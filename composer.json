@@ -1,0 +1,26 @@
+{
+    "name": "charm/parsing",
+    "description": "A PEG grammar parser, for parsing most context free grammar such as programming languages, database queries and mathematical expressions.",
+    "type": "library",
+    "require-dev": {
+        "phpunit/phpunit": "^9"
+    },
+    "license": "MIT",
+    "autoload": {
+        "files": ["Parser.php"],
+        "psr-4": {
+            "Charm\\Parsing\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Frode Borli",
+            "email": "frode@ennerd.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "charm/vector": "^1.0",
+        "charm/options": "^1.0"
+    }
+}
