@@ -7,11 +7,12 @@ use Charm\Parsing\Clause;
 class EOF extends Terminal {
 
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         if ($parser->offset === $parser->length) {
-            $parser->traceHit($this, $parser->offset, '*EOF');
+            $parser->traceEnd($this, true);
             return true;
         }
-        $parser->traceMiss($this, $parser->offset);
+        $parser->traceEnd($this, false);
         return false;
     }
 

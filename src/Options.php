@@ -11,7 +11,13 @@ class Options extends AbstractOptions {
     public bool $trace = false;
 
     /**
+     * Should the parser automatically tokenize based on terminals
+     * in the grammar?
+     */
+    public bool $auto_tokenize = true;
+
+    /**
      * Discard zero length matches
      */
-    public bool $discard_empty = true;
+//    public bool $discard_empty = true;
 }

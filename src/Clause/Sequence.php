@@ -5,10 +5,11 @@ use Charm\Parsing\ParserInterface;
 use Charm\Parsing\Clause;
 use Charm\Parsing\Rule;
 use Charm\Parsing\{
-    SnippetInstruction,
-    SnippetNothing,
-    SnippetFail,
-    SnippetResult
+    SequenceInstruction,
+    SequenceIgnore,
+    SequenceFail,
+    SequenceResult,
+    NodeInterface
 };
 /**
  * Sequence: e1 e2
@@ -17,18 +18,12 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
 
     private $clauses = [];
 
-    public function setRule(Rule $rule) {
-        foreach ($this->clauses as $clause) {
-            $clause->setRule($rule);
-        }
-        parent::setRule($rule);
-    }
-
     public function offsetGet($offset) {
         return $this->clauses[$offset] ?? null;
     }
 
     public function offsetSet($offset, $clause) {
+        $clause->setParent($this);
         $this->clauses[$offset] = $clause;
     }
 
@@ -37,10 +32,11 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
     }
 
     public function offsetUnset($offset) {
-        throw new Exception("Can't unset a clause from OrderedChoice");
+        throw new Exception("Can't unset a clause from Sequence");
     }
 
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         $result = null;
         foreach ($this as $subClause) {
@@ -49,29 +45,33 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
                 $match = $subClause->parse($parser, $result);
 
                 // snippets that belong directly in this sequence can send instructions
-                if ($match instanceof SnippetFail) {
+                if ($match instanceof SequenceFail) {
                     $parser->offset = $offset;
+                    $parser->traceEnd($this, false);
                     return false;
-                } elseif ($match instanceof SnippetNothing) {
+                } elseif ($match instanceof SequenceIgnore) {
+                    $parser->traceEnd($this, $match);
                     return $match;
-                } elseif ($match instanceof SnippetResult) {
+                } elseif ($match instanceof SequenceResult) {
                     if (is_bool($match->value)) {
+                        $parser->traceEnd($this, $match);
                         return $match;
                     } else {
+                        $parser->traceEnd($this, $match->value);
                         return $match->value;
                     }
                 }
                 // any other result will be interpreted by the sequence parser like normal
             } else {
                 $match = $this->processSubClause($parser, $subClause, $result);
-                if ($match instanceof SnippetNothing) {
+                if ($match instanceof SequenceIgnore) {
                     // Prevent the result from being part of this result
                     if ($result === null) {
                         $result = [];
                     }
                     continue;
-                } elseif ($match instanceof SnippetFail) {
-                    throw new InternalError("A SnippetFail leaked through from $subClause");
+                } elseif ($match instanceof SequenceFail) {
+                    throw new InternalError("A SequenceFail leaked through from $subClause");
                 }
             }
 
@@ -81,6 +81,7 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
 /*
                 $parser->traceMiss($this, $offset);
 */
+                $parser->traceEnd($this, false);
                 return false;
             } elseif ($match === true) {
                 // this is a non-capturing match (use new Result(true) to actually return true)
@@ -105,13 +106,24 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
         }
 
 
+        if (is_array($result)) {
+            if (count($result) === 1 && is_int(key($result))) {
+                $result = current($result);
+            } else {
+                $result = array_values($result);
+            }
+        }
+/*
         if (is_array($result) && count($result) === 1 && is_int(key($result))) {
             $result = current($result);
+        } else {
+        
         }
-
+*/
 /*
         $parser->traceHit($this, $offset, $result);
 */
+        $parser->traceEnd($this, $result);
         return $result;
     }
 
@@ -120,6 +132,7 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
     }
 
     public function addClause(Clause $clause) {
+        $clause->setParent($this);
         $this->clauses[] = $clause;
     }
 

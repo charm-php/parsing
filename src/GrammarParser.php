@@ -186,7 +186,7 @@ class GrammarParser implements ParserInterface {
         |(?<Suffix>(?<!\s)[+*?i])
         |(?<Identifier>([a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+)(?!\:)|\$|\^|\.|Ε|ε)
         |(?<String>"(\\\\|\\"|[^"])*"|'(\\\\|\\'|[^'])*')
-        |(?<Comment>(\/\/|\#)[^\n]*|\/\*((?&Comment)|.)*?\*\/)
+        |(?<Comment>(\/\/|\#)[^\n]*|\/\*((?&Comment)|[\s\S])*?\*\/)
         |(?<Regex>\/(\\\\|\\\/|[^\/ ])*\/|\[(\\\\|\\]|[^\]])+])
         |(?<Prefix>[!&]|[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*\:)
         |(?<Or>\/|\|)
@@ -438,7 +438,7 @@ var_dump($match);
                 $current = new Sequence(Clause::NONE, null);
             } elseif ($token->kind === 'Regex') {
                 if ($token->text[0] === '[') {
-                    $current->addClause(new Regex('/'.$token->text.'/', $token->getModifier(), $token->name));
+                    $current->addClause(new Regex('/'.strtr($token->text, ['/' => '\/']).'/', $token->getModifier(), $token->name));
                 } else {
                     $current->addClause(new Regex($token->text, $token->getModifier(), $token->name));
                 }
@@ -467,6 +467,7 @@ var_dump($match);
     }
 
     protected static function shorten(Clause $clause) {
+        return $clause;
         while ($clause instanceof Sequence && count($clause) === 1) {
 /*
             if (

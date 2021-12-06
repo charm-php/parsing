@@ -3,8 +3,9 @@ namespace Charm\Parsing;
 
 use Charm\Parsing\Clause\OrderedChoice;
 use Charm\Parsing\Clause\Sequence;
+use Charm\Parsing\Clause\Snippet;
 
-class Rule {
+class Rule implements \IteratorAggregate {
 
     const ASSOC_LEFT = -1;
     const ASSOC_NONE = 0;
@@ -18,6 +19,14 @@ class Rule {
         $this->ruleName = $ruleName;
         $this->clause = $clause;
         $this->associativity = $associativity;
+    }
+
+    public function getIterator() {
+        if ($this->clause instanceof Sequence) {
+            yield from $this->clause;
+        } else {
+            yield $this->clause;
+        }
     }
 
     public function getRuleName(): string {
@@ -59,24 +68,37 @@ class Rule {
     public function __toString() {
         $result = $this->ruleName." <-";
         if ($this->clause instanceof OrderedChoice) {
-            $result .= "\n";
+            $strlen = 0;
             foreach ($this->clause as $i => $clause) {
-                if ($i === 0) {
-                    $result .= "       ".$clause."\n";
-                } else {
-                    $result .= "     / ".$clause."\n";
+                $strlen += mb_strlen($clause);
+            }
+            if ($strlen > 50) {
+                foreach ($this->clause as $i => $clause) {
+                    if ($i === 0) {
+                        $result .= "\n       ".$clause;
+                    } else {
+                        $result .= "\n     / ".$clause;
+                    }
+                }
+                $result .= "\n";
+            } else {
+                foreach ($this->clause as $i => $clause) {
+                    if ($i === 0) {
+                        $result .= " ".$clause;
+                    } else {
+                        $result .= " / ".$clause;
+                    }
                 }
             }
         } else {
-            $result .= " ".$this->clause."\n";
+            $result .= " ".$this->clause;
         }
         return $result;
     }
 
     public function __debugInfo() {
         return [
-            'rule' => $this->getRuleName(),
-            'clause' => $this->getClause(),
+            'root' => $this->getClause()->getClauseName(),
         ];
     }
 }

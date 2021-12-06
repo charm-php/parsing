@@ -22,8 +22,6 @@ abstract class NonTerminal extends Clause {
             return $subClause->parse($parser, $parentResult);
         }
 
-
-
         $offset = $parser->offset;
 
         $result = null;

@@ -9,7 +9,8 @@ use Charm\Parsing\ParserInterface;
 class Epsilon extends Terminal {
 
     public function parse(ParserInterface $parser, &$parentResult) {
-        $parser->traceHit($this, $parser->offset, true);
+        $parser->traceStart($this, $parser->offset);
+        $parser->traceEnd($this, true);
         return true;
     }
 

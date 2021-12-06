@@ -8,13 +8,11 @@ class Leaf extends AbstractNode {
 
     private $kind;
     private $offset;
-    private $length;
 
-    public function __construct(string $kind, string $text, int $offset, int $length=null) {
-        parent::__construct($kind);
-        $this->text = $text;
+    public function __construct($value, int $offset) {
+        parent::__construct("terminal");
+        $this->value = $value;
         $this->offset = $offset;
-        $this->length = $length ?? strlen($text);
     }
 
     public function isLeafNode(): bool {

@@ -6,10 +6,12 @@ use Charm\Parsing\Clause;
 use Charm\Parsing\GrammarError;
 use Charm\Parsing\ParseError;
 use Charm\Parsing\{
-    SnippetInstruction,
-    SnippetFail,
-    SnippetNothing,
-    SnippetResult
+    SequenceInstruction,
+    SequenceFail,
+    SequenceIgnore,
+    SequenceResult,
+    Node,
+    Leaf
 };
 
 /**
@@ -40,7 +42,9 @@ class Snippet extends Terminal {
         T_FOREACH, T_AS,
         T_INC, T_DEC,
         T_ISSET,
-        T_EXIT
+        T_EXIT,
+        T_ECHO,
+        T_COMMENT,
     ];
     const SPECIAL = [
         T_STRING => [
@@ -110,7 +114,7 @@ class Snippet extends Terminal {
             $this->parser = null;
             throw $e;
         } catch (\Throwable $e) {
-            throw new GrammarError(strtr("Compile Error in snippet: ".$e->getMessage(), [
+            throw new GrammarError(strtr("Compile Error in snippet: '".$e->getMessage()."'", [
                 self::class.'::fn_' => '',
                 static::class.'::fn_' => '',
             ]));
@@ -135,47 +139,52 @@ class Snippet extends Terminal {
      * If returned, the entire rule should be presumed failed.
      */
     private function fn_fail() {
-        return new SnippetFail();
+        return new SequenceFail();
     }
 
     /**
-     * In snippet: return nothing();
+     * In snippet: return ignore();
      *
      * If returned, parsing of the rule should resume as if nothing happened.
      */
-    private function fn_nothing() {
-        return new SnippetNothing();
+    private function fn_ignore() {
+        return new SequenceIgnore();
     }
 
     /**
-     * In snippet: return done($result)
+     * In snippet: return value($result)
      *
      * If returned, the sequence or clause that the snippet appears in should
      * stop and return the provided result.
      */
-    private function fn_done($result) {
-        return new SnippetResult($result);
+    private function fn_value($result) {
+        return new SequenceResult($result);
+    }
+
+    private function fn_node(string $kind, array $children=[]) {
+        return new SequenceResult(new Node($kind, $children));
     }
 
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $this->parser = $parser;
 
         try {
             $result = ($this->invoker)($parentResult);
 
-            if ($result instanceof SnippetInstruction) {
+            if ($result instanceof SequenceIgnore) {
+                $parser->traceEnd($this, true);
+                return $result;
+            } elseif ($result instanceof SequenceFail) {
+                $parser->traceEnd($this, false);
+                return $result;
+            } elseif ($result instanceof SequenceResult) {
+                $parser->traceEnd($this, $result->value);
                 return $result;
             }
 
-            if ($result === false) {
-/*
-                $parser->traceMiss($this, $parser->offset, "Snippet failed parsing");
-*/
-                $this->parser = null;
-            } else {
-                $parser->traceHit($this, $parser->offset, $result);
-            }
             $this->parser = null;
+            $parser->traceEnd($this, $result);
             return $result;
         } catch (ParseError $e) {
             $this->parser = null;
@@ -190,6 +199,7 @@ class Snippet extends Terminal {
     }
 
     public function asString(): string {
+        return '*CODE';
         return '{'.$this->raw.'}';
     }
 

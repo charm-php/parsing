@@ -8,8 +8,9 @@ class Node extends AbstractNode implements \Countable, \IteratorAggregate, \Arra
 
     private $children = [];
 
-    public function __construct(string $kind) {
+    public function __construct(string $kind, array $children=[]) {
         parent::__construct($kind);
+        $this->children = $children;
     }
 
     public function addChild(NodeInterface $node) {

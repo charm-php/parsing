@@ -14,6 +14,7 @@ class Token {
     public $isOneOrMore = false;
     public $isZeroOrMore = false;
     public $isCaseInsensitive = false;
+    public $clause = null;
 
     public function __construct(string $text, string $kind, int $offset, array $settings) {
         $this->text = $text;

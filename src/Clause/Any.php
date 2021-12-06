@@ -8,14 +8,15 @@ use Charm\Parsing\Clause;
 class Any extends Terminal {
 
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         if ($parser->offset === $parser->length) {
-            $parser->traceMiss($this, $parser->offset);
+            $parser->traceEnd($this, false);
             return false;
         }
         $matched = mb_substr(substr($parser->source, $parser->offset, 4), 0, 1);
         $length = strlen($matched);
-        $parser->traceHit($this, $parser->offset, $matched);
+        $parser->traceEnd($this, $matched);
         $parser->offset += $length;
         return $matched;
     }

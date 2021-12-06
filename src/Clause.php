@@ -21,6 +21,7 @@ abstract class Clause implements ClauseInterface {
     private $modifier;
     private $name = null;
     private $rule = null;
+    private $parent = null;
 
     abstract protected function asString(): string;
 
@@ -29,20 +30,69 @@ abstract class Clause implements ClauseInterface {
         $this->name = $name;
     }
 
-    public function setRule(Rule $rule) {
-        $this->rule = $rule;
-    }
-
-    public function getRule(): ?Rule {
-        return $this->rule;
-    }
-
     /**
      * Match the clause against the source at offset.
      * - If the rule does not match, the function returns `null`.
      * - If the rule matches, it returns a Match instance.
      */
     abstract public function parse(ParserInterface $parser, &$parentResult);
+
+    public function getClauseName(bool $_leaf=true): string {
+        $name = $this->getName() ? $this->getName() . ":" : "";
+        if ($this->getParent()) {
+            $offset = '';
+            if ($this->getParent() instanceof \Traversable) {
+                foreach ($this->getParent() as $index => $subClause) {
+                    if ($subClause === $this) {
+                        $offset = '['.$index.']';
+                    }
+                }
+            }
+            if ($_leaf) {
+                return "[".$this->asString()." in ".$this->getParent()->getClauseName(false).$offset."]";
+            } else {
+                return $this->getParent()->getClauseName(false)."$offset -> ".$name.$this->getKind();
+            }
+        } elseif ($this->getRule()) {
+            return "[".$this->getRule()->getRuleName().": ".$name.$this->getKind()."]";
+        } else {
+            throw new InternalError("Clause has neither parent nor rule associated");
+        }
+    }
+
+    public function setRule(?Rule $rule) {
+        if ($this->parent !== null) {
+            throw new InternalError("A clause can't have both parent and rule");
+        }
+        if ($this->rule !== null && $rule !== null) {
+            throw new InternalError("A clause can't have two rules");
+        }
+        $this->rule = $rule;
+    }
+
+    public function getRule(): Rule {
+        if ($this->getParent()) {
+            return $this->getParent()->getRule();
+        } elseif ($this->rule) {
+            return $this->rule;
+        } else {
+            throw new InternalError("Clause has neither rule nor parent associated");
+        }
+    }
+
+    public function setParent(?Clause $parent) {
+        if ($this->rule !== null) {
+            throw new InternalError("Clause `$this` can't have both rule and parent. Rule was already `".$this->rule."` when setting parent `$parent`");
+        }
+        if ($this->parent !== null && $parent !== null) {
+            throw new InternalError("A clause can't have two parents");
+        }
+        $this->parent = $parent;
+    }
+
+    public function getParent(): ?Clause {
+        return $this->parent;
+    }
 
     public function getKind(): string {
         return substr(static::class, strrpos(static::class, '\\')+1);

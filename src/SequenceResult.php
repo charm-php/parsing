@@ -2,9 +2,9 @@
 namespace Charm\Parsing;
 
 /**
- * The snippet wants the production to return a particular value
+ * The sequence should complete successfully with a return value.
  */
-class SnippetResult implements SnippetInstruction {
+class SequenceResult implements SequenceInstruction {
     public $value;
 
     public function __construct($value) {

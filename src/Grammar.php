@@ -61,7 +61,7 @@ class Grammar implements IteratorAggregate, GrammarInterface {
     public function __construct(iterable $rules) {
         foreach ($rules as $rule) {
             if (isset($this->ruleMap[$rule->getRuleName()])) {
-                throw new Exception("Rule '".$rule->getRuleName()."' is already declared in this grammar");
+                throw new Exception("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
             }
             $this->ruleMap[$rule->getRuleName()] = $rule;
         }
@@ -104,16 +104,6 @@ class Grammar implements IteratorAggregate, GrammarInterface {
                 }
                 if ($clause instanceof Traversable) {
                     $queue->push($clause);
-/*
-                } elseif ($clause instanceof Identifier) {
-                    if (!isset($grammar[$clause->getName()])) {
-                        echo "GOT IDENTIFIER $clause, BUT GRAMMAR HAS NO SUCH CLAUSE\n";
-                        die();
-                    }
-                    $target = clone $grammar[$clause->getName()]->getClause();
-                    $target->setName($clause->getName());
-                    $traversable[$key] = $target;
-*/
                 }
             }
         }
@@ -150,11 +140,13 @@ class Grammar implements IteratorAggregate, GrammarInterface {
     }
 
     public function __toString() {
-        $res = '';
+
+        $arr = [];
         foreach ($this as $rule) {
-            $res .= $rule."\n";
+            $row = [ $rule->getRuleName(), trim($rule->getClause()) ];
+            $arr[] = $row;
         }
-        return $res;
+        return (string) new Terminal\Table($arr);
     }
 
 }

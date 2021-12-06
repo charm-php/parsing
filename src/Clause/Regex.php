@@ -5,7 +5,7 @@ use Charm\Parsing\ParserInterface;
 use Charm\Parsing\Clause;
 use Charm\Parsing\GrammarError;
 
-class Regex extends Terminal {
+class Regex extends Terminal implements RegexInterface {
 
     // the regex as provided by the grammar
     private $pattern;
@@ -21,19 +21,28 @@ class Regex extends Terminal {
         }
     }
 
+    public function getRegex(): string {
+        return substr($this->pattern, 1, -1);
+    }
+
+    public function getRegexPriority(): int {
+        return -mb_strlen($this->pattern);
+    }
+
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         $count = preg_match($this->re, $parser->source, $matches, 0, $parser->offset);
         if (!is_int($count)) {
             throw new GrammarError("Error in grammar regex `".$this->pattern."`: ".preg_last_error_msg()." code ".preg_last_error());
         }
         if ($count === 0) {
-            $parser->traceMiss($this, $offset);
+            $parser->traceEnd($this, false);
             return false;
         }
         $length = strlen($matches[0]);
         $parser->offset += $length;
-        $parser->traceHit($this, $offset, $matches[0]);
+        $parser->traceEnd($this, $matches[0]);
         return $matches[0];
     }
 

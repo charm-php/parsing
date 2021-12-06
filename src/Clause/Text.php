@@ -4,7 +4,7 @@ namespace Charm\Parsing\Clause;
 use Charm\Parsing\ParserInterface;
 use Charm\Parsing\Clause;
 
-class Text extends Terminal {
+class Text extends Terminal implements RegexInterface {
 
     private $text;
     private $length;
@@ -18,20 +18,29 @@ class Text extends Terminal {
         }
     }
 
+    public function getRegex(): string {
+        return preg_quote($this->text, "/");
+    }
+
+    public function getRegexPriority(): int {
+        return -mb_strlen($this->text);
+    }
+
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         $source = substr($parser->source, $parser->offset, $this->length);
         if ($this->isCaseInsensitive()) {
             if (mb_strtolower($source) !== $this->text) {
-                $parser->traceMiss($this, $parser->offset);
+                $parser->traceEnd($this, false);
                 return false;
             }
         } elseif ($source !== $this->text) {
-            $parser->traceMiss($this, $parser->offset);
+            $parser->traceEnd($this, false);
             return false;
         }
         $parser->offset += $this->length;
-        $parser->traceHit($this, $offset, $source);
+        $parser->traceEnd($this, $source);
         return $source;
     }
 

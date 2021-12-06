@@ -7,11 +7,12 @@ use Charm\Parsing\Clause;
 class SOF extends Terminal {
 
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         if ($parser->offset !== 0) {
-            $parser->traceMiss($this, $parser->offset);
+            $parser->traceEnd($this, false);
             return false;
         }
-        $parser->traceHit($this, $parser->offset, true);
+        $parser->traceEnd($this, true);
         return true;
     }
 

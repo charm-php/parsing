@@ -12,14 +12,8 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
 
     private $clauses = [];
 
-    public function setRule(Rule $rule) {
-        foreach ($this->clauses as $clause) {
-            $clause->setRule($rule);
-        }
-        parent::setRule($rule);
-    }
-
     public function parse(ParserInterface $parser, &$parentResult) {
+        $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
 
         foreach ($this->clauses as $clause) {
@@ -41,12 +35,14 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
 /*
             $parser->traceHit($this, $offset, $result);
 */
+            $parser->traceEnd($this, $result);
             return $result;
         }
         $parser->offset = $offset;
 /*
         $parser->traceMiss($this, $offset);
 */
+        $parser->traceEnd($this, false);
         return false;
     }
 
@@ -55,6 +51,7 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
     }
 
     public function offsetSet($offset, $clause) {
+        $clause->setParent($this);
         $this->clauses[$offset] = $clause;
     }
 
@@ -71,6 +68,7 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
     }
 
     public function addClause(Clause $choice) {
+        $choice->setParent($this);
         $this->clauses[] = $choice;
     }
 
