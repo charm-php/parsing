@@ -26,7 +26,7 @@ class Text extends Terminal implements RegexInterface {
         return -mb_strlen($this->text);
     }
 
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         $source = substr($parser->source, $parser->offset, $this->length);
@@ -52,13 +52,5 @@ class Text extends Terminal implements RegexInterface {
         } else {
             return '"'.strtr($this->text, ['"' => '""']).'"';
         }
-    }
-
-
-    public function __debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'text' => $this->text ];
-        }
-        return ['text' => $this->text];
     }
 }

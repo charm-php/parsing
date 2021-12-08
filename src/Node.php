@@ -13,6 +13,14 @@ class Node extends AbstractNode implements \Countable, \IteratorAggregate, \Arra
         $this->children = $children;
     }
 
+    public function __debugInfo() {
+        return [ $this->getKind() => count($this->children) === 1 ? current($this->children) : $this->children ];
+    }
+
+    public function isLeafNode(): bool {
+        return false;
+    }
+
     public function addChild(NodeInterface $node) {
         $this->children[] = $node;
     }
@@ -44,4 +52,11 @@ class Node extends AbstractNode implements \Countable, \IteratorAggregate, \Arra
         return array_key_exists($offset, $this->children);
     }
 
+    public function __toString() {
+        $children = [];
+        foreach ($this->children as $k => $v) {
+            $children[] = "$k=$v";
+        }
+        return $this->kind.'['.implode(" ",$children).']';
+    }
 }

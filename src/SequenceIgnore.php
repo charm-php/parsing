@@ -2,7 +2,7 @@
 namespace Charm\Parsing;
 
 /**
- * The sequence should return successfully without a match.
+ * The sequence should finish successfully without returning a token
  */
 class SequenceIgnore implements SequenceInstruction {
 }

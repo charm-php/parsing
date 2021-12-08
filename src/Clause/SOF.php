@@ -6,7 +6,7 @@ use Charm\Parsing\Clause;
 
 class SOF extends Terminal {
 
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         if ($parser->offset !== 0) {
             $parser->traceEnd($this, false);
@@ -18,12 +18,5 @@ class SOF extends Terminal {
 
     public function asString(): string {
         return '^';
-    }
-
-    public function __debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'SOF' => '^' ];
-        }
-        return ['SOF' => '^'];
     }
 }

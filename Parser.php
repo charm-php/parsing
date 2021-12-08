@@ -79,7 +79,7 @@ class Parser implements ParserInterface {
         }
         $this->grammar = $grammar->optimize();
 
-        if ($options->trace) {
+        if ($this->options->trace) {
             echo CSI::clear();
         }
     }
@@ -93,9 +93,11 @@ class Parser implements ParserInterface {
 
         $goal = $this->grammar[$this->goal];
         $vars = [];
-        $result = $goal->getClause()->parse($this, $vars);
+        $result = $goal->getClause()->parse($this, $vars, []);
+return $result;
 
         if (is_array($result)) {
+            return $result;
             array_walk_recursive($result, function(&$e) {
                 if ($e instanceof Result) {
                     $e = $e->value;
@@ -273,6 +275,7 @@ Expected:");
     }
 
     public function traceStart(Clause $clause, int $offset) {
+echo "Start: '$clause'\n";
         if (!$this->options->trace) {
             return;
         }
@@ -328,6 +331,9 @@ Expected:");
         }
         $this->traceNow->result = $result;
         echo $this->renderStep($this->traceNow);
+        if ($result === false) {
+            usleep(100000);
+        }
         usleep(100000);
         $this->traceNow = $this->traceNow->parent;
     }

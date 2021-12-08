@@ -18,24 +18,75 @@ abstract class Clause implements ClauseInterface {
     const NOT = 8;          // negate the result, and don't consume input
     const CASE_INSENSITIVE = 16;
 
-    private $modifier;
-    private $name = null;
-    private $rule = null;
-    private $parent = null;
+    protected $modifier;
+    protected $name = null;
+    protected $rule = null;
+    protected $parent = null;
+    protected $args = null; // arguments passed to the rule (for example presedence information)
 
+    /**
+     * Should return the string needed to write this clause in an expression, without predicates and
+     * modifiers.
+     */
     abstract protected function asString(): string;
+
+    /**
+     * Match the clause against the source at offset.
+     * - If the rule does not match, the function returns `null`.
+     * - If the rule matches, it returns a Match instance.
+     *
+     * @param $parser The parser instance (which holds the source, offset and grammar)
+     * @param $context An array which is shared among all clauses in the current rule
+     */
+    abstract public function parse(ParserInterface $parser, array &$context);
+
+    /**
+     * Annotate if this clause is a terminal clause, or if it is a clause which may recursively
+     * invoke other clauses.
+     */
+    abstract public function isTerminal(): bool;
 
     public function __construct(int $modifier, ?string $name) {
         $this->modifier = $modifier;
         $this->name = $name;
     }
 
-    /**
-     * Match the clause against the source at offset.
-     * - If the rule does not match, the function returns `null`.
-     * - If the rule matches, it returns a Match instance.
-     */
-    abstract public function parse(ParserInterface $parser, &$parentResult);
+    public function optimize(GrammarInterface $grammar): ClauseInterface {
+        $res = clone $this;
+        if ($res->getParent() !== null) {
+            throw new \Exception("After cloning parent should be NULL");
+        }
+        return $res;
+    }
+
+    public function __serialize() {
+        $res = [];
+        $rc = new \ReflectionClass($this);
+        foreach ($rc->getProperties() as $prop) {
+            $name = $prop->getName();
+            $prop->setAccessible(true);
+            $res[$name] = $prop->getValue($this);
+            $prop->setAccessible(false);
+        }
+        return $res;
+    }
+
+    public function __unserialize($data) {
+        $rc = new \ReflectionClass($this);
+        foreach ($rc->getProperties() as $prop) {
+            $name = $prop->getName();
+            if (array_key_exists($name, $data)) {
+                $prop->setAccessible(true);
+                $prop->setValue($this, $data[$name]);
+                $prop->setAccessible(false);
+            }
+        }
+    }
+
+    public function __clone() {
+        $this->rule = null;
+        $this->parent = null;
+    }
 
     public function getClauseName(bool $_leaf=true): string {
         $name = $this->getName() ? $this->getName() . ":" : "";
@@ -65,7 +116,7 @@ abstract class Clause implements ClauseInterface {
             throw new InternalError("A clause can't have both parent and rule");
         }
         if ($this->rule !== null && $rule !== null) {
-            throw new InternalError("A clause can't have two rules");
+            throw new InternalError("A clause can't be associated with two rules");
         }
         $this->rule = $rule;
     }
@@ -76,7 +127,7 @@ abstract class Clause implements ClauseInterface {
         } elseif ($this->rule) {
             return $this->rule;
         } else {
-            throw new InternalError("Clause has neither rule nor parent associated");
+            throw new InternalError("Clause $this has neither rule nor parent associated");
         }
     }
 
@@ -85,7 +136,7 @@ abstract class Clause implements ClauseInterface {
             throw new InternalError("Clause `$this` can't have both rule and parent. Rule was already `".$this->rule."` when setting parent `$parent`");
         }
         if ($this->parent !== null && $parent !== null) {
-            throw new InternalError("A clause can't have two parents");
+            throw new InternalError("A clause can't have two parents (already have ".$this->parent.")");
         }
         $this->parent = $parent;
     }
@@ -94,6 +145,9 @@ abstract class Clause implements ClauseInterface {
         return $this->parent;
     }
 
+    /**
+     * Returns the class name without namespace
+     */
     public function getKind(): string {
         return substr(static::class, strrpos(static::class, '\\')+1);
     }
@@ -108,6 +162,35 @@ abstract class Clause implements ClauseInterface {
 
     public final function getModifier(): int {
         return $this->modifier;
+    }
+
+    public function getModifierString(): string {
+        if ($this->isCaseInsensitive()) {
+            $str = 'i ';
+        } else {
+            $str = '';
+        }
+        if ($this->isOptional() && $this->isRepeating()) {
+            return $str.'*';
+        } elseif ($this->isOptional()) {
+            return $str.'?';
+        } elseif ($this->isRepeating()) {
+            return $str.'+';
+        } else {
+            return $str;
+        }
+    }
+
+    public function getPredicateString(): string {
+        if ($this->hasAndPredicate() && $this->hasNotPredicate()) {
+            return '!&';
+        } elseif ($this->hasAndPredicate()) {
+            return '&';
+        } elseif ($this->hasNotPredicate()) {
+            return '!';
+        } else {
+            return '';
+        }
     }
 
     public final function setModifier(int $modifier) {
@@ -148,34 +231,26 @@ abstract class Clause implements ClauseInterface {
             $res = '*RECURSION*';
         } else {
             $res = $this->asString();
+            if ($this->args !== null) {
+                $res .= '('.substr(json_encode($this->args), 1, -1).')';
+            }
         }
         if ($this instanceof Sequence || $this instanceof OrderedChoice) {
             $res = '( '.$res.' )';
         } else {
             $res = "`$res`";
         }
-        if ($this->isKleeneStar()) {
-            $res = "$res*";
-        } elseif ($this->isKleeneCross()) {
-            $res = "$res+";
-        } elseif ($this->isOptional()) {
-            $res = "$res?";
-        }
-        if ($this->isCaseInsensitive()) {
-            $res .= "i";
-        }
-
-        if ($this->hasAndPredicate()) {
-            $res = "&".$res;
-        }
-        if ($this->hasNotPredicate()) {
-            $res = "!".$res;
-        }
-        if ($this->name !== null) {
-            $res = $this->name.':'.$res;
-        }
+        $res = $this->getPredicateString().$res.$this->getModifierString();
         $this->_depth--;
-        return $res; //.'#'.\spl_object_id($this);
+        return $res;
+    }
+
+    public function __debugInfo() {
+        return [
+            'kind' => $this->getKind(),
+            'modifier' => $this->getModifierString(),
+            'predicate' => $this->getPredicateString(),
+        ];
     }
 
 }

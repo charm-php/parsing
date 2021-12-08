@@ -182,7 +182,7 @@ class GrammarParser implements ParserInterface {
 
     const TOKENIZER_REGEX = <<<'TOKENIZER'
         /
-        (?<Rule>[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*(?!:[\S!&])(?=\s*(:=|=(?!>)|<-|:)))
+         (?<Rule>[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*(?!:[\S!&])(?=\s*(:=|=(?!>)|<-|:)))
         |(?<Suffix>(?<!\s)[+*?i])
         |(?<Identifier>([a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+)(?!\:)|\$|\^|\.|Ε|ε)
         |(?<String>"(\\\\|\\"|[^"])*"|'(\\\\|\\'|[^'])*')
@@ -222,17 +222,16 @@ class GrammarParser implements ParserInterface {
         foreach (static::ruleMaker($tokens) as $ruleInfo) {
             $name = $ruleInfo[0]->name;
             $ruleName = $ruleInfo[0]->text;
+
             $clause = static::ruleClauseMaker($ruleInfo[1], Clause::NONE, $name);
-            $rule = new Rule($ruleName, $clause);
-            $clause->setRule($rule);
 
             if (isset($rules[$ruleName])) {
-                $rules[$ruleName]->addAlternativeClause($rule);
+                // The clause must be added to an existing rule
+                $rules[$ruleName]->addAlternativeClause($clause);
             } else {
-                $rules[$ruleName] = $rule;
+                $rules[$ruleName] = new Rule($ruleName, $clause);
             }
         }
-
         $className = $this->grammarClass;
         return new $className($rules);
     }
@@ -380,7 +379,6 @@ die("UNKNOWN TOKEN");
             } elseif (!empty($match['Begin'])) {
                 // ignored
             } else {
-var_dump($match);
                 throw new GrammarError("Unexpected ".substr($grammarString, $offset, 10)."[...] at offset $offset");
             }
             $offset += strlen($match[0]);
@@ -434,7 +432,7 @@ var_dump($match);
                     $current->setModifier(Clause::NONE);
                     $current->setName(null);
                 }
-                $orderedChoice->addClause(static::shorten($current));
+                $orderedChoice->addClause($current);
                 $current = new Sequence(Clause::NONE, null);
             } elseif ($token->kind === 'Regex') {
                 if ($token->text[0] === '[') {
@@ -455,34 +453,11 @@ var_dump($match);
             }
         }
         if ($orderedChoice !== null) {
-            $orderedChoice->addClause(static::shorten($current));
+            $orderedChoice->addClause($current);
             return $orderedChoice;
         } else {
-            return static::shorten($current);
-            if (count($current) === 1) {
-                return $current[0];
-            }
             return $current;
         }
-    }
-
-    protected static function shorten(Clause $clause) {
-        return $clause;
-        while ($clause instanceof Sequence && count($clause) === 1) {
-/*
-            if (
-                ($clause->getModifier() !== 0 && $clause[0]->getModifier() !== 0)
-            ) {
-                break;
-            }
-*/
-            if ($clause->getName() !== null) {
-                $clause[0]->setName($clause->getName());
-            }
-            $clause[0]->setModifier($clause[0]->getModifier() | $clause->getModifier());
-            $clause = $clause[0];
-        }
-        return $clause;
     }
 
 }

@@ -18,6 +18,7 @@ class Rule implements \IteratorAggregate {
     public function __construct(string $ruleName, Clause $clause, int $associativity=self::ASSOC_NONE) {
         $this->ruleName = $ruleName;
         $this->clause = $clause;
+        $this->clause->setRule($this);
         $this->associativity = $associativity;
     }
 
@@ -42,6 +43,7 @@ class Rule implements \IteratorAggregate {
     }
 
     public function setClause(Clause $clause) {
+        $clause->setRule($this);
         $this->clause = $clause;
     }
 
@@ -56,13 +58,16 @@ class Rule implements \IteratorAggregate {
     /**
      * Convert this rule to an ordered choice if needed, and append a new rule.
      */
-    public function addAlternativeClause(Rule $rule) {
+    public function addAlternativeClause(Clause $clause) {
         if (!($this->clause instanceof OrderedChoice)) {
-            $clause = new OrderedChoice(Clause::NONE);
-            $clause->addClause($this->clause);
-            $this->clause = $clause;
+            $oldClause = $this->clause;
+            $oldClause->setRule(null);
+            $this->clause = new OrderedChoice(Clause::NONE);
+            $this->clause->setRule($this);
+            $this->clause->addClause($oldClause);
+var_dump($this->clause->getParent());die("ALL OK");
         }
-        $this->clause->addClause($rule->clause);
+        $this->clause->addClause($clause);
     }
 
     public function __toString() {

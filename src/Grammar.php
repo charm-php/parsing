@@ -57,6 +57,7 @@ use Charm\Parsing\Clause\{
 class Grammar implements IteratorAggregate, GrammarInterface {
 
     private $ruleMap = [];
+    private $optimized = false;
 
     public function __construct(iterable $rules) {
         foreach ($rules as $rule) {
@@ -68,45 +69,35 @@ class Grammar implements IteratorAggregate, GrammarInterface {
     }
 
     public function optimize(): static {
+        if ($this->optimized) {
+            throw new \LogicException("Don't optimize a grammar twice");
+        }
         // create a new optimized grammar
-        return $this;
-        $grammar = new Grammar([]);
+        $ruleMap = [];
 
         /**
          * Get all rules from the original grammar and add them to the $rules array for optimizations
          */
         foreach ($this as $name => $rule) {
-            $clause = $rule->getClause();
-            while ($clause instanceof Sequence && count($clause) === 1 && $clause->getModifier() === 0) {
-                $clause = $clause[0];
-            }
-            $clause = clone $clause;
-            $grammar->ruleMap[$name] = new Rule($rule->getRuleName(), $clause, $rule->getAssociativity());
+            $ruleClause = clone $rule->getClause();
+            $ruleMap[$name] = new Rule($name, $ruleClause);
         }
 
-        /**
-         * Traverse all clauses and:
-         * - rewrite any Identifier clauses so that they refer directly to the clause of the grammar
-         * - rewrite any sequences which only has one element
-         */
-        $queue = new Vector();
-        foreach ($grammar as $rule) {
-            if ($rule->getClause() instanceof Traversable) {
-                $queue->push($rule->getClause());
-            }
+        $grammar = new Grammar($ruleMap);
+        foreach ($grammar->ruleMap as $name => $rule) {
+            $grammar->ruleMap[$name] = new Rule($name, $rule->getClause()->optimize($grammar));
         }
-        while (count($queue) > 0) {
-            $traversable = $queue->shift();
-            foreach ($traversable as $key => $clause) {
-                if ($clause instanceof Sequence && count($clause) === 1 && $clause->getModifier() === 0) {
-                    $traversable[$key] = $clause[0];
-                    $clause = $clause[0];
-                }
-                if ($clause instanceof Traversable) {
-                    $queue->push($clause);
-                }
-            }
+        foreach ($grammar->ruleMap as $name => $rule) {
+            $grammar->ruleMap[$name] = new Rule($name, $rule->getClause()->optimize($grammar));
         }
+/*
+        foreach ($grammar->ruleMap as $name => $rule) {
+            if (method_exists($rule->getClause(), 'isLeftRecursive') && $rule->getClause()->isLeftRecursive()) {
+                $grammar->ruleMap[$name]->setClause($rule->getClause()->getNonRecursive());
+            }
+*/
+        }
+        $grammar->optimized = true;
         return $grammar;
     }
 

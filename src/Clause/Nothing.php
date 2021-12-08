@@ -8,7 +8,7 @@ use Charm\Parsing\ParserInterface;
  */
 class Epsilon extends Terminal {
 
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $parser->traceEnd($this, true);
         return true;
@@ -20,12 +20,5 @@ class Epsilon extends Terminal {
 
     public function asString(): string {
         return 'ε';
-    }
-
-    public function debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'Epsilon' => 'ε' ];
-        }
-        return ['Epsilon' => 'ε'];
     }
 }

@@ -6,7 +6,8 @@ use Charm\Parsing\GrammarError;
 use Charm\Parsing\{
     SequenceFail,
     SequenceNothing,
-    SequenceResult
+    ClauseInterface,
+    GrammarInterface
 };
 
 /**
@@ -20,6 +21,29 @@ class Identifier extends NonTerminal {
         parent::__construct($modifier, $name);
         $this->identifier = $identifier;
     }
+
+/*
+    public function optimize(GrammarInterface $grammar): ClauseInterface {
+        $rule = $grammar[$this->getIdentifier()];
+        if ($rule->getClause() instanceof Terminal) {
+            $clause = $rule->getClause();
+            if ($clause->getModifier() !== static::NONE && $this->getModifier() !== static::NONE) {
+                return clone $this;
+            }
+            $clause = $clause->optimize($grammar);
+            if ($this->getModifier() !== static::NONE) {
+                $clause->setModifier($this->getModifier());
+            }
+            if ($this->getName()) {
+                $clause->setName($this->getName());
+            } else {
+                $clause->setName(null);
+            }
+            return $clause;
+        }
+        return clone $this;
+    }
+*/
 
     public function getClauseName(bool $_leaf=true): string {
         $name = $this->getName() ? $this->getName() . ":" : "";
@@ -48,7 +72,7 @@ class Identifier extends NonTerminal {
         return $this->identifier;
     }
 
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $grammar = $parser->getGrammar();
         if (!isset($grammar[$this->getIdentifier()])) {
@@ -58,49 +82,15 @@ class Identifier extends NonTerminal {
         $rule = $grammar[$this->getIdentifier()];
         $clause = $rule->getClause();
 
-        $context = null;
+        // Use args as context for the rule clause, if provided
+        $subContext = $args ?? [];
+        $result = $this->processSubClause($parser, $clause, $subContext);
 
-        if ($clause instanceof Snippet) {
-            $result = $clause->parse($parser, $context);
-            if ($result instanceof SequenceFail) {
-                $parser->traceEnd($this, false);
-                return false;
-            } elseif ($result instanceof SequenceIgnore) {
-                $parser->traceEnd($this, true);
-                return true;
-            } elseif ($result instanceof SequenceResult) {
-                if (is_bool($result->value)) {
-                    $parser->traceEnd($this, $result);
-                    return $result;
-                }
-                $parser->traceEnd($this, $result->value);
-                return $result->value;
-            }
-        } else {
-            $result = $this->processSubClause($parser, $clause, $context);
-        }
-/*
-        if ($result !== false) {
-            // must wrap the result to generate the full node tree
-            $parser->traceHit($this, $offset, $result);
-        } else {
-            $parser->traceMiss($this, $offset);
-        }
-*/
         $parser->traceEnd($this, $result);
         return $result;
     }
 
     public function asString(): string {
         return $this->getIdentifier();
-    }
-
-    public function debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'identifier' => $this->getIdentifier() ];
-        }
-        return [
-            'identifier' => $this->getIdentifier(),
-        ];
     }
 }

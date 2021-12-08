@@ -7,11 +7,12 @@ use Charm\Parsing\GrammarError;
 use Charm\Parsing\ParseError;
 use Charm\Parsing\{
     SequenceInstruction,
-    SequenceFail,
     SequenceIgnore,
-    SequenceResult,
+    SequenceResume,
     Node,
-    Leaf
+    Leaf,
+    InternalError,
+    BoxedResult
 };
 
 /**
@@ -26,7 +27,7 @@ use Charm\Parsing\{
 class Snippet extends Terminal {
 
     const LEGAL_TOKENS = [
-        '&', '!', '[', ']', '+', '-', '*', '/', ';', '(', ')', '{', '}', '=', '<', '>', ',', ':', '.', '"', "'",
+        '&', '!', '[', ']', '+', '-', '*', '/', ';', '(', ')', '{', '}', '=', '<', '>', ',', ':', '.', '"', "'", '?',
         T_WHITESPACE,
         T_VARIABLE, T_CONSTANT_ENCAPSED_STRING, T_LNUMBER,
         T_ENCAPSED_AND_WHITESPACE, 
@@ -51,13 +52,14 @@ class Snippet extends Terminal {
             'intval', 'floatval', 'boolval', 'strval',
             'true', 'false', 'null',
             'var_dump', 'print_r',
+            'substr', 'str_replace', 'strtr', 'strcmp',
+            'is_array', 'is_numeric',
         ],
     ];
 
-    private $code;
-    private $raw;
-    private $invoker;
-    private $closures = [];
+    protected $code;
+    protected $raw;
+    protected $invoker;
 
     public function __construct(string $code, int $modifier, ?string $name) {
         parent::__construct($modifier, $name);
@@ -70,8 +72,7 @@ class Snippet extends Terminal {
         foreach ($tokens as $token) {
             if (isset($token[1])) {
                 if (method_exists($this, $fn = 'fn_'.trim($token[1]))) {
-                    $this->closures['_fn_'.$token[1]] = \Closure::fromCallable([$this, $fn]);
-                    $code .= '($_'.$fn.')';
+                    $code .= '$this->'.$fn;
                     continue;
                 }
             }
@@ -95,28 +96,55 @@ class Snippet extends Terminal {
                     }
             }
         }
-        $src = <<<PHP
-            \$this->invoker = function(&\$result) {
+        $this->code = $code;
+        $this->build();
+    }
 
-                if (strpos(\$this->raw, '\$_')!==false && \$result === null) {
-                    echo "----------------\n".\$this->raw."\n---------------\n";
-                    throw new \Exception("null passed but function expects vars");
-                }
-                if (is_array(\$result)) extract(\$result, EXTR_OVERWRITE | EXTR_REFS | EXTR_PREFIX_INVALID, '');extract(\$this->closures, EXTR_OVERWRITE | EXTR_REFS | EXTR_PREFIX_INVALID, '');
-                $code
-            };
-        PHP;
+    public function __serialize() {
+        $res = parent::__serialize();
+        unset($res['invoker']);
+        return $res;
+    }
 
+    public function __unserialize($data) {
+        parent::__unserialize($data);
+        $this->build();
+    }
+
+    private function build() {
+        if ($this->invoker !== null) {
+            return;
+        }
+        $code = $this->code;
+        $src =
+            // this quoting style is to protect the line numbering in parse error messages
+            '$this->invoker = function(array &$context, array $args=[]) {'.
+            '   if (is_array($context))'.
+            '       extract($context, EXTR_REFS | EXTR_OVERWRITE | EXTR_PREFIX_INVALID, "");'.
+            '   '.$code.
+            '};';
 
         try {
+            set_error_handler(function($errno, $errstr, $errfile, $errline, $errcontext) use (&$oldErrorHandler) {
+                echo <<<TEXT
+                    ERROR: $errstr
+                    ==================================================
+                    Number: $errno File: $errfile Line: $errline
+                    Context:
+                    TEXT;
+                $oldErrorHandler = null;
+            }, E_ALL);
             eval($src);
-        } catch (ParseError $e) {
+            restore_error_handler();
+        } catch (\ParseError $e) {
             $this->parser = null;
-            throw $e;
+            $codeForError = preg_replace_callback('/\n|^/A', function() use (&$lineNum) {
+                return str_pad(++$lineNum, 5, ' ', STR_PAD_LEFT).' | ';
+            }, $code);
+            throw new GrammarError($e->getMessage()."\nGrammar Source:\n".rtrim($codeForError)."\n", $e->getCode());
         } catch (\Throwable $e) {
             throw new GrammarError(strtr("Compile Error in snippet: '".$e->getMessage()."'", [
-                self::class.'::fn_' => '',
-                static::class.'::fn_' => '',
+                '$this->fn_' => '',
             ]));
         }
     }
@@ -134,53 +162,44 @@ class Snippet extends Terminal {
     }
 
     /**
-     * In snippet: return fail();
+     * In snippet: return resume();
      *
-     * If returned, the entire rule should be presumed failed.
+     * If returned, parsing of the sequence should resume as if nothing happened.
      */
-    private function fn_fail() {
-        return new SequenceFail();
+    private function fn_resume() {
+        return new SequenceResume();
     }
 
     /**
      * In snippet: return ignore();
      *
-     * If returned, parsing of the rule should resume as if nothing happened.
+     * If returned, parsing of the sequence should stop and return true as if it was
+     * a success without capturing.
      */
     private function fn_ignore() {
         return new SequenceIgnore();
     }
 
-    /**
-     * In snippet: return value($result)
-     *
-     * If returned, the sequence or clause that the snippet appears in should
-     * stop and return the provided result.
-     */
-    private function fn_value($result) {
-        return new SequenceResult($result);
+    private function fn_node(string $kind, array $children) {
+        return new Node($kind, $children);
     }
 
-    private function fn_node(string $kind, array $children=[]) {
-        return new SequenceResult(new Node($kind, $children));
-    }
-
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $this->parser = $parser;
 
         try {
-            $result = ($this->invoker)($parentResult);
+            $result = ($this->invoker)($context, $args ?? []);
 
-            if ($result instanceof SequenceIgnore) {
-                $parser->traceEnd($this, true);
+            if ($result instanceof SequenceInstruction) {
+                $parser->traceEnd($this, $result);
                 return $result;
-            } elseif ($result instanceof SequenceFail) {
-                $parser->traceEnd($this, false);
-                return $result;
-            } elseif ($result instanceof SequenceResult) {
-                $parser->traceEnd($this, $result->value);
-                return $result;
+            } elseif ($result instanceof BoxedResult) {
+                // A snippet may return its result boxed. This way, snippets can act as ordinary clauses in a sequence.
+                $result = $result->value;
+            } elseif (is_bool($result)) {
+                // Prevent any side effects
+                $result = new BoxedResult($result);
             }
 
             $this->parser = null;
@@ -191,7 +210,7 @@ class Snippet extends Terminal {
             throw $e;
         } catch (\Throwable $e) {
             $this->parser = null;
-            throw new GrammarError(strtr("Runtime Error in snippet: ".$e->getMessage(), [
+            throw new GrammarError(strtr("Runtime error in snippet: ".$e->getMessage(), [
                 self::class.'::fn_' => '',
                 static::class.'::fn_' => '',
             ]));
@@ -199,15 +218,7 @@ class Snippet extends Terminal {
     }
 
     public function asString(): string {
-        return '*CODE';
-        return '{'.$this->raw.'}';
+        return '{{'.strtr(trim($this->raw), ["\n" => "\\n"]).'}}';
     }
 
-
-    public function __debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'code' => $this->code ];
-        }
-        return ['code' => $this->code];
-    }
 }

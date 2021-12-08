@@ -6,10 +6,12 @@ use Charm\Parsing\Clause;
 use Charm\Parsing\Rule;
 use Charm\Parsing\{
     SequenceInstruction,
+    SequenceResume,
     SequenceIgnore,
-    SequenceFail,
-    SequenceResult,
-    NodeInterface
+    NodeInterface,
+    ClauseInterface,
+    GrammarInterface,
+    BoxedResult
 };
 /**
  * Sequence: e1 e2
@@ -18,74 +20,51 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
 
     private $clauses = [];
 
-    public function offsetGet($offset) {
-        return $this->clauses[$offset] ?? null;
+    public function __clone() {
+        parent::__clone();
+        foreach ($this->clauses as $k => $v) {
+            $this->clauses[$k] = clone $v;
+            $this->clauses[$k]->setParent($this);
+        }
     }
 
-    public function offsetSet($offset, $clause) {
-        $clause->setParent($this);
-        $this->clauses[$offset] = $clause;
-    }
-
-    public function offsetExists($offset) {
-        return array_key_exists($offset, $this->clauses);
-    }
-
-    public function offsetUnset($offset) {
-        throw new Exception("Can't unset a clause from Sequence");
-    }
-
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
+
         $result = null;
+
         foreach ($this as $subClause) {
+            $match = $this->processSubClause($parser, $subClause, $context);
 
             if ($subClause instanceof Snippet) {
-                $match = $subClause->parse($parser, $result);
-
-                // snippets that belong directly in this sequence can send instructions
-                if ($match instanceof SequenceFail) {
-                    $parser->offset = $offset;
-                    $parser->traceEnd($this, false);
-                    return false;
-                } elseif ($match instanceof SequenceIgnore) {
+                // Snippets may provide instructions that determine how this sequence continues
+                if ($match instanceof SequenceIgnore) {
+                    // The sequence should terminate with a successful result
+                    $parser->traceEnd($this, true);
+                    return true;
+                } elseif ($match instanceof SequenceResume) {
+                    // The sequence should resume parsing as if nothing happened
+                    $match = true;
+                } else {
+                    // Snippets always terminate the sequence unless they instruct it to resume.
                     $parser->traceEnd($this, $match);
                     return $match;
-                } elseif ($match instanceof SequenceResult) {
-                    if (is_bool($match->value)) {
-                        $parser->traceEnd($this, $match);
-                        return $match;
-                    } else {
-                        $parser->traceEnd($this, $match->value);
-                        return $match->value;
-                    }
-                }
-                // any other result will be interpreted by the sequence parser like normal
-            } else {
-                $match = $this->processSubClause($parser, $subClause, $result);
-                if ($match instanceof SequenceIgnore) {
-                    // Prevent the result from being part of this result
-                    if ($result === null) {
-                        $result = [];
-                    }
-                    continue;
-                } elseif ($match instanceof SequenceFail) {
-                    throw new InternalError("A SequenceFail leaked through from $subClause");
                 }
             }
 
             if ($match === false) {
-                // a rule or snippet failed the sequence so we backtrack and break
+                // The sub clause failed, so the sequence fails
                 $parser->offset = $offset;
-/*
-                $parser->traceMiss($this, $offset);
-*/
                 $parser->traceEnd($this, false);
                 return false;
             } elseif ($match === true) {
-                // this is a non-capturing match (use new Result(true) to actually return true)
+                // The sub clause returned a successful empty parse, so we continue to the next clause
                 continue;
+            }
+
+            if ($match instanceof BoxedResult) {
+                $match = $match->value;
             }
 
             if (null !== ($name = $subClause->getName())) {
@@ -105,7 +84,9 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
             }
         }
 
+        $result = array_values($result);
 
+/*
         if (is_array($result)) {
             if (count($result) === 1 && is_int(key($result))) {
                 $result = current($result);
@@ -113,6 +94,7 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
                 $result = array_values($result);
             }
         }
+*/
 /*
         if (is_array($result) && count($result) === 1 && is_int(key($result))) {
             $result = current($result);
@@ -125,6 +107,42 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
 */
         $parser->traceEnd($this, $result);
         return $result;
+    }
+
+    public function optimize(GrammarInterface $grammar): ClauseInterface {
+        if ($this->getName() !== null || $this->getModifier() !== static::NONE) {
+            return clone $this;
+        }
+        if (count($this->clauses) === 1) {
+            $c = $this->clauses[0];
+            $cl = $c->optimize($grammar);
+            return $cl;
+        } else {
+            $c = clone $this;
+            foreach ($c->clauses as $k => $clause) {
+                $subClause = $clause->optimize($grammar);
+                $subClause->setParent($c);
+                $c->clauses[$k] = $subClause;
+            }
+            return $c;
+        }
+    }
+
+    public function offsetGet($offset) {
+        return $this->clauses[$offset] ?? null;
+    }
+
+    public function offsetSet($offset, $clause) {
+        $clause->setParent($this);
+        $this->clauses[$offset] = $clause;
+    }
+
+    public function offsetExists($offset) {
+        return array_key_exists($offset, $this->clauses);
+    }
+
+    public function offsetUnset($offset) {
+        throw new Exception("Can't unset a clause from Sequence");
     }
 
     public function count() {
@@ -141,20 +159,13 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
     }
 
     public function asString(): string {
-        return implode(" ", $this->clauses);
+        return implode(" ", $this->clauses)."(SEQ)";
     }
 
     public function __debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [
-                'modifier' => $this->getModifier(),
-                'sequence' => $this->clauses,
-            ];
-        }
-
-        return [
-            'sequence' => $this->clauses,
-        ];
+        $di = parent::__debugInfo();
+        $di['Sequence'] = $this->clauses;
+        return $di;
     }
 
 }

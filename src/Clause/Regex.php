@@ -29,7 +29,7 @@ class Regex extends Terminal implements RegexInterface {
         return -mb_strlen($this->pattern);
     }
 
-    public function parse(ParserInterface $parser, &$parentResult) {
+    public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
         $count = preg_match($this->re, $parser->source, $matches, 0, $parser->offset);
@@ -46,15 +46,8 @@ class Regex extends Terminal implements RegexInterface {
         return $matches[0];
     }
 
-
     public function asString(): string {
         return $this->pattern;
     }
 
-    public function debugInfo() {
-        if ($this->getModifier() !== 0) {
-            return [ 'modifier' => $this->getModifier(), 'regex' => $this->pattern ];
-        }
-        return ['regex' => $this->pattern];
-    }
 }
