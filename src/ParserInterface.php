@@ -2,8 +2,7 @@
 namespace Charm\Parsing;
 
 /**
- * When parsing a source, these properties are defined and contains the string being parsed. The Parser instance
- * is passed to the Clause instances to perform the actual parsing.
+ * A ParserInterface defines the API that a ready-to-use parser should expose for end users.
  *
  * @property $source The source currently being parsed
  * @property $offset The current parse offset
@@ -12,18 +11,24 @@ namespace Charm\Parsing;
 interface ParserInterface {
 
     /**
-     * Create a parser instance from a grammar; normally using the `Charm\Parsing\GrammarParser` to parse
+     * Parse a string into a representation as defined by the grammar. Throws exceptions
+     * on errors in the source string that's being parsed.
+     *
+     * @throws LexingError
+     * @throws SyntaxError
+     *
+     * @param $source       The string to parse
+     * @param $filename     A file name to use in error messages
      */
-    public static function fromString(string $grammar): static;
+    public function parse(string $source, string $filename=null);
 
     /**
-     * Parse the string and return the result
+     * Parse a file into an AST.
      */
-    public function parse(string $source);
+    public function parseFile(string $filename);
 
     /**
-     * Get the grammar
+     * Return an array for storing state information during parsing
      */
-    public function getGrammar(): GrammarInterface;
-
+    public function &getState(): array;
 }

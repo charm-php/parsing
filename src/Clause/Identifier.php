@@ -4,8 +4,6 @@ namespace Charm\Parsing\Clause;
 use Charm\Parsing\ParserInterface;
 use Charm\Parsing\GrammarError;
 use Charm\Parsing\{
-    SequenceFail,
-    SequenceNothing,
     ClauseInterface,
     GrammarInterface
 };
@@ -22,28 +20,13 @@ class Identifier extends NonTerminal {
         $this->identifier = $identifier;
     }
 
-/*
-    public function optimize(GrammarInterface $grammar): ClauseInterface {
-        $rule = $grammar[$this->getIdentifier()];
-        if ($rule->getClause() instanceof Terminal) {
-            $clause = $rule->getClause();
-            if ($clause->getModifier() !== static::NONE && $this->getModifier() !== static::NONE) {
-                return clone $this;
-            }
-            $clause = $clause->optimize($grammar);
-            if ($this->getModifier() !== static::NONE) {
-                $clause->setModifier($this->getModifier());
-            }
-            if ($this->getName()) {
-                $clause->setName($this->getName());
-            } else {
-                $clause->setName(null);
-            }
-            return $clause;
-        }
-        return clone $this;
+    public function toGrammarString(): string {
+        return $this->getPredicateString().$this->identifier.$this->getOperatorString();
     }
-*/
+
+    public function asString(): string {
+        return $this->identifier;
+    }
 
     public function getClauseName(bool $_leaf=true): string {
         $name = $this->getName() ? $this->getName() . ":" : "";
@@ -85,12 +68,8 @@ class Identifier extends NonTerminal {
         // Use args as context for the rule clause, if provided
         $subContext = $args ?? [];
         $result = $this->processSubClause($parser, $clause, $subContext);
-
         $parser->traceEnd($this, $result);
         return $result;
     }
 
-    public function asString(): string {
-        return $this->getIdentifier();
-    }
 }

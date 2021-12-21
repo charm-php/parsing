@@ -3,7 +3,8 @@ namespace Charm\Parsing;
 
 use Charm\Parsing\Clause\{
     Sequence,
-    OrderedChoice
+    OrderedChoice,
+    NonTerminal
 };
 
 /**
@@ -18,11 +19,99 @@ abstract class Clause implements ClauseInterface {
     const NOT = 8;          // negate the result, and don't consume input
     const CASE_INSENSITIVE = 16;
 
+    private static $_grammarIdCounter = 0;
+    protected $grammarId;   // unique number to identifiy this particular clause in the grammar
     protected $modifier;
     protected $name = null;
     protected $rule = null;
     protected $parent = null;
-    protected $args = null; // arguments passed to the rule (for example presedence information)
+
+    public string $cacheKey;
+
+    /**
+     * Should return this clause as it would have been written in the grammar.
+     */
+    public function toGrammarString(): string {
+        return $this->getPredicateString().$this->asString().$this->getOperatorString();
+    }
+
+    /**
+     * Return a string describing this clause in the context of the rule
+     */
+    public function toLocationString(): string {
+        $rule = $this->getRule();
+
+        $str = $rule->getRuleName().spl_object_id($rule);
+
+        if (null !== ($desc = $rule->getDescription())) {
+            $str .= ' '.json_encode($desc);
+        }
+        $str .= ' ::= ';
+
+        if ($this->getParent() === null) {
+            return $str."[[[RULE]]]";
+        }
+
+        $recurse = function(Clause $clause, int $depth=0) use (&$recurse) {
+            $parts = [];
+            if ($clause instanceof NonTerminal) {
+                foreach ($clause as $child) {
+                    foreach ($recurse($child, $depth+1) as $part) {
+                        $part[] = $clause;
+                        $parts[] = $part;
+                    }
+                }
+            } else {
+                $parts[] = [$depth, $clause];
+            }
+            return $parts;
+        };
+
+        $level = 0;
+
+        $clauseStr = '';
+        $path = [ $this ];
+        $me = $this;
+        while (null !== ($me = $me->getParent())) {
+            $path[] = $me;
+        }
+
+        foreach ($recurse($rule->getClause()) as $index => $def) {
+            while ($def[0] > $level) {
+                if (in_array($def[1]->getParent(), $path)) {
+                    $clauseStr .= " *(";
+                } else {
+                    $clauseStr .= " (";
+                }
+                $level++;
+            }
+            while ($def[0] < $level) {
+                $clauseStr .= " )";
+                $level--;
+            }
+
+            $part = $def[1]->toGrammarString();
+
+            if ($def[1] === $this) {
+                $part = "**$part**";
+            } elseif (in_array($def[1], $path)) {
+                $part = "*$part";
+            }
+/*
+            if ($def[1] === $this) {
+                $part = "[[[$part]]]";
+            }
+*/
+            $clauseStr .= " ".$part;
+        }
+        while ($def[0] < $level) {
+            $clauseStr .= ")";
+            $level--;
+        }
+
+        return $str.$clauseStr." ".$this->getKind().spl_object_id($this);
+    }
+
 
     /**
      * Should return the string needed to write this clause in an expression, without predicates and
@@ -47,6 +136,8 @@ abstract class Clause implements ClauseInterface {
     abstract public function isTerminal(): bool;
 
     public function __construct(int $modifier, ?string $name) {
+        $this->grammarId = self::$_grammarIdCounter++;
+        $this->cacheKey = get_class($this).' '.$this->grammarId;
         $this->modifier = $modifier;
         $this->name = $name;
     }
@@ -54,7 +145,7 @@ abstract class Clause implements ClauseInterface {
     public function optimize(GrammarInterface $grammar): ClauseInterface {
         $res = clone $this;
         if ($res->getParent() !== null) {
-            throw new \Exception("After cloning parent should be NULL");
+            throw new InternalError("After cloning, the parent should be NULL. Fix ".static::class."::__clone()");
         }
         return $res;
     }
@@ -84,8 +175,11 @@ abstract class Clause implements ClauseInterface {
     }
 
     public function __clone() {
+        $this->grammarId = self::$_grammarIdCounter++;
+        $this->cacheKey = $this->cacheKey.' -> '.$this->grammarId;
         $this->rule = null;
         $this->parent = null;
+
     }
 
     public function getClauseName(bool $_leaf=true): string {
@@ -100,43 +194,53 @@ abstract class Clause implements ClauseInterface {
                 }
             }
             if ($_leaf) {
-                return "[".$this->asString()." in ".$this->getParent()->getClauseName(false).$offset."]";
+                return "[#".spl_object_id($this)." ".$this->asString()." in ".$this->getParent()->getClauseName(false).$offset."]";
             } else {
                 return $this->getParent()->getClauseName(false)."$offset -> ".$name.$this->getKind();
             }
         } elseif ($this->getRule()) {
-            return "[".$this->getRule()->getRuleName().": ".$name.$this->getKind()."]";
+            return "[#".spl_object_id($this)." ".$this->getRule()->getRuleName().": ".$name.$this->getKind()."]";
         } else {
             throw new InternalError("Clause has neither parent nor rule associated");
         }
     }
 
-    public function setRule(?Rule $rule) {
+    public final function setRule(?Rule $rule) {
         if ($this->parent !== null) {
-            throw new InternalError("A clause can't have both parent and rule");
+            throw new InternalError("Remove ".static::class."->parent before calling ".static::class."::setRule()");
         }
         if ($this->rule !== null && $rule !== null) {
-            throw new InternalError("A clause can't be associated with two rules");
+            throw new InternalError(static::class."->rule is already set");
         }
         $this->rule = $rule;
     }
 
-    public function getRule(): Rule {
+    public final function getRule(): Rule {
         if ($this->getParent()) {
             return $this->getParent()->getRule();
         } elseif ($this->rule) {
             return $this->rule;
         } else {
-            throw new InternalError("Clause $this has neither rule nor parent associated");
+            throw new InternalError(static::class." is not associated with a rule");
         }
     }
 
-    public function setParent(?Clause $parent) {
+    public final function setParent(?NonTerminal $parent) {
+        if ($parent !== null) {
+            // check for loops, just in case
+            $ancestor = $parent;
+            while ($ancestor) {
+                if ($ancestor === $this) {
+                    throw new InternalError("Loop detected when calling ".static::class."::setParent()");
+                }
+                $ancestor = $ancestor->getParent();
+            }
+        }
         if ($this->rule !== null) {
-            throw new InternalError("Clause `$this` can't have both rule and parent. Rule was already `".$this->rule."` when setting parent `$parent`");
+            throw new InternalError(static::class."->rule is already set");
         }
         if ($this->parent !== null && $parent !== null) {
-            throw new InternalError("A clause can't have two parents (already have ".$this->parent.")");
+            throw new InternalError(static::class."->parent is already set");
         }
         $this->parent = $parent;
     }
@@ -164,9 +268,9 @@ abstract class Clause implements ClauseInterface {
         return $this->modifier;
     }
 
-    public function getModifierString(): string {
+    public function getOperatorString(): string {
         if ($this->isCaseInsensitive()) {
-            $str = 'i ';
+            $str = 'i';
         } else {
             $str = '';
         }
@@ -225,31 +329,28 @@ abstract class Clause implements ClauseInterface {
         return 0 < ($this->modifier & self::CASE_INSENSITIVE);
     }
 
-    private $_depth = 0;
     public final function __toString() {
-        if ($this->_depth++ > 0) {
-            $res = '*RECURSION*';
-        } else {
-            $res = $this->asString();
-            if ($this->args !== null) {
-                $res .= '('.substr(json_encode($this->args), 1, -1).')';
-            }
-        }
-        if ($this instanceof Sequence || $this instanceof OrderedChoice) {
-            $res = '( '.$res.' )';
-        } else {
-            $res = "`$res`";
-        }
-        $res = $this->getPredicateString().$res.$this->getModifierString();
-        $this->_depth--;
-        return $res;
+        return $this->toGrammarString();
     }
 
     public function __debugInfo() {
+        $parentId = null;
+        if ($this->getParent()) {
+            $parentId = $this->getParent()->__debugInfo()['id'];
+        }
+        $children = null;
+        if (is_iterable($this)) {
+            $children = implode(" ", array_map(function($e) { return $e->getKind().'#'.$e->grammarId; }, iterator_to_array($this)));
+        }
         return [
-            'kind' => $this->getKind(),
-            'modifier' => $this->getModifierString(),
+            'id' => $this->getKind()."#".$this->grammarId,
+            'parent_id' => $parentId,
+            'children_ids' => $children,
+            'string' => $this->__toString(),
+            'operator' => $this->getOperatorString(),
             'predicate' => $this->getPredicateString(),
+            'ruleName' => $this->getRule()->getRuleName(),
+            'ruleDescription' => $this->getRule()->getDescription(),
         ];
     }
 

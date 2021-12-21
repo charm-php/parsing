@@ -7,6 +7,10 @@ use Charm\Parsing\GrammarError;
 
 class Regex extends Terminal implements RegexInterface {
 
+    public function asString(): string {
+        return $this->pattern;
+    }
+
     // the regex as provided by the grammar
     private $pattern;
     // the final regex, as used for parsing
@@ -44,10 +48,6 @@ class Regex extends Terminal implements RegexInterface {
         $parser->offset += $length;
         $parser->traceEnd($this, $matches[0]);
         return $matches[0];
-    }
-
-    public function asString(): string {
-        return $this->pattern;
     }
 
 }

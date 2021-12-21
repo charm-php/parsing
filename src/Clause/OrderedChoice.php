@@ -15,16 +15,21 @@ use Charm\Parsing\{
 /**
  * OrderedChoice: e1 / e2 / e3
  */
-class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countable, \ArrayAccess {
+class OrderedChoice extends NonTerminal {
 
-    private $clauses = [];
-
-    public function __clone() {
-        parent::__clone();
-        foreach ($this->clauses as $k => $v) {
-            $this->clauses[$k] = clone $v;
-            $this->clauses[$k]->setParent($this);
+    public function toGrammarString(): string {
+        $childrenString = $this->asString();
+        if ($this->getParent() !== null || $this->getModifier() !== static::NONE) {
+            $childrenString = "($childrenString)";
         }
+        return $this->getPredicateString().$childrenString.$this->getOperatorString();
+    }
+
+    public function asString(): string {
+        $children = array_map(function($child) {
+            return $child->toGrammarString();
+        }, iterator_to_array($this));
+        return implode(" | ", $children);
     }
 
     public function optimize(GrammarInterface $grammar): ClauseInterface {
@@ -32,13 +37,12 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
             return clone $this;
         }
         $c = clone $this;
-        foreach ($c->clauses as $k => $clause) {
+        foreach ($c as $k => $clause) {
             $subClause = $clause->optimize($grammar);
             if ($subClause->getParent() !== null) {
                 throw new InternalError(get_class($clause)."::optimize() returned a clause which still has a parent");
             }
-            $subClause->setParent($this);
-            $c->clauses[$k] = $subClause;
+            $c[$k] = $subClause;
         }
         return $c;
     }
@@ -71,7 +75,7 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
             // the rule must have at least one clause that is not left-recursive, so we check for that
             $hasNonLeftRecursives = false;
             $ruleName = $rule->getRuleName();
-            foreach ($this->clauses as $clause) {
+            foreach ($this as $clause) {
                 if ($clause instanceof Sequence && $clause[0] instanceof Identifier && $clause[0]->getIdentifier() === $ruleName) {
                     $this->leftRecursive = true;
                     $clauses[] = [ 'left-recursive', $clause ];
@@ -118,7 +122,7 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
         } else {
             $headClause = new OrderedChoice(static::NONE, null);
             foreach ($headClauseCandidates as $clause) {
-                $headClause->addClause($clause);
+                $headClause[] = $clause;
             }
         }
 
@@ -148,7 +152,7 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
         if (count($tailClauseCandidates) > 1) {
             $tailClause = new OrderedChoice(static::REPEATING | static::OPTIONAL, null);
             foreach ($tailClauseCandidates as $subClause) {
-                $tailClause->addClause($subClause);
+                $tailClause[] = $subClause;
             }
         } else {
             $tailClause = $tailClauseCandidates[0];
@@ -156,15 +160,15 @@ class OrderedChoice extends NonTerminal implements \IteratorAggregate, \Countabl
         }
 
         $nonRecursiveClause = new Sequence(static::NONE, null);
-        $nonRecursiveClause->addClause($headClause);
-        $nonRecursiveClause->addClause($tailClause);
+        $nonRecursiveClause[] = $headClause;
+        $nonRecursiveClause[] = $tailClause;
 
         $this->leftRecursionClause = $nonRecursiveClause;
     }
 
     public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        $this->processLeftRecursiveClauses();
-
+//        $this->processLeftRecursiveClauses();
+/*
         if ($this->leftRecursive) {
 die("I should have been optimized away");
             if (null !== ($args = $this->getArgs())) {
@@ -173,15 +177,14 @@ die("I should have been optimized away");
                 return $this->leftRecursionClause->withArgs(['pr' => 0])->parse($parser, $parentResult);
             }
         }
+*/
 $indent = str_repeat(" ", count(debug_backtrace()));
 
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
 
-        foreach ($this->clauses as $clause) {
+        foreach ($this as $clause) {
             $parser->offset = $offset;
-
-            $context = null;
 
             if ($clause instanceof Snippet) {
                 $result = $clause->parse($parser, $context);
@@ -194,57 +197,17 @@ $indent = str_repeat(" ", count(debug_backtrace()));
                 continue;
             }
 
-/*
-            $parser->traceHit($this, $offset, $result);
-*/
             $parser->traceEnd($this, $result);
             return $result;
         }
         $parser->offset = $offset;
-/*
-        $parser->traceMiss($this, $offset);
-*/
         $parser->traceEnd($this, false);
         return false;
     }
 
-    public function offsetGet($offset) {
-        return $this->clauses[$offset] ?? null;
-    }
-
-    public function offsetSet($offset, $clause) {
-        $clause->setParent($this);
-        $this->clauses[$offset] = $clause;
-    }
-
-    public function offsetExists($offset) {
-        return array_key_exists($offset, $this->clauses);
-    }
-
-    public function offsetUnset($offset) {
-        throw new Exception("Can't unset a clause from OrderedChoice");
-    }
-
-    public function count() {
-        return count($this->clauses);
-    }
-
-    public function addClause(Clause $choice) {
-        $choice->setParent($this);
-        $this->clauses[] = $choice;
-    }
-
-    public function getIterator() {
-        yield from $this->clauses;
-    }
-
-    public function asString(): string {
-        return implode(" / ", $this->clauses);
-    }
-
     public function __debugInfo() {
         $di = parent::__debugInfo();
-        $di['OrderedChoice'] = $this->clauses;
+        $di['OrderedChoice'] = iterator_to_array($this);
         return $di;
     }
 }

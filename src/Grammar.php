@@ -56,19 +56,58 @@ use Charm\Parsing\Clause\{
  */
 class Grammar implements IteratorAggregate, GrammarInterface {
 
+    /**
+     * The filename for the grammar, if available
+     */
+    public $filename;
+
+    /**
+     * Associative array of rules
+     */
     private $ruleMap = [];
+
+    /**
+     * Has the grammar been optimized?
+     */
     private $optimized = false;
 
-    public function __construct(iterable $rules) {
+    public function __construct(iterable $rules, string $filename=null) {
+        $this->filename = $filename;
         foreach ($rules as $rule) {
             if (isset($this->ruleMap[$rule->getRuleName()])) {
-                throw new Exception("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
+                throw new GrammarError("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
             }
             $this->ruleMap[$rule->getRuleName()] = $rule;
         }
     }
 
-    public function optimize(): static {
+    public function validate() {
+        $checkClause = function(Clause $clause, Clause $parent=null) use (&$checkClause) {
+            if ($parent !== $clause->getParent()) {
+                throw new GrammarError("Clause '".$clause->getClauseName()."' has misreference
+
+Expected:   ".$parent->getClauseName()."
+Is:         ".$clause->getParent()->getClauseName()."
+
+");
+            }
+            if (is_iterable($clause)) {
+                foreach($clause as $subClause) {
+                    $checkClause($subClause, $clause);
+                }
+            }
+        };
+        foreach ($this->ruleMap as $name => $rule) {
+            if ($rule !== $rule->getClause()->getRule()) {
+                throw new GrammarError("Rule '$name' has misreference");
+            }
+            $checkClause($rule->getClause());
+        }
+
+
+    }
+
+    public function niu_optimize(): static {
         if ($this->optimized) {
             throw new \LogicException("Don't optimize a grammar twice");
         }
@@ -90,13 +129,14 @@ class Grammar implements IteratorAggregate, GrammarInterface {
         foreach ($grammar->ruleMap as $name => $rule) {
             $grammar->ruleMap[$name] = new Rule($name, $rule->getClause()->optimize($grammar));
         }
+
 /*
         foreach ($grammar->ruleMap as $name => $rule) {
             if (method_exists($rule->getClause(), 'isLeftRecursive') && $rule->getClause()->isLeftRecursive()) {
                 $grammar->ruleMap[$name]->setClause($rule->getClause()->getNonRecursive());
             }
-*/
         }
+*/
         $grammar->optimized = true;
         return $grammar;
     }
@@ -125,14 +165,16 @@ class Grammar implements IteratorAggregate, GrammarInterface {
         yield from $this->ruleMap;
     }
 
-    public static function fromString(string $grammarString) {
-        $parser = new GrammarParser(static::class);
-        return $parser->parse($grammarString);
-    }
-
     public function __toString() {
 
         $arr = [];
+
+        foreach ($this as $rule) {
+            $arr[] = (string) $rule;
+        }
+
+        return implode("\n\n", $arr);
+
         foreach ($this as $rule) {
             $row = [ $rule->getRuleName(), trim($rule->getClause()) ];
             $arr[] = $row;

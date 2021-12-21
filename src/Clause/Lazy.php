@@ -8,7 +8,7 @@ use Charm\Parsing\ParserInterface;
  * A rule which simply wraps another clause and presents it as if it was this clause.
  */
 class Pointer extends Terminal {
-
+TO BE DELETED
     private $clause = null;
     private $methodClass, $methodName;
 

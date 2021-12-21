@@ -4,6 +4,38 @@ Charm/Parsing
 A powerful parsing library for parsing PEG style grammars. It has functionality similar to `peg.js`, but is written from scratch
 in PHP.
 
+ * Simple to write complex parsers
+ * Supports direct left recursion
+ * PEG style recursive descent parsing
+ * Scannarless
+
+Example JSON parser
+-------------------
+
+```
+JSON =
+        Number
+    |   String
+    |   "null"
+    |   "true"
+    |   "false"
+    |   Object
+    |   Array
+
+Object  = '{' _ Members? '}' _
+Array   = '[' _ List? ']' _
+Members = Member (',' Member)*
+Member  = Key ':' _ JSON
+Key     = String | Number
+List    = JSON (',' JSON)*
+Number  = /(0|[1-9][0-9]*)(\.[0-9]+)?/ _        {{ return floatval($_0); }}
+String  = '"' ( '\\' | '\"' | !'"' . ) '"' _    {{ return implode("", $context); }}
+
+_       = /\s*/                                 {{ return ignore(); }}
+```
+
+
+
 Example Grammar Syntax
 ----------------------
 

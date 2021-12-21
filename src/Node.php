@@ -1,62 +1,69 @@
 <?php
 namespace Charm\Parsing;
 
-/**
- * Represents an inner node (that can have children) in a parse tree.
- */
-class Node extends AbstractNode implements \Countable, \IteratorAggregate, \ArrayAccess {
+use JsonSerializable, ArrayAccess;
 
-    private $children = [];
+class Node implements JsonSerializable, ArrayAccess {
+    private $name;
+    private array $members;
 
-    public function __construct(string $kind, array $children=[]) {
-        parent::__construct($kind);
-        $this->children = $children;
-    }
-
-    public function __debugInfo() {
-        return [ $this->getKind() => count($this->children) === 1 ? current($this->children) : $this->children ];
-    }
-
-    public function isLeafNode(): bool {
-        return false;
-    }
-
-    public function addChild(NodeInterface $node) {
-        $this->children[] = $node;
-    }
-
-    public function count() {
-        return count($this->children);
-    }
-
-    public function getIterator() {
-        yield from $this->children;
-    }
-
-    public function offsetGet($offset) {
-        return $this->children[$offset] ?? null;
+    public function __construct(...$members) {
+        foreach ($members as $k => $member) {
+            if (is_array($member)) {
+                $members[$k] = new Node(...$member);
+            }
+        }
+        $this->members = $members;
     }
 
     public function offsetSet($offset, $value) {
-        if (!is_int($offset)) {
-            throw new InternalError("Can't set non-integer offsets");
+        if (!is_int($offset) && $offset !== null) {
+            throw new InternalError("Offset ($offset) out of range");
         }
-        $this->children[$offset] = $value;
+        if ($offset === null) {
+            $offset = count($this->members);
+        }
+        if ($offset < 0) {
+            throw new InternalError("Offset ($offset) is negative");
+        }
+        if ($offset > count($this->members)) {
+            throw new InternalError("Offset ($offset) is out of range");
+        }
+        $this->members[$offset] = $value;
     }
 
-    public function offsetUnset($offset) {
-        unset($this->children[$offset]);
+    public function offsetGet($offset) {
+        return $this->members[$offset] ?? null;
     }
 
     public function offsetExists($offset) {
-        return array_key_exists($offset, $this->children);
+        return key_exists($offset, $this->members);
     }
 
-    public function __toString() {
-        $children = [];
-        foreach ($this->children as $k => $v) {
-            $children[] = "$k=$v";
-        }
-        return $this->kind.'['.implode(" ",$children).']';
+    public function offsetUnset($offset) {
+        throw new InternalError("Can't unset offset ($offset)");
     }
+
+    public function jsonSerialize() {
+        return $this->members;
+    }
+
+    public function sx(): string {
+        return "(".implode(" ", array_map(function($member) {
+            if ($member instanceof Node) {
+                return $node->sx();
+            } elseif (is_int($member) || is_string($member) || is_float($member)) {
+                return (string) $member;
+            } elseif (is_bool($member)) {
+                return $member ? 1 : 0;
+            } else {
+                throw new InternalError("Generating s-expression from type `".gettype($member)."` is not supported");
+            }
+        }, $this->members)).")";
+    }
+
+    public function __debugInfo() {
+        return $this->members;
+    }
+
 }

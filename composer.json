@@ -21,6 +21,7 @@
     "minimum-stability": "stable",
     "require": {
         "charm/vector": "^1.0",
-        "charm/options": "^1.0"
+        "charm/options": "^1.0",
+        "charm/map": "^1.0.2"
     }
 }

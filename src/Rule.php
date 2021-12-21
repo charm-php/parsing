@@ -13,6 +13,7 @@ class Rule implements \IteratorAggregate {
 
     private $ruleName;
     private $clause;
+    private $description;
     public $associativity;
 
     public function __construct(string $ruleName, Clause $clause, int $associativity=self::ASSOC_NONE) {
@@ -55,6 +56,14 @@ class Rule implements \IteratorAggregate {
         $this->associativity = $associativity;
     }
 
+    public function getDescription(): ?string {
+        return $this->description;
+    }
+
+    public function setDescription(?string $description) {
+        $this->description = $description;
+    }
+
     /**
      * Convert this rule to an ordered choice if needed, and append a new rule.
      */
@@ -64,14 +73,14 @@ class Rule implements \IteratorAggregate {
             $oldClause->setRule(null);
             $this->clause = new OrderedChoice(Clause::NONE);
             $this->clause->setRule($this);
-            $this->clause->addClause($oldClause);
+            $this->clause[] = $oldClause;
 var_dump($this->clause->getParent());die("ALL OK");
         }
-        $this->clause->addClause($clause);
+        $this->clause[] = $clause;
     }
 
     public function __toString() {
-        $result = $this->ruleName." <-";
+        $result = $this->ruleName.spl_object_id($this)." ".($this->description !== null ? json_encode($this->description)." " : "")."::=";
         if ($this->clause instanceof OrderedChoice) {
             $strlen = 0;
             foreach ($this->clause as $i => $clause) {

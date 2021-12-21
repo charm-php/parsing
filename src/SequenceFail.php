@@ -2,7 +2,7 @@
 namespace Charm\Parsing;
 
 /**
- * A return value indicating that the entire sequence should fail.
+ * The sequence will return false and be treated as a missed parse.
  */
 class SequenceFail implements SequenceInstruction {
 }

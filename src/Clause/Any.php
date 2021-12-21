@@ -7,6 +7,22 @@ use Charm\Parsing\Clause;
 
 class Any extends Terminal {
 
+    public function toGrammarString(): string {
+        return $this->getPredicateString().'.'.$this->getOperatorString();
+    }
+
+    public function asString(): string {
+        return '.';
+    }
+
+    public function compile(Context $context) {
+        return new ParseClass(<<<'CODE'
+            $this->parser->traceStart($this);
+            
+            $parser->traceStart($this, $parser->offset)
+        'CODE');
+    }
+
     public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
@@ -21,7 +37,4 @@ class Any extends Terminal {
         return $matched;
     }
 
-    public function asString(): string {
-        return '.';
-    }
 }

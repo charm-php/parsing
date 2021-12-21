@@ -7,13 +7,75 @@ use Charm\Parsing\{
     GrammarError,
     InternalError
 };
+use Charm\Parsing\Clause\{
+    Commit
+};
 
-abstract class NonTerminal extends Clause {
+abstract class NonTerminal extends Clause implements \ArrayAccess, \IteratorAggregate, \Countable {
 
-    public function __construct(int $modifier, ?string $name) {
-        $this->modifier = $modifier;
-        $this->name = $name;
+    private $children = [];
+
+    protected function filterSubClause(int $offset, Clause $clause): Clause {
+        return $clause;
     }
+
+    public function __clone() {
+        parent::__clone();
+        foreach ($this->children as $i => $child) {
+            $this[$i] = clone $child;
+        }
+    }
+
+    public final function count() {
+        return count($this->children);
+    }
+
+    public final function getIterator() {
+        yield from $this->children;
+    }
+
+    public final function offsetGet($offset) {
+        return $this->children[$offset] ?? null;
+    }
+
+    public final function offsetSet($offset, $child) {
+        if (!$child instanceof Clause) {
+            throw new InternalError("Children must be instance of Clause");
+        }
+        if ($offset === null) {
+            $offset = count($this->children);
+        }
+        $child = $this->filterSubClause($offset, $child);
+        if ($child->getParent() !== null) {
+            throw new InternalError("Children can't already have a parent");
+        }
+        if (is_int($offset) && $offset >= 0 && $offset <= count($this->children)) {
+            if (($this->children[$offset] ?? null) instanceof Clause) {
+                $this->children[$offset]->setParent(null);
+            }
+            $this->children[$offset] = $child;
+        } else {
+            throw new InternalError("Illegal offset '$offset' for child node");
+        }
+        $child->setParent($this);
+    }
+
+    public final function offsetExists($offset) {
+        return array_key_exists($offset, $this->children);
+    }
+
+    public final function offsetUnset($offset) {
+        if ($offset !== count($this->children)-1 || !isset($this[$offset])) {
+            throw new InternalError("Can't unset child at offset '$offset'");
+        }
+        $this->children[$offset]->setParent(null);
+        $c = count($this->children);
+        for ($i = $offset; $i < $c-1; $i++) {
+            $this->children[$i] = $this->children[$i+1];
+        }
+        unset($this->children[$c-1]);
+    }
+
 
 /*
     private $_hasLeftMostResult = false;
@@ -53,9 +115,13 @@ abstract class NonTerminal extends Clause {
 
     protected function processSubClause(ParserInterface $parser, Clause $subClause, array &$context, array $args=null) {
 
+        if ($subClause instanceof Commit) {
+            throw new InternalError("Commit not processed in class ".get_class($this));
+        }
+
         if ($subClause instanceof Snippet) {
             if ($subClause->getModifier() !== static::NONE) {
-                throw new GrammarError("Snippets can't be annotated with ".$subClause->getModifierString()." currently.");
+                throw new GrammarError("Snippets don't support operators '".$subClause->getOperatorString()."'");
             }
             return $subClause->parse($parser, $context, $args);
         }
@@ -70,7 +136,7 @@ abstract class NonTerminal extends Clause {
              * repetition expression e+ succeeds for one or more matches.
              */
             while (true) {
-                $subResult = $subClause->parse($parser, $context);
+                $subResult = $subClause->parse($parser, $context, $args);
 
                 if ($subResult === false) {
                     $subResult = false;
@@ -85,17 +151,18 @@ abstract class NonTerminal extends Clause {
                     $result[] = $subResult;
                 }
             }
+
             if ($result === null) {
                 if ($subClause->isOptional()) {
-                    $result = true;
+                    $result = [];
                 } else {
                     $result = false;
                 }
             }
         } else {
-            $result = $subClause->parse($parser, $parentResult);
+            $result = $subClause->parse($parser, $context, $args);
             if ($result === false && $subClause->isOptional()) {
-                $result = true;
+                $result = null;
             }
         }
 

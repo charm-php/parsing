@@ -5,6 +5,15 @@ use Charm\Parsing\ParserInterface;
 use Charm\Parsing\Clause;
 
 class EOF extends Terminal {
+
+    public function toGrammarString(): string {
+        return $this->getPredicateString().'$'.$this->getOperatorString();
+    }
+
+    public function asString(): string {
+        return '$';
+    }
+
     public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         if ($parser->offset === $parser->length) {
@@ -13,9 +22,5 @@ class EOF extends Terminal {
         }
         $parser->traceEnd($this, false);
         return false;
-    }
-
-    public function asString(): string {
-        return '$';
     }
 }

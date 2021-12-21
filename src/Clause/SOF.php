@@ -6,6 +6,10 @@ use Charm\Parsing\Clause;
 
 class SOF extends Terminal {
 
+    public function asString(): string {
+        return '^';
+    }
+
     public function parse(ParserInterface $parser, array &$context, array $args=null) {
         $parser->traceStart($this, $parser->offset);
         if ($parser->offset !== 0) {
@@ -16,7 +20,4 @@ class SOF extends Terminal {
         return true;
     }
 
-    public function asString(): string {
-        return '^';
-    }
 }

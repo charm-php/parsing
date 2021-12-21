@@ -1,5 +1,5 @@
 <?php
-namespace Charm\Parsing\Terminal;
+namespace Charm\Parsing\Util;
 
 class CSI {
     const INTENSITY_BOLD = 1;
@@ -34,6 +34,7 @@ class CSI {
     const BWHITE = 97;
 
     public static function isTTY() {
+return true;
         if (!function_exists('posix_isatty')) {
             return false;
         }
@@ -41,7 +42,70 @@ class CSI {
     }
 
     public static function strip(string $str) {
-        return preg_replace_all('/<![-_a-zA-Z0-9 ]*>/', '', $str);
+        return preg_replace('/<![-_a-zA-Z0-9 ]*>/', '', $str);
+    }
+
+    public static function strlen(string $str) {
+        return mb_strlen(self::strip($str));
+    }
+
+    public static function substr(string $str, int $start, int $length = 100000) {
+        preg_match_all('/(?<token><![-_a-zA-Z0-9 ]*>)|(?<text>[\s\S]*?(?=<|$))/', $str, $matches, PREG_SET_ORDER);
+
+        $res = '';
+        $captured = 0;
+        $skipped = 0;
+        $stack = [];
+        foreach ($matches as $token) {
+            if ($token['token'] !== '') {
+                // buffer any tokens that may not affect the result, and remove useless tokens
+                $instructions = preg_split("/\s+/", trim(substr($token[0], 2, -1)));
+                if ($instructions[0] === '') {
+                    if ($stack === []) die("STACK MISMATCH");
+                    array_pop($stack);
+                } else {
+                    $stack[] = $token[0];
+                }
+
+                if ($skipped < $start) {
+                    // not outputting before start (stack is output when capture starts)
+                } elseif ($captured >= $length) {
+                    assert(false, "BUG, SHOULD NOT COME HERE");
+                    // not outputting after start (stack will be emptied when capture ends)
+                } else {
+                    $res .= $token[0];
+                }
+            } else {
+                $tl = mb_strlen($token[0]);
+
+                if ($skipped + $tl < $start) {
+                    // will be in skipped phase after skip
+                    $skipped += $tl;
+                } else {
+                    if ($skipped < $start) {
+                        // will begin output after skip
+                        $token[0] = mb_substr($token[0], $start-$skipped);
+                        $tl -= $start - $skipped;
+                        $skipped = $start;
+                        $res .= implode('', $stack);
+                    }
+                    if ($captured + $tl > $length) {
+                        $res .= mb_substr($token[0], 0, $length - $captured);
+                        $captured += $length - $captured;
+                    } else {
+                        $res .= $token[0];
+                        $captured += $tl;
+                    }
+                    if ($captured === $length) {
+                        break;
+                    }
+                }
+            }
+        }
+        foreach ($stack as $null) {
+            $res .= '<!>';
+        }
+        return $res;
     }
 
     public static function parse(string $str) {

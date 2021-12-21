@@ -20,10 +20,4 @@ interface GrammarInterface extends Traversable, ArrayAccess, Countable {
      */
     public function __construct(iterable $rules);
 
-    /**
-     * Return an optimized version of the grammar. If no optimizations are
-     * performed, return a clone of this.
-     */
-    public function optimize(): static;
-
 }

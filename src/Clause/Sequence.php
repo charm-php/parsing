@@ -3,39 +3,46 @@ namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\ParserInterface;
 use Charm\Parsing\Clause;
+use Charm\Parsing\Clause\Commit;
 use Charm\Parsing\Rule;
 use Charm\Parsing\{
     SequenceInstruction,
     SequenceResume,
     SequenceIgnore,
-    NodeInterface,
     ClauseInterface,
     GrammarInterface,
-    BoxedResult
+    BoxedResult,
+    ExpectedError,
 };
 /**
  * Sequence: e1 e2
  */
-class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \ArrayAccess {
+class Sequence extends NonTerminal {
 
-    private $clauses = [];
-
-    public function __clone() {
-        parent::__clone();
-        foreach ($this->clauses as $k => $v) {
-            $this->clauses[$k] = clone $v;
-            $this->clauses[$k]->setParent($this);
-        }
+    public function asString(): string {
+        $children = array_map(function($child) {
+            return $child->toGrammarString();
+        }, iterator_to_array($this));
+        return implode(" ", $children);
     }
 
     public function parse(ParserInterface $parser, array &$context, array $args=null) {
+        if (isset($parser->cache[$parser->offset][$key = get_class($this)." ".$this])) {
+            var_dump("Sequence was here:", $parser->cache[$parser->offset][$key]);
+            die();
+        }
         $parser->traceStart($this, $parser->offset);
         $offset = $parser->offset;
+        $committed = null;
 
-        $result = null;
+        $result = [];
 
         foreach ($this as $subClause) {
-            $match = $this->processSubClause($parser, $subClause, $context);
+            if ($subClause instanceof Commit) {
+                $committed = $parser->offset;
+                continue;
+            }
+            $match = $this->processSubClause($parser, $subClause, $result);
 
             if ($subClause instanceof Snippet) {
                 // Snippets may provide instructions that determine how this sequence continues
@@ -55,6 +62,9 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
 
             if ($match === false) {
                 // The sub clause failed, so the sequence fails
+                if ($committed !== null) {
+                    throw new ExpectedError($parser, $this, $subClause);
+                }
                 $parser->offset = $offset;
                 $parser->traceEnd($this, false);
                 return false;
@@ -68,103 +78,49 @@ class Sequence extends NonTerminal implements \IteratorAggregate, \Countable, \A
             }
 
             if (null !== ($name = $subClause->getName())) {
-                // the subclause is labeled, so we don't merge the arrays
                 $result[$name] = $match;
             } else {
                 $result[] = $match;
-/*
-                if ($subClause->isRepeating()) {
-                    foreach ($match as $subMatch) {
-                        $result[] = $subMatch;
-                    }
-                } else {
-                    $result[] = $match;
-                }
-*/
             }
         }
-
-        $result = array_values($result);
-
-/*
-        if (is_array($result)) {
-            if (count($result) === 1 && is_int(key($result))) {
-                $result = current($result);
-            } else {
-                $result = array_values($result);
-            }
-        }
-*/
-/*
-        if (is_array($result) && count($result) === 1 && is_int(key($result))) {
-            $result = current($result);
+        if ($result === []) {
+            $result = null;
         } else {
-        
+            $result = array_values($result);
         }
-*/
-/*
-        $parser->traceHit($this, $offset, $result);
-*/
+
         $parser->traceEnd($this, $result);
         return $result;
     }
 
     public function optimize(GrammarInterface $grammar): ClauseInterface {
         if ($this->getName() !== null || $this->getModifier() !== static::NONE) {
-            return clone $this;
+            $res = clone $this;
+            return $res;
         }
-        if (count($this->clauses) === 1) {
-            $c = $this->clauses[0];
+        if (count($this) === 1) {
+            $c = $this[0];
             $cl = $c->optimize($grammar);
+            if ($cl->getParent() !== null) {
+                die("HAS REF AFTER CLONE");
+            }
             return $cl;
         } else {
             $c = clone $this;
-            foreach ($c->clauses as $k => $clause) {
+            foreach ($c as $k => $clause) {
                 $subClause = $clause->optimize($grammar);
-                $subClause->setParent($c);
-                $c->clauses[$k] = $subClause;
+                if ($subClause->getParent() !== null) {
+                    die("SUB HAS REF AFTER CLONE");
+                }
+                $c[$k] = $subClause;
             }
             return $c;
         }
     }
 
-    public function offsetGet($offset) {
-        return $this->clauses[$offset] ?? null;
-    }
-
-    public function offsetSet($offset, $clause) {
-        $clause->setParent($this);
-        $this->clauses[$offset] = $clause;
-    }
-
-    public function offsetExists($offset) {
-        return array_key_exists($offset, $this->clauses);
-    }
-
-    public function offsetUnset($offset) {
-        throw new Exception("Can't unset a clause from Sequence");
-    }
-
-    public function count() {
-        return count($this->clauses);
-    }
-
-    public function addClause(Clause $clause) {
-        $clause->setParent($this);
-        $this->clauses[] = $clause;
-    }
-
-    public function getIterator() {
-        yield from $this->clauses;
-    }
-
-    public function asString(): string {
-        return implode(" ", $this->clauses)."(SEQ)";
-    }
-
     public function __debugInfo() {
         $di = parent::__debugInfo();
-        $di['Sequence'] = $this->clauses;
+        $di['Sequence'] = iterator_to_array($this);
         return $di;
     }
 

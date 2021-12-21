@@ -1,463 +1,405 @@
 <?php
 namespace Charm\Parsing;
 
+use Charm\Vector;
 use Charm\Parsing\Clause\{
-    Identifier,
-    Sequence,
-    OrderedChoice,
-    Text,
-    Regex,
-    Any,
-    EOF,
+    Commit,
+    Snippet,
     SOF,
-    Snippet
+    EOF,
+    Identifier,
+    OrderedChoice,
+    Sequence,
+    Regex,
+    Text
 };
-/**
- * Parser for PEG-style grammar string into a GrammarInterface instance.
- *
- * Format
- * ======
- *
- * The parser tries to accept different notation styles by allowing a variety of different symbols for the same cause.
- *
- * Quick Start
- * -----------
- * We reccommend writing PEG grammars in PHP using "nowdoc" format to avoid problems with double escaped slashes and different
- * quoting styles. {@see https://www.php.net/manual/en/language.types.string.php#language.types.string.syntax.nowdoc}
- *
- * This example illustrates many of the capabilities of the grammar parser:
- * ```
- * <?php
- * require 'vendor/autoload.php';
- * $grammarParser = new Charm\Parsing\GrammarParser(Grammar::class);
- *
- * $expressionGrammar = $parser->parse(<<<'PEG'
- *
- *     Expression <-    ^ SumExpression $                                   #  This is a comment and the hat '^' and '$' means start/end of file
- *     SumExpression:   MulExpression ( ("+" / "-") MulExpression )*        // Here we use ':' instead of '<-' and show nested sub-expressions.
- *     MulExpression =  ExpExpression ( ("*" / "/") ExpExpression )*        #  Here we use '='. The '*' symbol means "zero or more".
- *     ExpExpression:                                                       #  Rules can span multiple lines.
- *       Value ('^' Value)*                                                 #  Single quotes are allowed
- *     Value:
- *       Float /                                                            #  Forward slash / means "or"
- *       Integer |                                                          #  Alternatively you can use the pipe symbol |
- *       Identifier
- *     Float:           Integer "." Integer
- *     Integer:         /[1-9][0-9]*|0/                                     #  Regular expressions between slash symbols.
- *     DoubleQuote:     "\""                                                #  Backslash escapes the quoting symbol (also for single quoted strings)
- *     QuoteSymbol:     ["']                                                #  Character ranges are supported
- *     EscapedQuote:    "\\" QuoteSymbol                                    #  Inside strings the backslash must be escaped
- *     PEG);
- *
- * $expressionParser = new Charm\Parser($expressionGrammar);
- * // Note that you can cache the parser by serializing or using var_export.
- *
- * $tree = $expressionParser->parse('10*2-20');
- * ```
- *
- * Production Rules
- * ----------------
- * The following are equivalent. Whitespace is ignored unless it belongs to a token.
 
- * ```
- * Number <- $clauses[]                         # This is the original style defined by Bryan Ford who formalized PEG grammars.
- * Number := $clauses[]
- * Number = $clauses[]
- * Number : $clauses[]
- * Number <-                                    # Multiple lines may be used to improve readability
- *   $clauses[]
- * ```
+/**
+ * This is a hand-written recursive descent parser for parsing grammars which can be
+ * interpreted by `Charm\Parsing\CPEGParser`.
  *
- * Clauses
- * -------
- * Clauses are the "expressions" that must match at any given offset in the file you're parsing. A clause may refer to another
- * production rule, in which case they are known as 'non terminal' clauses. Clauses that perform an actual match of the source
- * code are known as 'terminal' clauses.
- *
- * Terminal Clauses
- * ----------------
- * The following list shows all variations of terminal clauses currently supported (except for a few built-int clauses we'll
- * explain next.
+ * In BNF form the grammmar for grammars is:
  *
  * ```
- * Number       <- /[1-9][0-9]*|0](\.[0-9]*)/   # Regular expressions begin and end with /.
- * True         <- "true"                       # A literal match
- * False        <- 'false'                      # Single and double quotes are allowed
- * DoubleQuote  <- "\""                         # Quotes are escaped using backslashes
- * Digit        <- [0-9]                        # Character range matches
- * AOrB         <- [abAB]                       # Single character matches, escape the ] using a backslash when needed: [[\]]
- * Hex          <- "0x" /[0-9a-fA-F]+/          # Multiple terminal clauses can follow each other
- * ```
- *
- * Special Terminal Clauses
- * ------------------------
- * Some terminal symbols have special meaning in the grammar. They can mark the start '^' or the end '$' of the file, or "epsilon"
- * which means that it matches nothing at all and always succeeds.
- *
- * Example grammar for a file containing a single integer number without any whitespace.
- * ```
- * Number <- ^ /([1-9][0-9]*)/ $
- * ```
- *
- * Epsilon is the greek letters 'Ε' and 'ε', and literally means 'the smallest positive number'. It is used in grammars to create
- * a clause which is the smallest possible successful match. You can achieve a similar result by using an empty string terminal ''.
- *
- * In PEGs the epsilon symbol is rarely needed, but they are supported to simplify porting a grammar which requires epsilon.
- *
- * ```
- * AnOptionalMatch <- "Hello" / ε               # Either "Hello" or nothing is a successful match.
- * ```
- *
- * Non-Terminal Clauses
- * --------------------
- * Non terminal clauses are simply identifiers that call upon other production rules. For example:
- * ```
- * Value = Number / True / False / Hex          # Returns a Value containing either Number / True / False or Hex
- * ```
- *
- * Ordered Choice Clauses
- * ----------------------
- * Often you'll want to allow multiple different rules. This is annotated by the forward slash or pipe symbol:
- *
- * On a single line:
- * ```
- * Boolean      <- True / False
- * ```
- *
- * Using whitespace for readability:
- * ```
- * Boolean:     True
- *            / False
- * Boolean:
- *   True /
- *   False
- * ```
- *
- * ```
- * Boolean      <- True / False                 # First tries to match with rule "True". If that fails, it tries the next rule "False"
- * True         <- "true"
- * False        <- "false"
- * ```
- *
- * Repeating or optional clauses
- * ------------------------------
- * Clauses can have modifiers which change their behavior to repeat matches or make them optional.
- *
- * An optional match marked by a '?' suffix:
- * ```
- * DollarsOptional: "$"? Number                 # The "$" terminal is not required for the rule to match
- * ```
- * Match one or more times marked by a '+' suffix:
- * ```
- * Number:          Digit+
- * ```
- * Match zero or more times marked by a '*' suffix:
- * ```
- * Hex:             "0x" [0-9a-f] [0-9a-f]*
- * ```
- * Note that the '*' suffix is essentially the same as a combination of '+' and '?'
- * ```
- * IgnoreSpace:     " "+?
- * ```
- *
- * Nested clauses
- * --------------
- * Nested clauses are an important tool for parsing things like an mathematical expression, an argument
- * list or an array of values. Use parentheses to create nested expressions.
- *
- * ```
- * CallStatement:   FunctionName "(" Arguments ")"
- * Arguments:
- *   Argument ( "," Argument )*                 # Both "," and Argument must be repeated - or neither
- * Argument:
- *   CallStatement /
- *   Identifier /
- *   Number
- * FunctionName:    Identifier
- * Identifier:      /([a-zA-Z][a-zA-Z0-9]*)/
- * Number:          /([1-9][0-9]*|0)(\.[0-9]+)?/
+ * CPEG =               Rule* $
+ * Rule =               RuleName RuleDescription? ("::=" | "::" | ":=" | "=" | "->") Clauses ";"?
+ * RuleName =           IDENT
+ * RuleDescription =    STRING
+ * Clauses =            Clause+
+ * Clause =             Label? Predicate? (IDENT | STRING | REGEX | SubExpression) Operator?
+ * SubExpression =      "(" Clauses+ ")"
+ * Label =              STRING ":"
+ * Predicate =          "&" | "!"
+ * Operator =           "*" | "+" | "?"
  * ```
  */
-class GrammarParser implements ParserInterface {
+class GrammarParser extends RecursiveDescentParser {
+    const T_IDENT = 1;
+    const T_STRING = 2;
+    const T_REGEX = 3;
+    const T_NUMBER = 4;
+    const T_SNIPPET = 5;
+    const T_COMMENT = 6;
+    const T_BEGIN = 7;
+    const T_END = 8;
+    const T_PREDICATE = 9;
+    const T_OPERATOR = 10;
+    const T_COMMIT = 11;
+    const T_COLON = 12;
+    const T_BRACE_OPEN = 13;
+    const T_BRACE_CLOSE = 14;
+    const T_OR = 15;
+    const T_TOKEN = 16;
+    const T_WHITESPACE = 17;
 
-    const TOKENIZER_REGEX = <<<'TOKENIZER'
-        /
-         (?<Rule>[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*(?!:[\S!&])(?=\s*(:=|=(?!>)|<-|:)))
-        |(?<Suffix>(?<!\s)[+*?i])
-        |(?<Identifier>([a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+)(?!\:)|\$|\^|\.|Ε|ε)
-        |(?<String>"(\\\\|\\"|[^"])*"|'(\\\\|\\'|[^'])*')
-        |(?<Comment>(\/\/|\#)[^\n]*|\/\*((?&Comment)|[\s\S])*?\*\/)
-        |(?<Regex>\/(\\\\|\\\/|[^\/ ])*\/|\[(\\\\|\\]|[^\]])+])
-        |(?<Prefix>[!&]|[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*\:)
-        |(?<Or>\/|\|)
-        |(?<Begin>:=|=(?!>)|<-|:)
-        |(?<Sequence>\((?R)+\))
-        |(?<Snippet>{{[\s\S]*?}})
-        |(?<Whitespace>\s+)
-        /xmu
-        TOKENIZER;
+    public function __construct() {
+        $this->addTerminal(self::T_COMMENT, '(?<COMMENT>(\#|\/\/)[^\n]*+|\/\*((?!\*\/)[\s\S])*\*\/)');
 
-    /**
-     * @param class-name $grammarClass The grammar class we'll be creating.
-     */
-    public function __construct(string $grammarClass) {
-        $this->grammarClass = $grammarClass;
+        $this->addTerminal(self::T_IDENT, '[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+|\^|\$');
+
+        $this->addTerminal(self::T_STRING, <<<'RE'
+            (?<STRING>"(\\[\\"]|[^"\\]+|[^"])*+"|'(\\[\\']|[^'\\]+|[^'])*+')
+            RE,
+            function($match): string {
+                $q = $match->text[0];
+                $match = substr($match->text, 1, -1);
+                return strtr($match, [ "\\\\" => "\\", "\\$q" => $q ]);
+            });
+
+        $this->addTerminal(self::T_REGEX, <<<'RE'
+            \/(\\[\s\S]|[^\/])*+\/|\[(\\[\S\s]|[^]])*+\]
+            RE,
+            function($match) {
+                return $match->text;
+                if ($match->text[0] === '/') {
+                    return substr($match->text, 1, -1);
+                } elseif ($match->text[0] === '[') {
+                    return $match->text;
+                } else {
+                    throw new GrammarError("Unable to process regex `".$match->text."`");
+                }
+            });
+
+        $this->addTerminal(self::T_NUMBER, '(0|[1-9][0-9]*+)(\.[0-9]++)?',
+            function($match) {
+                if (is_int(strpos($match->text, '.'))) {
+                    return (float) $match->text;
+                }
+                return (int) $match->text;
+            });
+
+        $this->addTerminal(self::T_SNIPPET, <<<'RE'
+            <\?(
+                \?>(*ACCEPT)|
+                (?=[\/"'#])(
+                    (?&STRING)|
+                    (?&COMMENT)
+                )|
+                [^'"#\/?]++|
+                [\s\S]
+            )*+
+            RE,
+            function($match) {
+                return substr($match->text, 2, -2);
+            });
+
+        $this->addTerminal(self::T_BEGIN, '::=|:=|:=|->|=');
+        $this->addTerminal(self::T_END, ';');
+        $this->addTerminal(self::T_PREDICATE, '&|!');
+        $this->addTerminal(self::T_OPERATOR, '\*|\+|\?');
+        $this->addTerminal(self::T_COLON, ':');
+        $this->addTerminal(self::T_COMMIT, '@');
+        $this->addTerminal(self::T_BRACE_OPEN, <<<'RE'
+            [[({<]
+            RE);
+        $this->addTerminal(self::T_BRACE_CLOSE, <<<'RE'
+            [\])}>]
+            RE);
+
+        $this->addTerminal(self::T_OR, '\|');
+
+        $this->addTerminal(self::T_TOKEN, '\.');
+
+        $this->addTerminal(self::T_WHITESPACE, '\\s+');
+
+        // Ignore whitespace
+        $this->addIgnore(self::T_WHITESPACE);
+
+        // Ignore comments starting with // or #
+        $this->addIgnore(self::T_COMMENT);
     }
 
-    public static function fromString(string $grammar): static {
-        throw new \LogicException("Use `Charm\Parser::fromString()` instead.", 255);
+    protected function start() {
+        $grammar = $this->_CPEG();
+
+        if ($grammar === null) {
+            return null;
+        }
+
+        if (!$this->eof()) {
+            throw new GrammarError("Expected end of input");
+        }
+
+        return $grammar;
     }
 
-    public function getGrammar(): GrammarInterface {
-        throw new InternalError("The GrammarParser is not currently a complete self-hosted parser and can't be used this way.");
+    private function _CPEG() {
+        $rules = null;
+
+        while (null !== ($rule = $this->_Rule())) {
+            $rules[] = $rule;
+        }
+
+        if ($rules !== null) {
+            return new Grammar($rules, $this->filename);
+        }
+
+        return null;
     }
 
-    /**
-     * Parse a PEG-style grammar into a GrammarInterface representation.
-     */
-    public function parse(string $grammarString): GrammarInterface {
-        $tokens = static::tokenize($grammarString);
+    private function _RuleName() {
+        if (!$this->typeIs(self::T_IDENT)) {
+            return null;
+        }
+        if (!($this->typeIs(self::T_BEGIN, 1) || ($this->typeIs(self::T_STRING, 1) && $this->typeIs(self::T_BEGIN, 2)))) {
+            // rule names MUST be followed by BEGIN or by STRING+BEGIN
+            return null;
+        }
+        return $this->accept();
+    }
 
-        $rules = [];
-        foreach (static::ruleMaker($tokens) as $ruleInfo) {
-            $name = $ruleInfo[0]->name;
-            $ruleName = $ruleInfo[0]->text;
+    private function _Rule() {
+        if (!($this->typeIs(self::T_BEGIN, 1) || ($this->typeIs(self::T_STRING, 1) && $this->typeIs(self::T_BEGIN, 2)))) {
+            // rule names MUST be followed by BEGIN or by STRING+BEGIN
+            return null;
+        }
+        $ruleName = $this->accept();
 
-            $clause = static::ruleClauseMaker($ruleInfo[1], Clause::NONE, $name);
+        $description = $this->typeIs(self::T_STRING) ? $this->accept() : null;
 
-            if (isset($rules[$ruleName])) {
-                // The clause must be added to an existing rule
-                $rules[$ruleName]->addAlternativeClause($clause);
+        $begin = $this->typeIs(self::T_BEGIN) ? $this->accept() : null;
+
+        $clauses = $this->_Clauses();
+
+        if ($clauses === null) {
+            if ($begin !== null) {
+                throw new GrammarError("Empty rule `".$ruleName->value()."` not allowed.");
+            }
+        }
+
+        if ($this->eof()) {
+            goto done;
+        }
+
+        if ($this->typeIs(self::T_IDENT)) {
+            // this test makes the ';' optional
+            goto done;
+        }
+
+        if (!$this->textIs(';')) {
+            throw new GrammarError("Expected rule name, ';' or more clauses");
+        }
+        $this->accept();
+
+        done:
+        $rule = new Rule($ruleName->value(), $clauses);
+
+        if ($description !== null) {
+            $rule->setDescription($description->value());
+        }
+
+        return $rule;
+        return [
+            'rule' => $ruleName,
+            'description' => $description,
+            'clauses' => $clauses,
+        ];
+    }
+
+    private function _Clauses() {
+
+        $buildSequence = function(array $clauses) {
+            $s = new Sequence(Clause::NONE, null);
+            foreach ($clauses as $clause) {
+                $s[] = $clause;
+            }
+            return $s;
+        };
+        $buildOrderedChoice = function(array $sequences) {
+            $oc = new OrderedChoice(Clause::NONE, null);
+            foreach ($sequences as $sequence) {
+                $oc[] = $sequence;
+            }
+            return $oc;
+        };
+
+        $result = null;
+        $groups = null;
+        while (!$this->eof()) {
+            if ($this->typeIs(self::T_OR)) {
+                if ($result === null) {
+                    throw new GrammarError("Unexpected | without preceding clauses");
+                }
+                $this->accept();
+                $groups[] = $buildSequence($result);
+                $result = [];
+            } elseif ($this->typeIs(self::T_COMMIT)) {
+                $this->accept();
+                $result[] = new Commit(Clause::NONE, null);
+            } elseif (null !== ($clause = $this->_FullClause())) {
+                $result[] = $clause;
             } else {
-                $rules[$ruleName] = new Rule($ruleName, $clause);
+                break;
             }
         }
-        $className = $this->grammarClass;
-        return new $className($rules);
+        if ($result === null) {
+            return null;
+        }
+        if ($result === []) {
+            throw new GrammarError("Expected clause after |");
+        }
+        if ($groups === null) {
+            return $buildSequence($result);
+        }
+        $groups[] = $buildSequence($result);
+        return $buildOrderedChoice($groups);
     }
 
-    /**
-     * Splits the token stream into an array of arrays like [ $ruleNameToken, $arrayOfClauseTokens ]
-     *
-     * @param $tokens An array of Token objects as parsed from the grammar source code.
-     */
-    protected static function ruleMaker(array $tokens) {
-        $ruleToken = null;
-        $buffer = [];
-        $result = [];
+    private function _FullClause() {
+        if (!in_array($this->type(), [self::T_IDENT, self::T_STRING, self::T_REGEX, self::T_SNIPPET, self::T_PREDICATE, self::T_BRACE_OPEN])) {
+            return null;
+        }
+        $label = $this->_Label();
+        $predicate = $this->_Predicate();
+        $clause = $this->_Clause();
 
-        foreach ($tokens as $token) {
-            if ($token->kind === 'Rule') {
-                if ($ruleToken !== null) {
-                    $result[] = [$ruleToken, $buffer];
-                    $buffer = [];
-                }
-                $ruleToken = $token;
-            } elseif ($token->kind === 'Begin' || $token->kind === 'Comment' || $token->kind === 'Whitespace') {
-            } elseif ($token->kind === 'Identifier' || $token->kind === 'Or' || $token->kind === 'Regex' || $token->kind === 'String' || $token->kind === 'Sequence' || $token->kind === 'Snippet') {
-                $buffer[] = $token;
-            } else { // FRODE
-var_dump($token);
-die("UNKNOWN TOKEN");
-                $buffer[] = $token;
+        if ($clause === null && ($label !== null || $predicate !== null)) {
+            throw new GrammarError("Expecting a clause after a predicate or a label");
+        } elseif ($clause === null) {
+            return null;
+        }
+
+        $operator = $this->_Operator();
+
+        $modifier = 0;
+
+        if ($predicate !== null) {
+            switch ($predicate->text) {
+                case '&': $modifier |= Clause::AND; break;
+                case '!': $modifier |= Clause::NOT; break;
+                default : throw new GrammarError("Unknown predicate '{$predicate->text}'");
             }
         }
-        if ($ruleToken !== null) {
-            $result[] = [ $ruleToken, $buffer ];
+
+        if ($operator !== null) {
+            switch ($operator->text) {
+                case '*': $modifier |= Clause::OPTIONAL | Clause::REPEATING; break;
+                case '+': $modifier |= Clause::REPEATING; break;
+                case '?': $modifier |= Clause::OPTIONAL; break;
+                default : throw new GrammarError("Unknown operator '{$operator->text}'");
+            }
         }
-        return $result;
+        $clause->setModifier($modifier);
+        if ($label !== null) {
+            switch ($label->type) {
+                case self::T_IDENT: $label = $label->text; break;
+                default: throw new GrammarError("Unknown label type '{$label->type}'");
+            }
+            $clause->setName($label);
+        }
+        return $clause;
     }
 
-    /**
-     * Tokenizes the grammar source code for parsing. This functionality would ideally
-     * use Charm\Parser, but in this case the chicken came before the egg.
-     *
-     * @param $grammarString A string of the grammar we're going to parse
-     * @param $offset The start offset of the string (in the case of recursively parsing a sub-string)
-     * @return array<Token>
-     */
-    protected static function tokenize(string $grammarString, int $offset=0): array {
-        $res = preg_match_all(static::TOKENIZER_REGEX, $grammarString, $matches, PREG_SET_ORDER, 0);
-        if (!is_int($res)) {
-            throw new InternalError("The tokenizer regex contains an error: ".preg_last_error_msg(), preg_last_error());
+    private function _Label() {
+        if (!$this->textIs(':', 1)) {
+            return null;
         }
-        $tokens = [];
-        $token = null;
-        $isAnd = false;
-        $isNot = false;
-        $name = null;
-        foreach ($matches as $match) {
-            if (!empty($match['Whitespace']) || !empty($match['Comment'])) {
-                $offset += strlen($match[0]);
-                continue;
-            }
-            if (!empty($match['Rule'])) {
-                if ($token !== null) {
-                    $tokens[] = $token;
-                    $token = null;
-                }
-                $isAnd = false;
-                $isNot = false;
-                $name = null;
-                $tokens[] = new Token($match[0], 'Rule', $offset, [
-                    'name' => $name,
-                    'isAnd' => false,
-                    'isNot' => false,
-                    'isOptional' => false,
-                    'isOneOrMore' => false,
-                    'isZeroOrMore' => false,
-                    'isCaseInsensitive' => false,
-                ]);
-            } elseif (
-                !empty($match[$kind = 'Identifier']) || 
-                !empty($match[$kind = 'String']) ||
-                !empty($match[$kind = 'Regex']) ||
-                !empty($match[$kind = 'Sequence']) ||
-                !empty($match[$kind = 'Snippet'])
-            ) {
-                if ($token !== null) {
-                    $tokens[] = $token;
-                }
-                $token = new Token($match[0], $kind, $offset, [
-                    'name' => $name,
-                    'isAnd' => $isAnd,
-                    'isNot' => $isNot,
-                    'isOptional' => false,
-                    'isOneOrMore' => false,
-                    'isZeroOrMore' => false,
-                    'isCaseInsensitive' => false,
-                ]);
-                $name = null;
-                $isAnd = false;
-                $isNot = false;
-            } elseif (!empty($match['Prefix'])) {
-                if ($token !== null) {
-                    $tokens[] = $token;
-                    $token = null;
-                    $name = null;
-                    $isAnd = false;
-                    $isNot = false;
-                }
-                if ($match[0] === '&') {
-                    $isAnd = true;
-                } elseif ($match[0] === '!') {
-                    $isNot = true;
-                } elseif (substr($match[0], -1) === ':') {
-                    $name = substr($match[0], 0, -1);
-                } else {
-                    throw new \Exception("Unknown prefix '".$match[0]."'");
-                }
-            } elseif (!empty($match['Or'])) {
-                if ($token !== null) {
-                    $tokens[] = $token;
-                    $token = null;
-                    $name = null;
-                    $isAnd = false;
-                    $isNot = false;
-                }
-                $tokens[] = new Token('/', 'Or', $offset, [
-                    'name' => null,
-                    'isAnd' => false,
-                    'isNot' => false,
-                    'isOptional' => false,
-                    'isOneOrMore' => false,
-                    'isZeroOrMore' => false,
-                    'isCaseInsensitive' => false,
-                ]);
-            } elseif (!empty($match['Suffix']) && $token !== null) {
-                if ($match[0] === '+') {
-                    $token->isOneOrMore = true;
-                } elseif ($match[0] === '?') {
-                    $token->isOptional = true;
-                } elseif ($match[0] === '*') {
-                    $token->isZeroOrMore = true;
-                } elseif ($match[0] === 'i') {
-                    $token->isCaseInsensitive = true;
-                } else {
-                    throw new \Exception("Unknown suffix token ".$match[0]);
-                }
-            } elseif (!empty($match['Begin'])) {
-                // ignored
-            } else {
-                throw new GrammarError("Unexpected ".substr($grammarString, $offset, 10)."[...] at offset $offset");
-            }
-            $offset += strlen($match[0]);
+        if (in_array($this->type(), [self::T_IDENT, self::T_STRING])) {
+            $label = $this->accept();
+            $this->accept();
+            return $label;
         }
-        if ($token !== null) {
-            $tokens[] = $token;
-        }
-        return $tokens;
+        return null;
     }
 
-    /**
-     * Creates Clause objects from an array of Tokens and attached prefix and suffix modifiers to the returned token.
-     *
-     * Multiple clauses will be combined into a Sequence or an OrderedClause object.
-     *
-     * @param $tokens An array of Token object
-     * @param $modifier An integer according to Clause::* constants which will be attached to the returned clause.
-     */
-    protected static function ruleClauseMaker(array $tokens, int $modifier, ?string $name): Clause {
-        $orderedChoice = null;
-        $current = new Sequence($modifier, $name);
-        foreach ($tokens as $token) {
-            if ($token->kind === 'Begin' || $token->kind === 'Comment' || $token->kind === 'Whitespace') {
-                continue;
+    private function _Predicate() {
+        if (!$this->typeIs(self::T_PREDICATE)) {
+            return null;
+        }
+        $res = $this->accept();
+        return $res;
+    }
+
+    private function _Clause() {
+        if (in_array($this->type(), [self::T_STRING, self::T_IDENT, self::T_REGEX, self::T_SNIPPET])) {
+            if ($this->typeIs(self::T_BEGIN, 1)) {
+                // look forward and avoid parsing a rule name as a clause
+                return null;
+            }
+            if ($this->typeIs(self::T_STRING, 1) && $this->typeIs(self::T_BEGIN, 2)) {
+                // look forward and avoid parsing a rule name as a clause
+                return null;
             }
 
-            if ($token->kind === 'Identifier') {
-                /**
-                 * Some special tokens are parsed as identifiers and handled here. This could be
-                 * refactored into a separate token kind named Keyword at a later time.
-                 */
-                if ($token->text === '^') {
-                    $current->addClause(new SOF($token->getModifier(), $token->name));
-                } elseif ($token->text === '$') {
-                    $current->addClause(new EOF($token->getModifier(), $token->name));
-                } elseif ($token->text === '.') {
-                    $current->addClause(new Any($token->getModifier(), $token->name));
-                } elseif ($token->text === 'Ε' || $token->text === 'ε' || $token->text === 'EPSILON') {
-                    $current->addClause(new Nothing($token->getModifier(), $token->name));
-                } else {
-                    $current->addClause(new Identifier($token->text, $token->getModifier(), $token->name));
-                }
-            } elseif ($token->kind === 'Sequence') {
-                $subString = substr($token->text, 1, -1);
-                $subTokens = self::tokenize($subString, $token->offset);
-                $clause = self::ruleClauseMaker($subTokens, $token->getModifier(), $token->name);
-                $current->addClause($clause);
-            } elseif ($token->kind === 'Or') {
-                if ($orderedChoice === null) {
-                    $orderedChoice = new OrderedChoice($current->getModifier(), $current->getName());
-                    $current->setModifier(Clause::NONE);
-                    $current->setName(null);
-                }
-                $orderedChoice->addClause($current);
-                $current = new Sequence(Clause::NONE, null);
-            } elseif ($token->kind === 'Regex') {
-                if ($token->text[0] === '[') {
-                    $current->addClause(new Regex('/'.strtr($token->text, ['/' => '\/']).'/', $token->getModifier(), $token->name));
-                } else {
-                    $current->addClause(new Regex($token->text, $token->getModifier(), $token->name));
-                }
-            } elseif ($token->kind === 'String') {
-                $escapeChar = substr($token->text, 0, 1);
-                $innerString = strtr(substr($token->text, 1, -1), [
-                    '\\'.$escapeChar => $escapeChar,
-                ]);
-                $current->addClause(new Text($innerString, $token->getModifier(), $token->name));
-            } elseif ($token->kind === 'Snippet') {
-                $current->addClause(new Snippet(substr($token->text, 2, -2), $token->getModifier(), $token->name));
-            } else {
-                die("Unknown token kind ".$token->kind."\n");
+            $clause = $this->accept();
+
+            switch ($clause->type) {
+                case self::T_IDENT:
+                    switch ($clause->text) {
+                        case '^' : return new SOF(Clause::NONE, null);
+                        case '$' : return new EOF(Clause::NONE, null);
+                        case '.' : return new Any(Clause::NONE, null);
+                        default : return new Identifier($clause->text, Clause::NONE, null);
+                    }
+
+                case self::T_STRING:
+                    return new Text($clause->value(), Clause::NONE, null);
+
+                case self::T_SNIPPET:
+                    return new Snippet($clause->value(), Clause::NONE, null);
+
+                case self::T_REGEX:
+                    return new Regex($clause->value(), Clause::NONE, null);
+
+                default :
+                    throw new GrammarError("Unknown clause type={$clause->type} $operator$clause");
             }
         }
-        if ($orderedChoice !== null) {
-            $orderedChoice->addClause($current);
-            return $orderedChoice;
-        } else {
-            return $current;
+        return $this->_BracedClause();
+    }
+
+    private function _BracedClause() {
+        if (!$this->typeIs(self::T_BRACE_OPEN)) {
+            return null;
         }
+
+        $openOffset = $this->getOffset();
+        $open = $this->accept();
+
+        $clauses = $this->_Clauses();
+        if ($clauses === null) {
+            throw new GrammarError("Expected clauses inside sub-clause");
+        }
+
+        $close = ['<' => '>', '(' => ')', '[' => ']', '{' => '}'][$open->text];
+        if (!$this->typeIs(self::T_BRACE_CLOSE)) {
+            $this->setOffset($openOffset);
+            throw new GrammarError("Unclosed `".$open->value()."`");
+            throw new GrammarError("Expecting $close or another clause inside sub-clause");
+        }
+
+        if (!$this->textIs($close)) {
+            throw new GrammarError("Mismatched closing brace {".$this->token()->text."}, expecting $close");
+        }
+        $this->accept();
+        return $clauses;
+    }
+
+    private function _Operator() {
+        if ($this->typeIs(self::T_OPERATOR)) {
+            return $this->accept();
+        }
+        return null;
     }
 
 }

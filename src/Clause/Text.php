@@ -18,6 +18,20 @@ class Text extends Terminal implements RegexInterface {
         }
     }
 
+    public function toGrammarString(): string {
+        return $this->getPredicateString().'"'.strtr($this->text, ["\"" => "\\\""]).'"'.$this->getOperatorString();
+    }
+
+    public function asString(): string {
+        if (strpos($this->text, '"') === false) {
+            return '"'.$this->text.'"';
+        } elseif (strpos($this->text, "'") === false) {
+            return "'".$this->text."'";
+        } else {
+            return '"'.strtr($this->text, ['"' => '""']).'"';
+        }
+    }
+
     public function getRegex(): string {
         return preg_quote($this->text, "/");
     }
@@ -42,15 +56,5 @@ class Text extends Terminal implements RegexInterface {
         $parser->offset += $this->length;
         $parser->traceEnd($this, $source);
         return $source;
-    }
-
-    public function asString(): string {
-        if (strpos($this->text, '"') === false) {
-            return '"'.$this->text.'"';
-        } elseif (strpos($this->text, "'") === false) {
-            return "'".$this->text."'";
-        } else {
-            return '"'.strtr($this->text, ['"' => '""']).'"';
-        }
     }
 }
