@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d93b71821cc0cb9561942082c3cf1182",
+    "content-hash": "e2691198f713298b10f4d3e853eec70d",
     "packages": [
         {
             "name": "charm/map",
-            "version": "1.0.4",
+            "version": "1.0.5",
             "source": {
                 "type": "git",
                 "url": "https://bitbucket.org/ennerd/charm-map.git",
-                "reference": "a93e1ae1e15952f7d423b10d12619918943b0fa1"
+                "reference": "b835772a780d753796ad834a97bf5bea1ac57f02"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://bitbucket.org/ennerd/charm-map/get/a93e1ae1e15952f7d423b10d12619918943b0fa1.zip",
-                "reference": "a93e1ae1e15952f7d423b10d12619918943b0fa1",
+                "url": "https://bitbucket.org/ennerd/charm-map/get/b835772a780d753796ad834a97bf5bea1ac57f02.zip",
+                "reference": "b835772a780d753796ad834a97bf5bea1ac57f02",
                 "shasum": ""
             },
             "require-dev": {
@@ -42,12 +42,12 @@
                     "email": "frode@ennerd.com"
                 }
             ],
-            "description": "An array that support keys that are of any type, such as objects, float or booleans. A small, thorough and efficient hashmap implementation.",
+            "description": "A hashmap implementation similar to Map in javascript - allowing keys and values of any data type. A small, thorough and efficient hashmap implementation.",
             "homepage": "https://bitbucket.org/ennerd/charm-map",
             "support": {
-                "source": "https://bitbucket.org/ennerd/charm-map/src/a93e1ae1e15952f7d423b10d12619918943b0fa1/?at=1.0.4"
+                "source": "https://bitbucket.org/ennerd/charm-map/src/b835772a780d753796ad834a97bf5bea1ac57f02/?at=1.0.5"
             },
-            "time": "2021-12-10T14:12:24+00:00"
+            "time": "2021-12-21T08:07:06+00:00"
         },
         {
             "name": "charm/options",
@@ -88,6 +88,43 @@
                 "source": "https://bitbucket.org/ennerd/charm-options/src/ebc45b1532ffe6d6db097b8c7d17aa8e03038f7b/?at=1.0.3"
             },
             "time": "2021-12-20T21:18:34+00:00"
+        },
+        {
+            "name": "charm/util-phpencode",
+            "version": "1.0.1",
+            "source": {
+                "type": "git",
+                "url": "https://bitbucket.org/ennerd/charm-util-phpencode.git",
+                "reference": "0e9eb36ad25dceff3a71b1c14f184c460677f0ac"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://bitbucket.org/ennerd/charm-util-phpencode/get/0e9eb36ad25dceff3a71b1c14f184c460677f0ac.zip",
+                "reference": "0e9eb36ad25dceff3a71b1c14f184c460677f0ac",
+                "shasum": ""
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "php-encode.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Frode Børli",
+                    "email": "frode@ennerd.com"
+                }
+            ],
+            "description": "A small function that encodes compact PHP arrays, like json_encode - but for PHP arrays.",
+            "homepage": "https://bitbucket.org/ennerd/charm-util-phpencode",
+            "support": {
+                "source": "https://bitbucket.org/ennerd/charm-util-phpencode/src/0e9eb36ad25dceff3a71b1c14f184c460677f0ac/?at=1.0.1"
+            },
+            "time": "2022-01-06T11:51:39+00:00"
         },
         {
             "name": "charm/vector",
@@ -131,6 +168,56 @@
                 "source": "https://bitbucket.org/ennerd/charm-vector/src/3742ff1ff0fa210d0f1cdf65766f1229d1be1d4d/?at=1.0.0"
             },
             "time": "2021-11-15T15:14:01+00:00"
+        },
+        {
+            "name": "psr/log",
+            "version": "3.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/php-fig/log.git",
+                "reference": "fe5ea303b0887d5caefd3d431c3e61ad47037001"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/php-fig/log/zipball/fe5ea303b0887d5caefd3d431c3e61ad47037001",
+                "reference": "fe5ea303b0887d5caefd3d431c3e61ad47037001",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.0.0"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "3.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Psr\\Log\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "PHP-FIG",
+                    "homepage": "https://www.php-fig.org/"
+                }
+            ],
+            "description": "Common interface for logging libraries",
+            "homepage": "https://github.com/php-fig/log",
+            "keywords": [
+                "log",
+                "psr",
+                "psr-3"
+            ],
+            "support": {
+                "source": "https://github.com/php-fig/log/tree/3.0.0"
+            },
+            "time": "2021-07-14T16:46:02+00:00"
         }
     ],
     "packages-dev": [

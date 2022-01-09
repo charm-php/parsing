@@ -2,20 +2,14 @@
 namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\Util\ExceptionTools;
+use Charm\Parsing\Error\{
+    CustomError,
+    ParseError
+};
 use Charm\Parsing\{
-    ParserInterface,
+    State,
     Clause,
-    SequenceInstruction,
-    SequenceIgnore,
-    SequenceResume,
-    SequenceFail,
-    BoxedResult,
-    Node,
-    Exception,
-    InternalError,
-    GrammarError,
-    ParseError,
-    ErrorInfo
+    BoxedResult
 };
 
 /**
@@ -36,19 +30,25 @@ class Snippet extends Terminal {
     const ERROR_RUNTIME = 253;
 
     public function asString(): string {
+        return '<? SNIPPET ?>';
         return '<? '.strtr(trim($this->originalSource), ["\n" => "\\n"]).' ?>';
     }
 
+    /**
+     * Temporarily holds $state so that it can be used from within custom functions in the
+     * provided PHP code.
+     */
+    private $state;
+
     protected $originalSource;      // the raw string passed to construct the function
     protected $compiledSource;      // the rewritten code
+    protected $invokerSource;       // the full function definition
     protected $invoker;             // the compiled callback function
     protected $variables;           // the variables that the code tries to access
 
     public function __construct(string $code, int $modifier, ?string $name) {
         parent::__construct($modifier, $name);
-        if (trim($code) === '') {
-            throw new InternalError("Empty snippet created. The parser should prevent instantiating empty snippets.", self::ERROR_EMPTY_SNIPPET);
-        }
+        assert(trim($code)!=='');
         $this->originalSource = $code;
         $this->build();
     }
@@ -57,7 +57,7 @@ class Snippet extends Terminal {
         $code = $this->originalSource;
         $variables = [];
         $tokens = token_get_all('<?php '.$code);
-        array_shift($tokens); // remove the '<?php' token
+        $removed = array_shift($tokens); // remove the '<?php' token
         $code = '';
         $stack = []; // for matching braces
         $stackLength = 0;
@@ -71,7 +71,6 @@ class Snippet extends Terminal {
                 $offset += isset($token[1]) ? strlen($token[1]) : 1;
             }
             $token = $tokens[$i];
-//echo strtr($code, ["\n" => "\\n"])."\n";
             if (isset($token[1])) {
                 // this is not a built-in token
                 if (method_exists($this, $fn = 'fn_'.trim($token[1]))) {
@@ -106,26 +105,18 @@ class Snippet extends Terminal {
                             if ($name[0] === '_' && is_numeric(substr($name, 1))) {
                                 $name = (int) substr($name, 1);
                             }
-                            $code .= '$locals['.var_export($name, true).']';
+                            $code .= '$_context['.var_export($name, true).']';
                             break;
                         case T_CURLY_OPEN:
-                            if ($isIn) {
-                                $code .= '".';
-                                $isIn = false;
-                                continue 2;
-                            } else {
-die("CURLY OPEN WHILE NOT IN\n");
-                            }
-                            break;
+                            assert($isIn, "Curly open while not \$isIn");
+                            $code .= '".';
+                            $isIn = false;
+                            continue 2;
                         case '}':
-                            if (!$isIn) {
-                                $code .= '."';
-                                $isIn = true;
-                                continue 2;
-                            } else {
-die("CURLY CLOSE WHILE IN\n");
-                            }
-                            break;
+                            assert(!$isIn, "Curly close while not \$isIn");
+                            $code .= '."';
+                            $isIn = true;
+                            continue 2;
                         case '[': case ']':
                             $code .= $token[0];
                             break;
@@ -137,10 +128,10 @@ die("CURLY CLOSE WHILE IN\n");
                             $code .= $token[1];
                             break;
                         case T_LNUMBER:
-                
                             $code .= $token[1];
                             break;
                         case '"':
+                            assert($isIn, "What happens here while validating PHP code?");
                             if ($isIn) {
                                 $isIn = false;
                                 $code .= $token[0];
@@ -150,21 +141,13 @@ die("CURLY CLOSE WHILE IN\n");
                             }
                             continue 3;
                         default:
-//echo "CODE SO FAR: `$code`\n";
-                            throw new GrammarError("Illegal keyword ".self::tokenString($token)." in quoted string", self::ERROR_ILLEGAL_KEYWORD, new ErrorInfo([
-                                'source' => $this->originalSource,
-                                'offset' => $offset,
-                            ]));
+                            throw new ParseError($this->originalSource, 3 + $offset, "Illegal string token ".self::tokenString($token)." on :location");
                     }
                 }
-                throw new InternalError("Unable to parse quoted string correctly", self::ERROR_VALIDATION);
+                assert(false, "Failed parsing quoted string");
             } elseif (isset(self::SPECIAL[$token[0]])) {
                 if (!in_array($token[1], self::SPECIAL[$token[0]])) {
-                    throw new GrammarError("Illegal keyword `".trim($token[1])."`", self::ERROR_ILLEGAL_KEYWORD, new ErrorInfo([
-                        'source' => $this->originalSource,
-                        'offset' => $offset,
-                        'filename' => 'grammar snippet',
-                    ]));
+                    throw new ParseError($this->originalSource, 3 + $offset, "Illegal token ".self::tokenString($token)." on :location");
                 }
             } elseif ($token[0] === ($stack[$stackLength-1] ?? null)) {
                 if ($token[0] === '"') {
@@ -178,17 +161,9 @@ die("CURLY CLOSE WHILE IN\n");
                 $stack[$stackLength++] = self::BRACES[$token[0]];
             } elseif (in_array($token[0], self::BRACES)) {
                 if ($stackLength > 0) {
-                    throw new GrammarError('Unexpected '.self::tokenString($token).', expecting '.self::tokenString($stack[$stackLength-1]), self::ERROR_BRACE_MISMATCH, new ErrorInfo([
-                        'source' => $this->originalSource,
-                        'offset' => $offset,
-                        'filename' => 'grammar snippet',
-                    ]));
+                    throw new ParseError($this->originalSource, 3 + $offset, "Unexpected ".self::tokenString($token)." on :location, expected ".self::tokenString($stack[$stackLength-1]));
                 } else {
-                    throw new GrammarError('Unexpected '.self::tokenString($token), self::ERROR_BRACE_MISMATCH, new ErrorInfo([
-                        'source' => $this->originalSource,
-                        'offset' => $offset,
-                        'filename' => 'grammar snippet',
-                    ]));
+                    throw new ParseError($this->originalSource, 3 + $offset, "Unexpected ".self::tokenString($token)." on :location");
                 }
 /*
             } elseif ($token[0] === '$' && isset($tokens[$i+1]) && $tokens[$i+1][0] === T_LNUMBER) {
@@ -198,11 +173,7 @@ die("CURLY CLOSE WHILE IN\n");
                 continue;
 */
             } elseif (!in_array($token[0], self::LEGAL_TOKENS)) {
-                throw new GrammarError("Illegal keyword ".self::tokenString($token), self::ERROR_ILLEGAL_KEYWORD, new ErrorInfo([
-                    'source' => $this->originalSource,
-                    'offset' => $offset,
-                    'filename' => 'grammar snippet'
-                ]));
+                throw new ParseError($this->originalSource, 3 + $offset, "Illegal token ".self::tokenString($token)." on :location");
             }
 
             switch ($token[0]) {
@@ -212,7 +183,7 @@ die("CURLY CLOSE WHILE IN\n");
                         $name = (int) substr($name, 1);
                     }
                     $variables[] = $name;
-                    $code .= '$locals['.var_export($name, true).']';
+                    $code .= '$_context['.var_export($name, true).']';
                     break;
                 default :
                     if (is_string($token)) {
@@ -223,11 +194,7 @@ die("CURLY CLOSE WHILE IN\n");
             }
         }
         if ($stackLength > 0) {
-            throw new GrammarError("Expected ".self::tokenString($stack[$stackLength - 1]), self::ERROR_BRACE_MISMATCH, new ErrorInfo([
-                'source' => $this->originalSource,
-                'offset' => $offset,
-                'filename' => 'grammar snippet',
-            ]));
+            throw new ParseError($this->originalSource, 3 + $offset, "Expected ".self::tokenString($stack[$stackLength-1])." on :location");
         }
         return ['code' => $code, 'variables' => $variables];
     }
@@ -249,129 +216,68 @@ die("CURLY CLOSE WHILE IN\n");
         }
         $errorReporting = error_reporting(E_ALL);
         $compileResult = $this->compile();
-        $code = $compileResult['code'];
+        $this->compiledSource = $code = $compileResult['code'];
         $variables = $compileResult['variables'];
         $src =
             // this quoting style is to protect the line numbering in parse error messages
-            '$this->invoker = function(array $context, array $args, array &$state, array &$locals) {
-'.
+            '$this->invoker = function(Charm\Parsing\Clause\Snippet\Context $_context) {'.
                 $code.
             "\n};";
 
         try {
             set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']), E_ALL);
+            $this->invokerSource = $src;
             eval($src);
-        } catch (GrammarError $e) {
-            throw $e;
-        } catch (\ParseError $e) {
-            $code = strtr($code, [
-                '$this->fn_' => ''
-            ]);
-            $codeForError = preg_replace_callback('/(?<=\n)|^/', function() use (&$lineNum) {
-                return str_pad(++$lineNum, 5, ' ', STR_PAD_LEFT).' | ';
-            }, $this->compiledSource);
-            echo "PARSE ERROR: ".$e->getMessage()." on line ".$e->getLine()."\n";
-            echo "CODE:\n$codeForError\n\n";
-echo "TRACE:".$e->getTraceAsString();
-
-
-
-            self::dumpTokens(token_get_all('<?php '.$this->originalSource));
-
-            die();
-            throw new GrammarError($e->getMessage()."\nGrammar Source:\n".rtrim($codeForError)."\n", $e->getCode());
         } catch (\Throwable $e) {
-            throw $e;
-            throw new GrammarError(strtr("Compile Error in snippet: '".$e->getMessage()."'", [
+            $message = $e->getMessage();
+            $message = strtr($message, [
                 '$this->fn_' => '',
-            ]));
+            ]);
+            throw new CustomError($message, $e->getCode(), $e);
         } finally {
-            $this->parser = null;
+            $this->state = null;
             restore_error_handler();
             error_reporting($errorReporting);
         }
     }
 
     /**
-     * Hold a reference to the current parser for functions made available to scripts
-     */
-    private $parser;
-
-    /**
-     * In snippet: error("Some fatal parsing error");
+     * Snippet function for raising a custom parse error.
      */
     private function fn_error(string $reason=null) {
-        $e = new ParseError($reason ?? "General parse error");
-die("SNIPPET fn_error");
+        // in case the snippet caused the parser offset to change
+        $this->state->offset = $this->offset;
+        throw new CustomError($reason ?? "Unknown parse error");
     }
 
     /**
-     * In snippet: return resume();
+     * Snippet function for returning a clause result. When returning a value using
+     * this function, the result is processed as if it was returned by any other
+     * clause.
      *
-     * If returned, parsing of the sequence should resume as if nothing happened.
-     */
-    private function fn_resume() {
-        return new SequenceResume();
-    }
-
-    private function fn_fail() {
-        return new SequenceFail();
-    }
-
-    /**
-     * In snippet: return ignore();
+     * Without this function, the return value of a snippet becomes the return value
+     * of the sequence.
      *
-     * If returned, parsing of the sequence should stop and return true as if it was
-     * a success without capturing.
+     * `return as_clause(true);`
      */
-    private function fn_ignore() {
-        return new SequenceIgnore();
+    private function fn_as_clause($value) {
+        return new BoxedResult($value);
     }
 
-    private function fn_node(...$members): Node {
-        return new Node(...$members);
-    }
-
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        $parser->traceStart($this, $parser->offset);
-        $this->parser = $parser;
+    public function interpret(State $state, array $context, array $args=null) {
+        // in case of recursion, we'll keep a reference to any previous state
+        $previousState = $this->state;
+        $offset = $state->offset;
+        $this->state = $state;
 
         $errorReporting = error_reporting(E_ALL);
         set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']));
 
         try {
-            $state = &$parser->state;
-            $locals = $context;
-            $result = ($this->invoker)($context, $args ?? [], $state, $locals);
-
-            if ($result instanceof SequenceInstruction) {
-                $parser->traceEnd($this, $result);
-                return $result;
-            } elseif ($result instanceof BoxedResult) {
-                // A snippet may return its result boxed. This way, snippets can act as ordinary clauses in a sequence.
-                $result = $result->value;
-            } elseif (is_bool($result)) {
-                // Prevent any side effects
-                $result = new BoxedResult($result);
-            }
-
-            $parser->traceEnd($this, $result);
-            return $result;
-        } catch (Exception $e) {
-            throw $e;
-die("SNIPPET");
-//            $e->pushStackTrace(');
-die();
-        } catch (\Throwable $e) {
-            throw $e;
-var_dump($e);die("Snippet");
-throw $e;
-            throw new GrammarError(strtr("Runtime error in snippet <? ".$this->compiledSource." ?>: ".$e->getMessage(), [
-                self::class.'::fn_' => '',
-                static::class.'::fn_' => '',
-            ]));
+            $ctx = new Snippet\Context($context + [ 'context' => $context, 'args' => $args ]);
+            return ($this->invoker)($ctx);
         } finally {
-            $this->parser = null;
+            $this->state = $previousState;
             restore_error_handler();
             error_reporting($errorReporting);
         }
@@ -388,17 +294,7 @@ throw $e;
             return 'Undefined variable $_'.$m['ak'];
         }, $message);
 
-//var_dump($severity, $message, $file, $line);die();
-
-///root/lib/dev/charm-parsing/src/Clause/Snippet.php(264) : eval()'d code
-        $e = new GrammarError($message, self::ERROR_RUNTIME, new ErrorInfo([
-            'source' => $this->originalSource,
-            'filename' => $this->parser->getGrammar()->filename.' : rule '.$this->getRule()->getRuleName(),
-            'functionName' => $this->getRule()->getRuleName(),
-            'line' => $line,
-        ]));
-
-        throw $e;
+        throw new CustomError($message, $severity);
     }
 
     const BRACES = [
@@ -410,7 +306,7 @@ throw $e;
     ];
 
     const LEGAL_TOKENS = [
-        '&', '!', '+', '-', '*', '/', ';', '=', '<', '>', ',', ':', '.', '?',
+        '&', '!', '+', '-', '*', '/', ';', '=', '<', '>', ',', ':', '.', '?', '%',
         T_WHITESPACE,
         T_VARIABLE, T_CONSTANT_ENCAPSED_STRING, T_LNUMBER,
         T_ENCAPSED_AND_WHITESPACE, 
@@ -541,6 +437,8 @@ throw $e;
 
             'elseif',
 
+            'sleep', 'usleep',
+
         ],
     ];
 
@@ -548,7 +446,7 @@ throw $e;
         if (is_string($token)) {
             return '"'.$token.'"';
         } else {
-            return token_name($token[0]);
+            return "`".$token[1]."` (".token_name($token[0]).")";
         }
     }
 
@@ -561,5 +459,47 @@ throw $e;
                 echo token_name($t[0])." `".json_encode($t[1])."` `".json_encode($t[2])."`\n";
             }
         }
+    }
+}
+
+namespace Charm\Parsing\Clause\Snippet;
+
+use Charm\Parsing\Error\CustomError;
+
+class Context implements \ArrayAccess {
+
+    private $data;
+
+    public function __construct(array $data) {
+        $this->data = $data;
+    }
+
+    public function &offsetGet($offset) {
+        if (!key_exists($offset, $this->data)) {
+            $this->throwUndefinedVariable($offset);
+        }
+        return $this->data[$offset];
+    }
+
+    public function offsetSet($offset, $value) {
+        $this->data[$offset] = $value;
+    }
+
+    public function offsetExists($offset) {
+        return key_exists($offset, $this->data);
+    }
+
+    public function offsetUnset($offset) {
+        unset($this->data[$offset]);
+    }
+
+    private function throwUndefinedVariable(string $variable) {
+        $vars = implode(", ", array_map(function($v) {
+            if (is_numeric($v)) {
+                $v = '_'.$v;
+            }
+            return '$'.$v;
+        }, array_keys($this->data)));
+        throw new CustomError("Undefined variable \$$variable. Available variables are $vars.");
     }
 }

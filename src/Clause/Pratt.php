@@ -1,9 +1,12 @@
 <?php
 namespace Charm\Parsing\Clause;
-use Charm\Parsing\ParserInterface;
+use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 use Charm\Parsing\GrammarError;
-use Charm\Parsing\ExpectedError;
+use Charm\Parsing\{
+    ExpectedError,
+    ExceptionInterface
+};
 
 class Pratt extends NonTerminal {
 
@@ -89,17 +92,14 @@ class Pratt extends NonTerminal {
         return $clause;
     }
 
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
+    public function interpret(State $state, array &$context, array $args=null) {
         assert($context === [], "The initial context must be []");
 
-        $offset = $parser->offset;
+        $offset = $state->offset;
 
-        $parser->traceStart($this, $parser->offset);
-
-        $result = $this->parseExpression($parser, 0, $args);
+        $result = $this->parseExpression($state, 0, $args);
         if ($result === null) {
-            $parser->offset = $offset;
-            $parser->traceEnd($this, false);
+            $state->offset = $offset;
             return false;
         }
 
@@ -107,25 +107,24 @@ class Pratt extends NonTerminal {
         if (is_bool($result)) {
             $result = new BoxedResult($result);
         }
-        $parser->traceEnd($this, $result);
         return $result;
     }
 
     /**
      * @param $precedence The precedence level which we won't adopt
      */
-    private function parseExpression(ParserInterface $parser, int $precedence, array $args=null): ?Pratt\Result {
-        $left = $this->parseLeft($parser, $args);
+    private function parseExpression(State $state, int $precedence, array $args=null): ?Pratt\Result {
+        $left = $this->parseLeft($state, $args);
 
         if ($left === null) {
             return null;
         }
         while (true) {
-            if ($parser->offset === $parser->length) {
+            if ($state->offset === $state->length) {
                 // stop if we've reached EOF
                 break;
             }
-            $subParse = $this->parseRight($parser, $left);
+            $subParse = $this->parseRight($state, $left);
 
             $rp = null;
             while ($subParse->valid()) {
@@ -146,21 +145,21 @@ class Pratt extends NonTerminal {
         return $left;
     }
 
-    private function parseLeft(ParserInterface $parser, array &$args=null): ?Pratt\Result {
-        $offset = $parser->offset;
+    private function parseLeft(State $state, array &$args=null): ?Pratt\Result {
+        $offset = $state->offset;
         foreach ($this->leftDenotations as $clauseIndex => $clause) {
             $context = [];
-            $left = $this->processSubClause($parser, $clause, $context);
+            $left = $clause->parse($state, $context);
             if ($left !== false) {
                 return new Pratt\Result($left, $clause, $offset, 0); // count($this->leftDenotations) - $clauseIndex);
             }
         }
-        assert($parser->offset === $offset);
+        assert($state->offset === $offset);
         return null;
     }
 
-    private function parseRight(ParserInterface $parser, Pratt\Result $left): \Generator {
-        $offset = $parser->offset;
+    private function parseRight(State $state, Pratt\Result $left): \Generator {
+        $offset = $state->offset;
         foreach ($this->nullDenotations as $clauseIndex => $clause) {
             assert($clause[0] instanceof Identifier, "First sub clause should be an identifier");
             assert($clause[0]->getIdentifier() === $this->ruleName, "First sub clause seems to be not recursive");
@@ -175,20 +174,25 @@ class Pratt extends NonTerminal {
                 if ($subClause instanceof Identifier && $subClause->getIdentifier() === $this->ruleName) {
 
                     // We are about to go recursive, but here we must allow the caller to decide if we should continue
-                    $t = $parser->offset;
-                    $parser->offset = $offset;
+                    $t = $state->offset;
+                    $state->offset = $offset;
                     $shouldResume = yield count($this->nullDenotations) - $clauseIndex;
                     if (!$shouldResume) {
                         return false;
                     }
-                    $parser->offset = $t;
+                    $state->offset = $t;
 
-                    $match = $this->parseExpression($parser, count($this->nullDenotations) - $clauseIndex) ?? false;
+                    $match = $this->parseExpression($state, count($this->nullDenotations) - $clauseIndex) ?? false;
                     if ($match !== false) {
                         $match = $match->value;
                     }
                 } else {
-                    $match = $this->processSubClause($parser, $subClause, $result);
+                    try {
+                        $match = $subClause->parse($state, $result);
+                    } catch (ExceptionInterface $e) {
+                        $match = false;
+                    }
+//                    $match = $this->processSubClause($state, $subClause, $result);
 
                     if ($subClause instanceof Snippet) {
                         // Snippets may provide instructions that determine how this sequence continues
@@ -207,7 +211,7 @@ class Pratt extends NonTerminal {
 
                 if ($match === false) {
                     // The sub clause failed, so the sequence fails
-                    $parser->offset = $offset;
+                    $state->offset = $offset;
                     continue 2;
                 } elseif ($match === true) {
                     // The sub clause returned a successful empty parse, so we continue to the next clause

@@ -1,10 +1,10 @@
 <?php
 namespace Charm\Parsing\Clause;
 
-use Charm\Parsing\ParserInterface;
+use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 
-class Text extends Terminal implements RegexInterface {
+class Text extends Terminal {
 
     private $text;
     private $length;
@@ -32,29 +32,17 @@ class Text extends Terminal implements RegexInterface {
         }
     }
 
-    public function getRegex(): string {
-        return preg_quote($this->text, "/");
-    }
-
-    public function getRegexPriority(): int {
-        return -mb_strlen($this->text);
-    }
-
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        $parser->traceStart($this, $parser->offset);
-        $offset = $parser->offset;
-        $source = substr($parser->source, $parser->offset, $this->length);
+    public function interpret(State $state, array $context) {
+        $offset = $state->offset;
+        $source = substr($state->source, $state->offset, $this->length);
         if ($this->isCaseInsensitive()) {
             if (mb_strtolower($source) !== $this->text) {
-                $parser->traceEnd($this, false);
                 return false;
             }
         } elseif ($source !== $this->text) {
-            $parser->traceEnd($this, false);
             return false;
         }
-        $parser->offset += $this->length;
-        $parser->traceEnd($this, $source);
+        $state->offset += $this->length;
         return $source;
     }
 }

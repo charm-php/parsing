@@ -13,6 +13,10 @@ use Charm\Parsing\Clause\{
     Regex,
     Text
 };
+use Charm\Parsing\Util\StringTools;
+use Charm\Parsing\Error\State\ParseError;
+use Charm\Parsing\Error\AbstractParseError;
+use Charm\Parsing\Error\CustomError;
 
 /**
  * This is a hand-written recursive descent parser for parsing grammars which can be
@@ -34,110 +38,139 @@ use Charm\Parsing\Clause\{
  * ```
  */
 class GrammarParser extends RecursiveDescentParser {
-    const T_IDENT = 1;
-    const T_STRING = 2;
-    const T_REGEX = 3;
-    const T_NUMBER = 4;
-    const T_SNIPPET = 5;
-    const T_COMMENT = 6;
-    const T_BEGIN = 7;
-    const T_END = 8;
-    const T_PREDICATE = 9;
-    const T_OPERATOR = 10;
-    const T_COMMIT = 11;
-    const T_COLON = 12;
-    const T_BRACE_OPEN = 13;
+    const T_IDENT       = 1;
+    const T_STRING      = 2;
+    const T_REGEX       = 3;
+    const T_NUMBER      = 4;
+    const T_SNIPPET     = 5;
+    const T_COMMENT     = -6;
+    const T_BEGIN       = 7;
+    const T_END         = 8;
+    const T_PREDICATE   = 9;
+    const T_OPERATOR    = 10;
+    const T_COMMIT      = 11;
+    const T_COLON       = 12;
+    const T_BRACE_OPEN  = 13;
     const T_BRACE_CLOSE = 14;
-    const T_OR = 15;
-    const T_TOKEN = 16;
-    const T_WHITESPACE = 17;
+    const T_OR          = 15;
+    const T_TOKEN       = 16;
+    const T_WHITESPACE  = -17;
+    const T_PRAGMA      = 18;
 
-    public function __construct() {
-        $this->addTerminal(self::T_COMMENT, '(?<COMMENT>(\#|\/\/)[^\n]*+|\/\*((?!\*\/)[\s\S])*\*\/)');
+    public function getLexer(): LexerInterface {
+        return new Lexer([
+            new LexerPattern(
+                self::T_COMMENT, 'T_COMMENT',
+                '(?<COMMENT>(\#|\/\/)[^\n]*+|\/\*((?!\*\/)[\s\S])*\*\/)'
+                ),
 
-        $this->addTerminal(self::T_IDENT, '[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+|\^|\$');
+            new LexerPattern(
+                self::T_IDENT, 'T_IDENT',
+                '[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*+|\^|\$'
+                ),
 
-        $this->addTerminal(self::T_STRING, <<<'RE'
-            (?<STRING>"(\\[\\"]|[^"\\]+|[^"])*+"|'(\\[\\']|[^'\\]+|[^'])*+')
-            RE,
-            function($match): string {
-                $q = $match->text[0];
-                $match = substr($match->text, 1, -1);
-                return strtr($match, [ "\\\\" => "\\", "\\$q" => $q ]);
-            });
+            new LexerPattern(
+                self::T_STRING, 'T_STRING',
+                <<<'RE'
+                (?<STRING>"(\\[\\"]|[^"\\]+|[^"])*+"|'(\\[\\']|[^'\\]+|[^'])*+')
+                RE,
+                function($match): string {
+                    $q = $match->text[0];
+                    $match = substr($match->text, 1, -1);
+                    return strtr($match, [ "\\\\" => "\\", "\\$q" => $q ]);
+                }
+                ),
 
-        $this->addTerminal(self::T_REGEX, <<<'RE'
-            \/(\\[\s\S]|[^\/])*+\/|\[(\\[\S\s]|[^]])*+\]
-            RE,
-            function($match) {
-                return $match->text;
-                if ($match->text[0] === '/') {
-                    return substr($match->text, 1, -1);
-                } elseif ($match->text[0] === '[') {
+            new LexerPattern(
+                self::T_REGEX, 'T_REGEX',
+                <<<'RE'
+                \/(\\[\s\S]|[^\/\n])*+\/|\[(\\[\S\s]|[^]])*+\]
+                RE,
+                function($match) {
+                    if ($match->text[0] === '[') {
+                        return '/['.preg_quote(substr($match->text, 1, -1), '/').']/';
+                    }
                     return $match->text;
-                } else {
-                    throw new GrammarError("Unable to process regex `".$match->text."`");
                 }
-            });
+                ),
 
-        $this->addTerminal(self::T_NUMBER, '(0|[1-9][0-9]*+)(\.[0-9]++)?',
-            function($match) {
-                if (is_int(strpos($match->text, '.'))) {
-                    return (float) $match->text;
+            new LexerPattern(
+                self::T_PRAGMA, 'T_PRAGMA',
+                <<<'RE'
+                %[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff\-]*
+                RE,
+                function($match) {
+                    return substr($match->text, 1);
                 }
-                return (int) $match->text;
-            });
+                ),
 
-        $this->addTerminal(self::T_SNIPPET, <<<'RE'
-            <\?(
-                \?>(*ACCEPT)|
-                (?=[\/"'#])(
-                    (?&STRING)|
-                    (?&COMMENT)
-                )|
-                [^'"#\/?]++|
-                [\s\S]
-            )*+
-            RE,
-            function($match) {
-                return substr($match->text, 2, -2);
-            });
+            new LexerPattern(
+                self::T_NUMBER, 'T_NUMBER',
+                '(0|[1-9][0-9]*+)(\.[0-9]++)?',
+                function($match) {
+                    if (is_int(strpos($match->text, '.'))) {
+                        return (float) $match->text;
+                    }
+                    return (int) $match->text;
+                }),
 
-        $this->addTerminal(self::T_BEGIN, '::=|:=|:=|->|=');
-        $this->addTerminal(self::T_END, ';');
-        $this->addTerminal(self::T_PREDICATE, '&|!');
-        $this->addTerminal(self::T_OPERATOR, '\*|\+|\?');
-        $this->addTerminal(self::T_COLON, ':');
-        $this->addTerminal(self::T_COMMIT, '@');
-        $this->addTerminal(self::T_BRACE_OPEN, <<<'RE'
-            [[({<]
-            RE);
-        $this->addTerminal(self::T_BRACE_CLOSE, <<<'RE'
-            [\])}>]
-            RE);
+            new LexerPattern(
+                self::T_SNIPPET, 'T_SNIPPET',
+                <<<'RE'
+                <\?(
+                    \?>(*ACCEPT)|
+                    (?=[\/"'#])(
+                        (?&STRING)|
+                        (?&COMMENT)
+                    )|
+                    [^'"#\/?]++|
+                    [\s\S]
+                )*+
+                RE,
+                function($match) {
+                    return substr($match->text, 2, -2);
+                }),
 
-        $this->addTerminal(self::T_OR, '\|');
+            new LexerPattern(self::T_BEGIN, 'T_BEGIN', '::=|:=|:=|->|='),
+            new LexerPattern(self::T_END, 'T_END', ';'),
+            new LexerPattern(self::T_PREDICATE, 'T_PREDICATE', '&|!'),
+            new LexerPattern(self::T_OPERATOR, 'T_OPERATOR', '\*|\+|\?'),
+            new LexerPattern(self::T_COLON, 'T_COLON', ':'),
+            new LexerPattern(self::T_COMMIT, 'T_COMMIT', '@'),
+            new LexerPattern(self::T_BRACE_OPEN, 'T_BRACE_OPEN', <<<'RE'
+                [[({<]
+                RE),
+            new LexerPattern(self::T_BRACE_CLOSE, 'T_BRACE_CLOSE', <<<'RE'
+                [\])}>]
+                RE),
 
-        $this->addTerminal(self::T_TOKEN, '\.');
+            new LexerPattern(self::T_OR, 'T_OR', '\||\/'),
 
-        $this->addTerminal(self::T_WHITESPACE, '\\s+');
+            new LexerPattern(self::T_TOKEN, 'T_TOKEN', '\.|,'),
 
-        // Ignore whitespace
-        $this->addIgnore(self::T_WHITESPACE);
-
-        // Ignore comments starting with // or #
-        $this->addIgnore(self::T_COMMENT);
+            new LexerPattern(self::T_WHITESPACE, 'T_WHITESPACE', '\\s+'),
+        ]);
     }
 
     protected function start() {
-        $grammar = $this->_CPEG();
+        try {
+            $grammar = $this->_CPEG();
+        } catch (AbstractParseError $e) {
+            $grammarOffset = $this->getByteOffsetAt($this->offset - 1);
+
+            $st = new StringTools($this->source);
+            $e->setFileInfo($this->filename, $st->getLineNumberAt($grammarOffset), $st->getColumnNumberAt($grammarOffset));
+            throw $e;
+        } catch (CustomError $e) {
+            throw new ParseError($this, $e->getMessage().' on :location', $e->getCode(), $e);
+        }
 
         if ($grammar === null) {
             return null;
         }
 
         if (!$this->eof()) {
-            throw new GrammarError("Expected end of input");
+            throw new ParseError($this, 'Expected end-of-file on :location, found :source_description');
         }
 
         return $grammar;
@@ -183,7 +216,7 @@ class GrammarParser extends RecursiveDescentParser {
 
         if ($clauses === null) {
             if ($begin !== null) {
-                throw new GrammarError("Empty rule `".$ruleName->value()."` not allowed.");
+                throw new ParseError($this, "Rules must contain clauses on :location");
             }
         }
 
@@ -197,15 +230,15 @@ class GrammarParser extends RecursiveDescentParser {
         }
 
         if (!$this->textIs(';')) {
-            throw new GrammarError("Expected rule name, ';' or more clauses");
+            throw new ParseError($this, "Expected ';' or clauses on :location, got :source_description");
         }
         $this->accept();
 
         done:
-        $rule = new Rule($ruleName->value(), $clauses);
+        $rule = new Rule($ruleName->getValue(), $clauses);
 
         if ($description !== null) {
-            $rule->setDescription($description->value());
+            $rule->setDescription($description->getValue());
         }
 
         return $rule;
@@ -219,9 +252,29 @@ class GrammarParser extends RecursiveDescentParser {
     private function _Clauses() {
 
         $buildSequence = function(array $clauses) {
-            $s = new Sequence(Clause::NONE, null);
+            $subs = [];
+            $pragmas = [];
             foreach ($clauses as $clause) {
-                $s[] = $clause;
+                if ($clause instanceof Pragma) {
+                    $pragmas[] = $clause;
+                } else {
+                    $subs[] = $clause;
+                }
+            }
+
+            if (count($subs) === 1) {
+                foreach ($pragmas as $pragma) {
+                    $subs[0]->addPragma($pragma);
+                }
+                return $subs[0];
+            }
+
+            $s = new Sequence(Clause::NONE, null);
+            foreach ($pragmas as $pragma) {
+                $s->addPragma($pragma);
+            }
+            foreach ($subs as $subClause) {
+                $s[] = $subClause;
             }
             return $s;
         };
@@ -238,7 +291,7 @@ class GrammarParser extends RecursiveDescentParser {
         while (!$this->eof()) {
             if ($this->typeIs(self::T_OR)) {
                 if ($result === null) {
-                    throw new GrammarError("Unexpected | without preceding clauses");
+                    throw new ParseError($this, "Expected '|' on :location, got :source_description");
                 }
                 $this->accept();
                 $groups[] = $buildSequence($result);
@@ -248,6 +301,8 @@ class GrammarParser extends RecursiveDescentParser {
                 $result[] = new Commit(Clause::NONE, null);
             } elseif (null !== ($clause = $this->_FullClause())) {
                 $result[] = $clause;
+            } elseif (null !== ($pragma = $this->_Pragma())) {
+                $result[] = $pragma;
             } else {
                 break;
             }
@@ -256,13 +311,45 @@ class GrammarParser extends RecursiveDescentParser {
             return null;
         }
         if ($result === []) {
-            throw new GrammarError("Expected clause after |");
+            throw new ParseError($this, "Expected clause on :location, got :source_description");
         }
         if ($groups === null) {
             return $buildSequence($result);
         }
         $groups[] = $buildSequence($result);
         return $buildOrderedChoice($groups);
+    }
+
+    private function _Pragma() {
+        if (!$this->typeIs(self::T_PRAGMA)) {
+            return null;
+        }
+
+        $pragmaToken = $this->accept();
+        $params = [];
+        if ($this->textIs('(')) {
+            $this->accept();
+            if (!$this->textIs(')')) {
+                do {
+                    if (!in_array($this->type(), [self::T_IDENT, self::T_STRING, self::T_NUMBER, self::T_REGEX])) {
+                        throw new ParseError($this, "Expected identifier, string, number or regex on :location, got :source_description");
+                    }
+                    $params[] = $this->accept();
+                } while ($this->textIs(',') && $this->accept());
+            }
+            if (!$this->textIs(')')) {
+                throw new ParseError($this, "Expected ')' on :location, got :source_description");
+            }
+            $this->accept();
+        } elseif ($this->textIs('=')) {
+            $this->accept();
+            if (!in_array($this->type(), [self::T_IDENT, self::T_STRING, self::T_NUMBER, self::T_REGEX])) {
+                throw new ParseError($this, "Expected identifier, string, number or regex on :location, got :source_description");
+            }
+            $params[] = $this->accept();
+        }
+
+        return Pragma::create($pragmaToken->getValue(), $params);
     }
 
     private function _FullClause() {
@@ -274,7 +361,7 @@ class GrammarParser extends RecursiveDescentParser {
         $clause = $this->_Clause();
 
         if ($clause === null && ($label !== null || $predicate !== null)) {
-            throw new GrammarError("Expecting a clause after a predicate or a label");
+            throw new ParseError($this, "Excpected clause on :location, got :source_description");
         } elseif ($clause === null) {
             return null;
         }
@@ -287,7 +374,8 @@ class GrammarParser extends RecursiveDescentParser {
             switch ($predicate->text) {
                 case '&': $modifier |= Clause::AND; break;
                 case '!': $modifier |= Clause::NOT; break;
-                default : throw new GrammarError("Unknown predicate '{$predicate->text}'");
+                default :
+                    throw new ParseError($this, "Illegal predicate '{$predicate->text}' on :location");
             }
         }
 
@@ -296,14 +384,16 @@ class GrammarParser extends RecursiveDescentParser {
                 case '*': $modifier |= Clause::OPTIONAL | Clause::REPEATING; break;
                 case '+': $modifier |= Clause::REPEATING; break;
                 case '?': $modifier |= Clause::OPTIONAL; break;
-                default : throw new GrammarError("Unknown operator '{$operator->text}'");
+                default :
+                    throw new ParseError($this, "Illegal operator '{$operator->text}' on :location");
             }
         }
         $clause->setModifier($modifier);
         if ($label !== null) {
             switch ($label->type) {
                 case self::T_IDENT: $label = $label->text; break;
-                default: throw new GrammarError("Unknown label type '{$label->type}'");
+                default:
+                    throw new ParseError($this, "Expected identifier on :location, got :source_description");
             }
             $clause->setName($label);
         }
@@ -353,16 +443,16 @@ class GrammarParser extends RecursiveDescentParser {
                     }
 
                 case self::T_STRING:
-                    return new Text($clause->value(), Clause::NONE, null);
+                    return new Text($clause->getValue(), Clause::NONE, null);
 
                 case self::T_SNIPPET:
-                    return new Snippet($clause->value(), Clause::NONE, null);
+                    return new Snippet($clause->getValue(), Clause::NONE, null);
 
                 case self::T_REGEX:
-                    return new Regex($clause->value(), Clause::NONE, null);
+                    return new Regex($clause->getValue(), Clause::NONE, null);
 
                 default :
-                    throw new GrammarError("Unknown clause type={$clause->type} $operator$clause");
+                    throw new ParseError($this, "Unexpected :source_description on :location");
             }
         }
         return $this->_BracedClause();
@@ -373,23 +463,33 @@ class GrammarParser extends RecursiveDescentParser {
             return null;
         }
 
-        $openOffset = $this->getOffset();
+        $openOffset = $this->offset;
         $open = $this->accept();
 
         $clauses = $this->_Clauses();
+
         if ($clauses === null) {
-            throw new GrammarError("Expected clauses inside sub-clause");
+            throw new ParseError($this, "Expected clause on :location, got :source_description");
+        }
+
+        if (!($clauses instanceof Sequence) && !($clauses instanceof OrderedChoice)) {
+            /**
+             * This was intentionally put inside braces, so we'll ensure it is a sequence
+             */
+            $newClauses = new Sequence(Clause::NONE, null);
+            $newClauses[] = $clauses;
+            $newClauses[] = new Snippet('return $_0;', Clause::NONE, null);
+            $clauses = $newClauses;
         }
 
         $close = ['<' => '>', '(' => ')', '[' => ']', '{' => '}'][$open->text];
         if (!$this->typeIs(self::T_BRACE_CLOSE)) {
-            $this->setOffset($openOffset);
-            throw new GrammarError("Unclosed `".$open->value()."`");
-            throw new GrammarError("Expecting $close or another clause inside sub-clause");
+            $this->offset = $openOffset;
+            throw new ParseError($this, "Expected $close on :location, found :source_description");
         }
 
         if (!$this->textIs($close)) {
-            throw new GrammarError("Mismatched closing brace {".$this->token()->text."}, expecting $close");
+            throw new ParseError($this, "Brace mismatch, expected '{$close}' on :location, found :source_description");
         }
         $this->accept();
         return $clauses;

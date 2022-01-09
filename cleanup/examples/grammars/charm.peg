@@ -1,0 +1,75 @@
+# This is a work in progress grammar for the Charm programming language.
+Charm
+  = Statement*
+Statement
+  = Block
+  / Declaration _ ";" _
+Block
+  = _ "{" _ Statement * _ "}" _
+Declaration
+  = _ Type __ Identifier ( _ "=" _ Expression )?
+Expression
+  = ConditionalExpression
+ConditionalExpression
+  = ConditionalOrExpression (_ "?" _ Expression _ ":" _ ConditionalOrExpression)*
+ConditionalOrExpression
+  = ConditionalAndExpression (_ "||" _ ConditionalAndExpression)*
+ConditionalAndExpression
+  = InclusiveOrExpression (_ "&&" _ InclusiveOrExpression)*
+InclusiveOrExpression
+  = ExclusiveOrExpression (_ "|" _ ExclusiveOrExpression)*
+ExclusiveOrExpression
+  = AndExpression (_ "^" _ AndExpression)*
+AndExpression
+  = EqualityExpression (_ "&" _ EqualityExpression)*
+EqualityExpression
+  = RelationalExpression  (_ ("==" / "!=") _ RelationalExpression)*
+RelationalExpression
+  = ShiftExpression (_ ("<=" / ">=" / "<" / ">") _ ShiftExpression)*
+ShiftExpression
+  = AdditiveExpression (_ ("<<" / ">>>" / ">>") _ AdditiveExpression)*
+AdditiveExpression
+  = MultiplicativeExpression (_ ("+" / "-") _ MultiplicativeExpression)*
+MultiplicativeExpression
+  = UnaryExpression (("*" / "/" / "%") UnaryExpression)*
+UnaryExpression
+  = ("+" / "-" / "!" / "~") UnaryExpression
+  / Primary
+ParExpression
+  = "(" Expression ")"
+Primary
+  = ParExpression
+  / NUMBER
+  / STRING
+NumericType
+  = "float"
+  / "int"
+StringType
+  = "string"
+BoolType
+  = "bool"
+Type
+  = NumericType
+  / StringType
+  / BoolType
+Identifier
+  = [a-zA-Z_\x7f-\xff] [a-zA-Z0-9_\x7f-\xff]*
+NUMBER
+  = FLOAT
+  / INT
+INT
+  = [1-9] [0-9]*
+  / [0-9]
+FLOAT
+  = INT "." [0-9]+
+STRING
+  = '"' ('\\' / '\"' / !'"' .)* '"'
+BOOL
+  = "true"
+  / "false"
+NULL
+  = "null"
+__
+  = [ \t\n\r]+
+_
+  = [ \t\n\r]* { return null; }

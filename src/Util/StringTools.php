@@ -10,6 +10,12 @@ class StringTools {
         $this->length = strlen($s);
     }
 
+    public function indent(int $s=4): static {
+        $indent = str_repeat(" ", $s);
+        $s = $indent.str_replace("\n", "\$n$indent", $this->s);
+        return new static($s);
+    }
+
     public function first(): static {
         preg_match_all('/^\w+|^\s+|\^\W+|[\s\S]+\b/u', $this->s, $matches);
         foreach ($matches as $match) {
@@ -25,6 +31,32 @@ class StringTools {
             return new static(mb_substr($this->s, $offset, $length - 3).'...');
         }
         return new static($this->s);
+    }
+
+    /**
+     * Provides a human readable description of the string found at the
+     * given offset for debug messages and logging.
+     */
+    public function describeOffset(int $offset): string {
+        if ($offset === $this->length) {
+            return 'end of file';
+        } elseif ($offset > $this->length) {
+            return 'invalid offset after end of file';
+        } elseif ($offset === 0) {
+            return 'start of file';
+        } elseif ($offset < 0) {
+            return 'invalid negative offset';
+        }
+
+        preg_match('/(?<whitespace>^\s+)|(?<string>^\w+)|(?<symbol>^.)/u', substr($this->s, $offset, 80), $matches);
+        $key = array_search($matches[0], array_slice($matches, 1, null, true));
+
+        $loc = ' on line '.$this->getLineNumberAt($offset).' column '.$this->getColumnNumberAt($offset);
+
+        if ($key === 'whitespace') {
+            return $key.$loc;
+        }
+        return "$key `".$matches[0]."`".$loc;
     }
 
     public function getLineAt(int $offset): static {
@@ -70,14 +102,14 @@ class StringTools {
         if ($offset < 0 || $offset > $this->length) {
             return null;
         }
-        return substr_count($this->s, "\n", 0, $offset) + 1;
+        return substr_count($this->s, "\n", 0, $offset);
     }
 
     public function getColumnNumberAt(int $offset): int {
         $this->assertValidOffset($offset);
         $lineStartOffset = $this->getLineStartOffset($offset);
 
-        return 1 + $offset - $lineStartOffset;
+        return $offset - $lineStartOffset;
     }
 
     private function assertValidOffset(int $offset) {

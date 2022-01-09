@@ -1,0 +1,33 @@
+1+2*3+4
+
+parse       precedence
+1           -1          left
+1+          1           
+  2         -1          left
+  2*        2           current expression precedence is 2
+    3       -1
+    3+4     1           full expression precedence is 1
+
+
+1           -1          $left
+1+??        2           (precedence > leftPrecedence, so left becomes node)
+  
+
+
+for expr2:
+    if (that.precedence < this.precedence) {
+        // steal that's left and add myself to that's first
+    } else {
+        // make that my right child
+    }
+
+
+if (expr number 2 precedence >
+
+
+
+
+1+          2
+  2*        1
+    3+      2
+      4#    0

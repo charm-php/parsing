@@ -1,7 +1,7 @@
 <?php
 namespace Charm\Parsing\Clause;
 
-use Charm\Parsing\ParserInterface;
+use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 use Charm\Parsing\Clause\Commit;
 use Charm\Parsing\Rule;
@@ -23,73 +23,87 @@ class Sequence extends NonTerminal {
         $children = array_map(function($child) {
             return $child->toGrammarString();
         }, iterator_to_array($this));
-        return implode(" ", $children);
+
+        if ($this->getModifier() === Clause::NONE && $this->getParent() === null) {
+            return implode(" ", $children);
+        } else {
+            return '('.implode(" ", $children).')';
+        }
     }
 
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        if (isset($parser->cache[$parser->offset][$key = get_class($this)." ".$this])) {
-            var_dump("Sequence was here:", $parser->cache[$parser->offset][$key]);
+    public function interpret(State $state, array $context) {
+        if (isset($state->cache[$state->offset][$key = get_class($this)." ".$this])) {
+            var_dump("Sequence was here:", $state->cache[$state->offset][$key]);
             die();
         }
-        $parser->traceStart($this, $parser->offset);
-        $offset = $parser->offset;
+        $offset = $state->offset;
         $committed = null;
 
         $result = [];
 
-        foreach ($this as $subClause) {
-            if ($subClause instanceof Commit) {
-                $committed = $parser->offset;
-                continue;
-            }
-            $match = $this->processSubClause($parser, $subClause, $result);
+        try {
+            foreach ($this as $index => $subClause) {
+                if ($subClause instanceof Commit) {
+                    $committed = $state->offset;
+                    continue;
+                }
 
-            if ($subClause instanceof Snippet) {
-                // Snippets may provide instructions that determine how this sequence continues
-                if ($match instanceof SequenceIgnore) {
-                    // The sequence should terminate with a successful result
-                    $parser->traceEnd($this, true);
-                    return true;
-                } elseif ($match instanceof SequenceResume) {
-                    // The sequence should resume parsing as if nothing happened
-                    $match = true;
+                $match = $subClause->parse($state, $result);
+    //            $match = $this->processSubClause($state, $subClause, $result);
+
+                if ($subClause instanceof Snippet) {
+                    // Snippets may provide instructions that determine how this sequence continues
+                    if ($match instanceof SequenceIgnore) {
+                        // The sequence should terminate with a successful result
+                        return true;
+                    } elseif ($match instanceof SequenceResume) {
+                        // The sequence should resume parsing as if nothing happened
+                        $match = true;
+                    } else {
+                        if ($match === false) {
+                            if ($committed !== null) {
+                                throw new CommittedError($state, $this, $subClause);
+//                                throw new CommittedError($this, $subClause, new ErrorInfo(['offset' => $state->offset, 'source' => $state->source, 'functionName' => 'OrderedChoice']));
+                            }
+                        }
+
+                        // Snippets always terminate the sequence unless they instruct it to resume.
+                        return $match;
+                    }
+                }
+
+                if ($match === false) {
+                    // The sub clause failed, so the sequence fails
+                    if ($committed !== null) {
+                        throw new CommittedError($state, $this, $subClause);
+                    }
+                    $state->offset = $offset;
+                    return false;
+                } elseif ($match === true) {
+                    // The sub clause returned a successful empty parse, so we continue to the next clause
+                    continue;
+                }
+
+                if ($match instanceof BoxedResult) {
+                    $match = $match->value;
+                }
+
+                if (null !== ($name = $subClause->getName())) {
+                    $result[$name] = $match;
                 } else {
-                    // Snippets always terminate the sequence unless they instruct it to resume.
-                    $parser->traceEnd($this, $match);
-                    return $match;
+                    $result[] = $match;
                 }
             }
-
-            if ($match === false) {
-                // The sub clause failed, so the sequence fails
-                if ($committed !== null) {
-                    throw new ExpectedError($parser, $this, $subClause);
-                }
-                $parser->offset = $offset;
-                $parser->traceEnd($this, false);
-                return false;
-            } elseif ($match === true) {
-                // The sub clause returned a successful empty parse, so we continue to the next clause
-                continue;
-            }
-
-            if ($match instanceof BoxedResult) {
-                $match = $match->value;
-            }
-
-            if (null !== ($name = $subClause->getName())) {
-                $result[$name] = $match;
+            if ($result === []) {
+                $result = null;
             } else {
-                $result[] = $match;
+                $result = array_values($result);
             }
-        }
-        if ($result === []) {
-            $result = null;
-        } else {
-            $result = array_values($result);
+        } catch (ExceptionInterface $e) {
+            $state->offset = $offset;
+            throw $e;
         }
 
-        $parser->traceEnd($this, $result);
         return $result;
     }
 

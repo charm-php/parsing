@@ -1,11 +1,13 @@
 <?php
 namespace Charm\Parsing\Clause;
 
-use Charm\Parsing\ParserInterface;
+use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 use Charm\Parsing\GrammarError;
+use Charm\Parsing\Error\CustomError;
+use Charm\Parsing\Grammar;
 
-class Regex extends Terminal implements RegexInterface {
+class Regex extends Terminal {
 
     public function asString(): string {
         return $this->pattern;
@@ -23,30 +25,31 @@ class Regex extends Terminal implements RegexInterface {
         if ($this->isCaseInsensitive()) {
             $this->re .= 'i';
         }
+        // validate the exception
+        set_error_handler(function($errno, $errstr, $errfile=null, $errline=null, $errcontext=null) {
+            restore_error_handler();
+            throw new CustomError(strtr($errstr, [
+                'preg_match():' => $this->re.':',
+            ]));
+        }, E_ALL);
+        if (!is_int(preg_match($this->re, "sample string", $matches, 0, 0))) {
+            die("invalid regex");
+        }
+        restore_error_handler();
     }
 
-    public function getRegex(): string {
-        return substr($this->pattern, 1, -1);
-    }
-
-    public function getRegexPriority(): int {
-        return -mb_strlen($this->pattern);
-    }
-
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        $parser->traceStart($this, $parser->offset);
-        $offset = $parser->offset;
-        $count = preg_match($this->re, $parser->source, $matches, 0, $parser->offset);
+    public function interpret(State $state, array $context) {
+        $offset = $state->offset;
+        
+        $count = preg_match($this->re, $state->source, $matches, 0, $state->offset);
         if (!is_int($count)) {
-            throw new GrammarError("Error in grammar regex `".$this->pattern."`: ".preg_last_error_msg()." code ".preg_last_error());
+            throw new CustomError("Error in regex `{$this->pattern}`: ".preg_last_error_msg()." code ".preg_last_error());
         }
         if ($count === 0) {
-            $parser->traceEnd($this, false);
             return false;
         }
         $length = strlen($matches[0]);
-        $parser->offset += $length;
-        $parser->traceEnd($this, $matches[0]);
+        $state->offset += $length;
         return $matches[0];
     }
 

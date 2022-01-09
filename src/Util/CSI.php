@@ -34,7 +34,6 @@ class CSI {
     const BWHITE = 97;
 
     public static function isTTY() {
-return true;
         if (!function_exists('posix_isatty')) {
             return false;
         }
@@ -43,6 +42,15 @@ return true;
 
     public static function strip(string $str) {
         return preg_replace('/<![-_a-zA-Z0-9 ]*>/', '', $str);
+    }
+
+    public static function str_pad(string $str, int $length, string $pad_string=" ", int $pad_type=STR_PAD_RIGHT) {
+        $stripped = self::strip($str);
+        $strippedLength = mb_strlen($stripped);
+        $currentLength = mb_strlen($str);
+        $diff = $currentLength - $strippedLength;
+        $length += $diff;
+        return str_pad($str, $length, $pad_string, $pad_type);
     }
 
     public static function strlen(string $str) {

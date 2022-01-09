@@ -6,11 +6,12 @@ use Charm\Parsing\Clause\{
     OrderedChoice,
     NonTerminal
 };
+use JSONSerializable;
 
 /**
  * Abstract superclass of all PEG operators and terminals
  */
-abstract class Clause implements ClauseInterface {
+abstract class Clause implements ClauseInterface, JSONSerializable {
 
     const NONE = 0;         // no operators attached to the clause
     const OPTIONAL = 1;     // if pattern does not match, it is still a successful parse
@@ -25,8 +26,15 @@ abstract class Clause implements ClauseInterface {
     protected $name = null;
     protected $rule = null;
     protected $parent = null;
+    private $pragmas = [];
 
     public string $cacheKey;
+
+    /**
+     * Prepare for parsing by recursively asking child clauses to prepare.
+     */
+    public function prepare(Grammar $grammar) {
+    }
 
     /**
      * Should return this clause as it would have been written in the grammar.
@@ -119,6 +127,95 @@ abstract class Clause implements ClauseInterface {
      */
     abstract protected function asString(): string;
 
+
+    /**
+     * Function to evaluate the clause. Return values have the
+     * following meanings:
+     *
+     * - `false` means that the clause did not match the source.
+     * - `true` means that the clause matched the source but
+     *   does not have a value.
+     * - `instanceof BoxedResult` is used if the clause returns
+     *   a boolean `true` or `false` value.
+     * - `instanceof SequenceIgnore` instructs the calling clause
+     *   that it should return `true`.
+     * - `instanceof Sequence
+     * - any other value is considered a successful match.
+     */
+    public final function parse(State $parser, array $context) {
+        $offset = $parser->offset;
+        $doTrace = $parser->trace;
+        if ($doTrace) $parser->traceStart($this, $parser->offset);
+
+        if ($this->modifier === self::NONE) {
+            try {
+                $result = $this->interpret($parser, $context);
+                
+                if ($doTrace) $parser->traceEnd($this, $result);
+                if ($result === false) {
+                    if ($parser->offset !== $offset) {
+                        die("1incorrect parser offset after fail in ".$this::class);
+                    }
+                }
+                return $result;
+            } catch (ExceptionInterface $e) {
+                $parser->offset = $offset;
+                if ($doTrace) $parser->traceEnd($this, false);
+                throw $e;
+            }
+        }
+
+
+        try {
+            if ($this->modifier === self::OPTIONAL) {
+                $offset = $parser->offset;
+                $result = $this->interpret($parser, $context);
+                if ($result !== false) {
+                    if ($doTrace) $parser->traceEnd($this, $result);
+                    return $result;
+                }
+                if ($doTrace) $parser->traceEnd($this, null);
+                return null;
+            } elseif ($this->modifier === (self::OPTIONAL | self::REPEATING)) {
+                $result = [];
+                do {
+                    $offset = $parser->offset;
+                    $partial = $this->interpret($parser, $context);
+                    if ($partial !== false) {
+                        $result[] = $partial;
+                    } else {
+                        if ($doTrace) $parser->traceEnd($this, $result);
+                        return $result;
+                    }
+                } while(true);
+            } elseif ($this->modifier === self::REPEATING) {
+                $result = false;
+                do {
+                    $offset = $parser->offset;
+                    $partial = $this->interpret($parser, $context);
+                    if ($partial !== false) {
+                        $result[] = $partial;
+                    } else {
+                        if ($doTrace) $parser->traceEnd($this, $result);
+                        return $result;
+                    }
+                } while(true);
+            } else {
+                assert(false, "Unhandled modifier ".$this->modifier);
+            }
+
+            echo "Modifier is: ".$this->modifier."\n";
+            echo "Is repeating: ".($this->modifier & self::REPEATING ? "true" : "false")."\n";
+            echo "Is optional: ".($this->modifier & self::OPTIONAL ? "true" : "false")."\n";
+            echo "Is positive lookahead (&): ".($this->modifier & self::AND ? "true" : "false")."\n";
+            echo "Is negative lookahead (!): ".($this->modifier & self::NOT ? "true" : "false")."\n";
+            die();
+        } catch (ExceptionInterface $e) {
+            $parser->offset = $offset;
+            if ($doTrace) $parser->traceEnd($this, false);
+        }
+    }
+
     /**
      * Match the clause against the source at offset.
      * - If the rule does not match, the function returns `null`.
@@ -127,7 +224,7 @@ abstract class Clause implements ClauseInterface {
      * @param $parser The parser instance (which holds the source, offset and grammar)
      * @param $context An array which is shared among all clauses in the current rule
      */
-    abstract public function parse(ParserInterface $parser, array &$context);
+    abstract public function interpret(State $parser, array $context);
 
     /**
      * Annotate if this clause is a terminal clause, or if it is a clause which may recursively
@@ -144,9 +241,7 @@ abstract class Clause implements ClauseInterface {
 
     public function optimize(GrammarInterface $grammar): ClauseInterface {
         $res = clone $this;
-        if ($res->getParent() !== null) {
-            throw new InternalError("After cloning, the parent should be NULL. Fix ".static::class."::__clone()");
-        }
+        assert($res->getParent() === null, "After cloning, the parent should be NULL. Fix ".static::class."::__clone()");
         return $res;
     }
 
@@ -180,6 +275,36 @@ abstract class Clause implements ClauseInterface {
         $this->rule = null;
         $this->parent = null;
 
+    }
+
+    protected function getModifierDescription(): string {
+        $str = '';
+        if (0 !== ($this->modifier & self::REPEATING & self::OPTIONAL)) {
+            $str = 'zero or more ';
+        } elseif (0 !== ($this->modifier & self::REPEATING)) {
+            $str = 'one or more ';
+        } elseif (0 !== ($this->modifier & self::OPTIONAL)) {
+            $str = 'an optional ';
+        }
+        if (0 !== ($this->modifier & self::NOT)) {
+            $str = 'not matching '.$str;
+        }
+        return $str;
+    }
+
+    public final function addPragma(Pragma $pragma) {
+        assert(!key_exists($pragma->getName(), $this->pragmas), "Pragma '".$pragma->getName()."' already declared");
+        $this->pragmas[$pragma->getName()] = $pragma;
+    }
+
+    public final function pragma(string $name): ?Pragma {
+        return $this->pragmas[$name] ?? null;
+    }
+
+    public function getDescription(): string {
+        $str = $this->getModifierDescription();
+        $str .= $this->asString();
+        return $str;
     }
 
     public function getClauseName(bool $_leaf=true): string {
@@ -256,6 +381,10 @@ abstract class Clause implements ClauseInterface {
         return substr(static::class, strrpos(static::class, '\\')+1);
     }
 
+    public function getDebugName(): string {
+        return $this->getRule()->getRuleName().':'.$this->getKind().'#'.spl_object_id($this);
+    }
+
     public final function getName(): ?string {
         return $this->name;
     }
@@ -329,11 +458,28 @@ abstract class Clause implements ClauseInterface {
         return 0 < ($this->modifier & self::CASE_INSENSITIVE);
     }
 
+    public function jsonSerialize() {
+        if ($this instanceof \Traversable) {
+            return [ $this->getPredicateString().$this->getKind().$this->getOperatorString() => iterator_to_array($this) ];
+        } else {
+            return $this->toGrammarString();
+        }
+    }
+
     public final function __toString() {
         return $this->toGrammarString();
     }
 
     public function __debugInfo() {
+        if ($this instanceof \Traversable) {
+            $children = iterator_to_array($this);
+            return [
+                'kind' => $this->getKind(),
+                'children' => $children,
+                ];
+        } else {
+            return [$this->toGrammarString()];
+        }
         $parentId = null;
         if ($this->getParent()) {
             $parentId = $this->getParent()->__debugInfo()['id'];

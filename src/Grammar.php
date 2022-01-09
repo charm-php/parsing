@@ -54,7 +54,7 @@ use Charm\Parsing\Clause\{
  * Grammar parsing giant regex
  *
  */
-class Grammar implements IteratorAggregate, GrammarInterface {
+class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable {
 
     /**
      * The filename for the grammar, if available
@@ -79,66 +79,13 @@ class Grammar implements IteratorAggregate, GrammarInterface {
             }
             $this->ruleMap[$rule->getRuleName()] = $rule;
         }
+        $this->prepare();
     }
 
-    public function validate() {
-        $checkClause = function(Clause $clause, Clause $parent=null) use (&$checkClause) {
-            if ($parent !== $clause->getParent()) {
-                throw new GrammarError("Clause '".$clause->getClauseName()."' has misreference
-
-Expected:   ".$parent->getClauseName()."
-Is:         ".$clause->getParent()->getClauseName()."
-
-");
-            }
-            if (is_iterable($clause)) {
-                foreach($clause as $subClause) {
-                    $checkClause($subClause, $clause);
-                }
-            }
-        };
-        foreach ($this->ruleMap as $name => $rule) {
-            if ($rule !== $rule->getClause()->getRule()) {
-                throw new GrammarError("Rule '$name' has misreference");
-            }
-            $checkClause($rule->getClause());
+    protected function prepare() {
+        foreach ($this->ruleMap as $ruleName => $rule) {
+            $rule->prepare($this);
         }
-
-
-    }
-
-    public function niu_optimize(): static {
-        if ($this->optimized) {
-            throw new \LogicException("Don't optimize a grammar twice");
-        }
-        // create a new optimized grammar
-        $ruleMap = [];
-
-        /**
-         * Get all rules from the original grammar and add them to the $rules array for optimizations
-         */
-        foreach ($this as $name => $rule) {
-            $ruleClause = clone $rule->getClause();
-            $ruleMap[$name] = new Rule($name, $ruleClause);
-        }
-
-        $grammar = new Grammar($ruleMap);
-        foreach ($grammar->ruleMap as $name => $rule) {
-            $grammar->ruleMap[$name] = new Rule($name, $rule->getClause()->optimize($grammar));
-        }
-        foreach ($grammar->ruleMap as $name => $rule) {
-            $grammar->ruleMap[$name] = new Rule($name, $rule->getClause()->optimize($grammar));
-        }
-
-/*
-        foreach ($grammar->ruleMap as $name => $rule) {
-            if (method_exists($rule->getClause(), 'isLeftRecursive') && $rule->getClause()->isLeftRecursive()) {
-                $grammar->ruleMap[$name]->setClause($rule->getClause()->getNonRecursive());
-            }
-        }
-*/
-        $grammar->optimized = true;
-        return $grammar;
     }
 
     public function count() {
@@ -165,6 +112,10 @@ Is:         ".$clause->getParent()->getClauseName()."
         yield from $this->ruleMap;
     }
 
+    public function jsonSerialize() {
+        return iterator_to_array($this);
+    }
+
     public function __toString() {
 
         $arr = [];
@@ -173,7 +124,7 @@ Is:         ".$clause->getParent()->getClauseName()."
             $arr[] = (string) $rule;
         }
 
-        return implode("\n\n", $arr);
+        return implode("\n", $arr);
 
         foreach ($this as $rule) {
             $row = [ $rule->getRuleName(), trim($rule->getClause()) ];

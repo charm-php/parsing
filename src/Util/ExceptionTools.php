@@ -32,7 +32,7 @@ class ExceptionTools {
         return $top;
     }
 
-    public function setFileName(string $filename) {
+    public function setFile(string $filename) {
         $rp = new \ReflectionProperty($this->ex, 'file');
         $rp->setAccessible(true);
         $rp->setValue($this->ex, $filename);
@@ -44,6 +44,22 @@ class ExceptionTools {
         $rp = new \ReflectionProperty($this->ex, "line");
         $rp->setAccessible(true);
         $rp->setValue($this->ex, $line);
+        $rp->setAccessible(false);
+        return $this;
+    }
+
+    public function setCode($code) {
+        $rp = new \ReflectionProperty($this->ex, "code");
+        $rp->setAccessible(true);
+        $rp->setValue($this->ex, $code);
+        $rp->setAccessible(false);
+        return $this;
+    }
+
+    public function setMessage($message) {
+        $rp = new \ReflectionProperty($this->ex, "message");
+        $rp->setAccessible(true);
+        $rp->setValue($this->ex, $message);
         $rp->setAccessible(false);
         return $this;
     }

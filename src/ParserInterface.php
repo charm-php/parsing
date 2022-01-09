@@ -19,16 +19,13 @@ interface ParserInterface {
      *
      * @param $source       The string to parse
      * @param $filename     A file name to use in error messages
+     * @param $lineOffset   A number to add to line numbers in errors and offset information
+     * @param $columnOffset A number to add to column numbers in errors and offset information
      */
-    public function parse(string $source, string $filename=null);
+    public function parse(string $source, string $filename, int $lineOffset=0, int $columnOffset=0);
 
     /**
      * Parse a file into an AST.
      */
     public function parseFile(string $filename);
-
-    /**
-     * Return an array for storing state information during parsing
-     */
-    public function &getState(): array;
 }

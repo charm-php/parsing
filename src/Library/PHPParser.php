@@ -6,12 +6,12 @@ class PHPParser extends \Charm\Parser {
     const GRAMMAR = <<<'CPEG'
 
     Program "PHP script" =
-        ^ TextMode? ( '<?php' __ Code ( '?>' _ Program<? return node('program', $_1); ?> )? )? $
+        ^ TextMode? ( '<?php' __ Code ( '?>' _ Program)? )? $
 
-    TextMode "text section" =
-        /((?!<\?php)[\s\S])+/                       <? return ['TextMode', var_export($_0, true)]; ?>
+    TextMode =
+        /((?!<\?php)[\s\S])+/
 
-    Code "program code section" = Statement*
+    Code "PHP script" = Statement*
 
     Statement "statement" =
         "{" _ Statement* "}" _
@@ -20,34 +20,23 @@ class PHPParser extends \Charm\Parser {
     |   WhileStatement
     |   TryStatement
     |   EchoStatement
-    |   ExpressionStatement
-    |   DirectStatement
     |   ClassDecl
     |   NamespaceDecl
-    |   ";" _                                       <? return ignore(); ?>
+    |   ExpressionStatement
+    |   DirectStatement
+    |   ";" _                                       <? return true; ?>
 
     EchoStatement =
-        "echo" _ Expressions                        <? return node('Echo', $_1); ?>
+        "echo" _ Expressions
 
     IfStatement =
-        "if" _ Parentheses Statement ("elseif" _ Parentheses Statement)* ("else" _ Statement)?
-        <?
-            var_dump("IfStatement", $context);
-            die();
-            return node('If', ['test' => $_1, 'then' => $_2]);
-        ?>
+        "if" _ @ Parentheses Statement ("elseif" _ Parentheses Statement)* ("else" _ Statement)?
 
     DoStatement
       = "do" _ Statement "while" _ Parentheses ";" _
-        <?
-            return node('Do', ['statement' => $_1, 'test' => $_3]);
-        ?>
 
     WhileStatement =
         "while" _ Parentheses Statement
-        <?
-            return node('While', ['test' => $_1, 'statement' => $_2]);
-        ?>
 
     TryStatement =
         "try" _ Statement ("catch" _ "(" _ TypeDef Variable ")" _ Statement)* ("finally" _ Statement)?
@@ -58,15 +47,12 @@ class PHPParser extends \Charm\Parser {
 
     ExpressionStatement =
         Expr ";" _
-        <?
-            return node("Expression", $_0);
-        ?>
 
     DirectStatement =
         STATIC_ID __ Expressions ";"
 
     ClosureDecl =
-        "function" _ "(" ArgumentList? ")" _ ClosureUseDecl? "{" Statements* "}" _
+        "function" _ "(" ArgumentList? ")" _ ClosureUseDecl? "{" _ Statement* "}" _
 
     ClosureUseDecl =
         "use" _ "(" "&"? _ Variable ("," _ "&"? _ Variable)* ","? _ ")" _
@@ -84,8 +70,6 @@ class PHPParser extends \Charm\Parser {
 
     ClassMemberDefinition =
         AbstractMethodDefinition
-    |   MethodDefinition
-    |   PropertyDefinition
 
     AbstractMethodDefinition =
         AbstractVisibilityModifier* "function" _ ArgumentList ";"
@@ -118,7 +102,8 @@ class PHPParser extends \Charm\Parser {
         "use" __ NAMESPACE_ID _ ";" _
 
     NamespaceDecl "namespace Decl" =
-        "namespace" __ NAMESPACE_ID _ ";" _
+        "namespace" __
+        NAMESPACE_ID _ ";" _
 
     Expressions "list of expressions" =
         Expr (_ "," _ Expr)*
@@ -132,48 +117,46 @@ class PHPParser extends \Charm\Parser {
       ;
 
     Expr "expression" =
-        '(' _ Expr ')' _                                        <? return $_1; ?>
-    |   Expr _ "(" Expressions? ")"                             <? return node('call', $_0, $_2); ?>
-    |   Expr _ ('::'|'->') _ Expr                               <? return node($_1, [$_0, $_2]); ?>
-    |   ('clone' | 'new') _ Expr                                <? return node($_0, $_1); ?>
-    |   Expr '**' _ Expr                                        <? return node('pow', [$_0, $_1]); ?>
+        '(' _ Expr ')' _                                        
+    |   Expr _ "(" Expressions? ")"                             
+    |   Expr _ ('::'|'->') _ Expr                               
+    |   ('clone' | 'new') _ Expr                                
+    |   Expr '**' _ Expr                                        
     |   ('+' | '-' | '++' | '--' | '~' | '(' _ NAMESPACE_ID _ ')' | '@') _ Expr
-                                                                <? return node('prefix', [$_0, $_1]); ?>
-    |   Expr ("++" | "--") _                                    <? return node('suffix', [$_0, $_1]); ?>
-    |   'instanceof' _ Expr                                     <? return node('prefix', ['instanceof', $_1]); ?>
-    |   '!' _ Expr                                              <? return node('prefix', ['not', $_1]); ?>
-    |   Expr ('*' | '/' | '%') _ Expr                           <? return node($_1, [$_0, $_2]); ?>
-    |   Expr ('+' | '-') _ Expr                                 <? return node($_1, [$_0, $_2]); ?>
-    |   Expr ('<<' | '>>') _ Expr                               <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '.' _ Expr                                         <? return node($_1, [$_0, $_2]); ?>
-    |   Expr ('<=' | '<' | '>=' | '>') _ Expr                   <? return node($_1, [$_0, $_2]); ?>
+                                                                
+    |   Expr ("++" | "--") _                                    
+    |   'instanceof' _ Expr                                     
+    |   '!' _ Expr                                              
+    |   Expr ('*' | '/' | '%') _ Expr                           
+    |   Expr ('+' | '-') _ Expr                                 
+    |   Expr ('<<' | '>>') _ Expr                               
+    |   Expr '.' _ Expr                                         
+    |   Expr ('<=' | '<' | '>=' | '>') _ Expr                   
     |   Expr ('===' | '==' | '!==' | '!=' | '<>' | '<=>') _ Expr
-                                                                <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '&' _ Expr                                         <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '^' _ Expr                                         <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '|' _ Expr                                         <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '&&' _ Expr                                        <? return node($_1, [$_0, $_2]); ?>
-    |   Expr '||' _ Expr                                        <? return node($_1, [$_0, $_2]); ?>
+    |   Expr '&' _ Expr                                         
+    |   Expr '^' _ Expr                                         
+    |   Expr '|' _ Expr                                         
+    |   Expr '&&' _ Expr                                        
+    |   Expr '||' _ Expr                                        
     |   Expr ('??' _ Expr)
-    |   if:Expr '?' _ then:Expr ':' _ else:Expr                 <? return node('?:', [$if, $then, $else]); ?>
+    |   if:Expr '?' _ then:Expr ':' _ else:Expr                 
     |   Expr (('=' | '+=' | '-=' | '**=' | '*=' | '/=' | '.=' | '&=' | '!=' | '^=' | '<<=' | '>>=' | '??=') _ Expr)
-                                                                <? return node($_1[0], [$_0, $_1[1]]); ?>
-    |   'yield' _ 'from' _ Expr                                 <? return node('yieldFrom', $_3); ?>
-    |   'yield' _ Expr                                          <? return node('yield', $_2); ?>
-    |   'print' _ Expr                                          <? return node('print', $_1); ?>
-    |   Expr 'and' Expr                                         <? return node('and', [$_0, $_2]); ?>
-    |   Expr 'xor' Expr                                         <? return node('xor', [$_0, $_2]); ?>
-    |   Expr 'or' Expr                                          <? return node('or', [$_0, $_2]); ?>
+    |   'yield' _ 'from' _ Expr
+    |   'yield' _ Expr
+    |   'print' _ Expr
+    |   Expr 'and' _ Expr
+    |   Expr 'xor' _ Expr
+    |   Expr 'or' _ Expr
     |   ClosureDecl
     |   Atom
-      ;
+    ;
 
     Parentheses
     =   "(" _ Expr ")" _                                        <? return $_1; ?>
 
     Atom =
         Literal
-    |   VAR_ID _                                                <? return node('var', $_0); ?>
+    |   VAR_ID _                                                
     |   NAMESPACE_ID _
 
     Literal =
@@ -218,10 +201,10 @@ class PHPParser extends \Charm\Parser {
         ?>
 
     _ =
-        /\s*/                                       <? return ignore(); ?>;
+        /(\s|\/\/[^\n]*)*/                                       <? return true; ?>
 
     __ "whitespace" =
-        /\s+/                                       <? return ignore(); ?>;
+        /(\s|\/\/[^\n]*)+/                                       <? return true; ?>
 
 CPEG;
 }

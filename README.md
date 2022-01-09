@@ -1,15 +1,78 @@
 Charm/Parsing
 =============
 
-A powerful parsing library for parsing PEG style grammars. It has functionality similar to `peg.js`, but is written from scratch
-in PHP.
+A very powerful and easy to use parser library for PHP.
 
- * Simple to write complex parsers
- * Supports direct left recursion
- * PEG style recursive descent parsing
- * Scannarless
+Quick Start
+-----------
 
-Example JSON parser
+The easiest way to begin parsing is using the `Charm\cpeg_parse()` method. This
+function is our equivalent of `preg_match_all`.
+
+Syntax:
+
+```
+cpeg_parse(string $expression, string $subject): ?array;
+```
+
+Example for parsing a JSON:
+
+```
+use function Charm\cpeg_parse;
+
+$expression = '
+    Value   =   Number | String | "true" | "false" | "null" | Object | Array
+    Array   =   "[" (Value ("," Value)*)? "]"
+    Object  =   "{" (String ":" Value ("," String ":" Value)*)? "}"
+    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
+    String  =   /"(\\[\\"]|[^"])*"/
+';
+
+$result = cpeg_parse($expression, '[1,2,"A string",{"key":[3,4]}');
+
+```
+
+Example for parsing an expression:
+
+```
+use function Charm\cpeg_parse;
+
+$expression = '
+    Expr    =   Expr ("*" | "/") Expr
+            |   Expr ("+" | "-") Expr
+            |   Number
+    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
+';
+
+$result = cpeg_parse($expression, '1*2+3*4');
+```
+
+
+Introduction to parsing
+-----------------------
+
+Parsing is not difficult, if you're using the right parser and once you understand 
+a few basic things. In general, regular expressions are much 
+
+
+
+
+
+
+
+
+
+
+
+Parsing can be a very complex subject. This library tries to make the entire subject
+a lot simpler - but nevertheless you'll need to understand a parsing syntax
+
+Parsing is a very academic subject, which means that a lot of the documentation out there
+
+
+
+
+Grammar documentation
 -------------------
 
 ```

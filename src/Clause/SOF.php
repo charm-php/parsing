@@ -1,7 +1,7 @@
 <?php
 namespace Charm\Parsing\Clause;
 
-use Charm\Parsing\ParserInterface;
+use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 
 class SOF extends Terminal {
@@ -10,13 +10,10 @@ class SOF extends Terminal {
         return '^';
     }
 
-    public function parse(ParserInterface $parser, array &$context, array $args=null) {
-        $parser->traceStart($this, $parser->offset);
-        if ($parser->offset !== 0) {
-            $parser->traceEnd($this, false);
+    public function interpret(State $state, array $context) {
+        if ($state->offset !== 0) {
             return false;
         }
-        $parser->traceEnd($this, true);
         return true;
     }
 
