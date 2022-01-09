@@ -1,7 +1,7 @@
 <?php
 namespace Charm;
 
-function cpeg_parse(string $expression, string $subject) {
+function cpeg_parse(string $expression, string $subject, array $initialState=[]) {
     static $cache = null;
     if ($cache === null) {
         $cache = [];
@@ -20,7 +20,8 @@ function cpeg_parse(string $expression, string $subject) {
             break;
         }
     }
-    $result = $cache[$hash]->parse($subject, $t['file'], $t['line']);
+
+    $result = $cache[$hash]->parse($subject, $t['file'], $t['line'], 0, $initialState);
 
     return $result;
 }

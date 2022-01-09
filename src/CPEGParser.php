@@ -13,6 +13,7 @@ use Charm\Parsing\Util\CSI;
 
 class CPEGParser implements ParserInterface {
     public $options;
+
     private $grammar;
     private $goal;
 
@@ -35,14 +36,17 @@ class CPEGParser implements ParserInterface {
         $this->grammar = $grammar;
     }
 
-    public function parseFile(string $filename) {
-        return $this->parse(file_get_contents($filename), $filename);
+
+    public function parseFile(string $filename, array $initialState=[]) {
+        return $this->parse(file_get_contents($filename), $filename, 0, 0, $bindThis);
     }
 
-    public function parse(string $source, string $filename, int $lineOffset = 0, int $columnOffset = 0) {
+    public function parse(string $source, string $filename, int $lineOffset = 0, int $columnOffset = 0, array $initialState=[]) {
         $state = new State();
+
     start_over_with_trace:
         $state->setState($source);
+        $state->globals = $initialState;
 
         $goal = $this->grammar[$this->goal];
         $vars = [];

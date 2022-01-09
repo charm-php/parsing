@@ -104,8 +104,8 @@ foreach ($testFiles as $number => $testFile) {
             }
 
             if ($outputBuffer !== '') {
-/*
                 out("\n\n<!byellow><!underline>UNEXPECTED OUTPUT<!><!>\n\n$outputBuffer\n\n");
+/*
 
 die("OWERWER
 

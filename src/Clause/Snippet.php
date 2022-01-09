@@ -274,7 +274,7 @@ class Snippet extends Terminal {
         set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']));
 
         try {
-            $ctx = new Snippet\Context($context + [ 'context' => $context, 'args' => $args ]);
+            $ctx = new Snippet\Context($context + [ 'context' => $context, 'state' => &$state->globals ]);
             return ($this->invoker)($ctx);
         } finally {
             $this->state = $previousState;

@@ -38,6 +38,12 @@ class State implements StateInterface {
      * Set this to true, and repeat the parse if it fails.
      */
     public bool $trace = false;
+
+    /**
+     * Storage of globals which is accessible throughout parsing in snippets via $globals
+     */
+    public array $globals = [];
+
     /**
      * @internal
      * Stack contains clauses being processed and is used to control
