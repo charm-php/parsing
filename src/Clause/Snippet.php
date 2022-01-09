@@ -306,7 +306,7 @@ class Snippet extends Terminal {
     ];
 
     const LEGAL_TOKENS = [
-        '&', '!', '+', '-', '*', '/', ';', '=', '<', '>', ',', ':', '.', '?', '%',
+        '&', '!', '+', '-', '*', '/', ';', '=', '<', '>', ',', ':', '.', '?', '%', '~', '^', '|',
         T_WHITESPACE,
         T_VARIABLE, T_CONSTANT_ENCAPSED_STRING, T_LNUMBER,
         T_ENCAPSED_AND_WHITESPACE, 
@@ -328,6 +328,7 @@ class Snippet extends Terminal {
         T_COMMENT,
         T_DOUBLE_CAST, T_INT_CAST,
         T_ELLIPSIS,
+        T_POW, T_SL, T_SR, T_LOGICAL_AND, T_LOGICAL_XOR, T_LOGICAL_OR,
     ];
     const SPECIAL = [
         T_STRING => [

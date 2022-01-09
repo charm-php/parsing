@@ -19,6 +19,7 @@ use Charm\Parsing\Clause\{
     SOF,
     Any
 };
+use Charm\Parsing\Error\CustomError;
 
 /**
  * Represents a Parsing Expression Grammar, which is a formal grammar for describing
@@ -75,7 +76,7 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
         $this->filename = $filename;
         foreach ($rules as $rule) {
             if (isset($this->ruleMap[$rule->getRuleName()])) {
-                throw new GrammarError("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
+                throw new CustomError("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
             }
             $this->ruleMap[$rule->getRuleName()] = $rule;
         }

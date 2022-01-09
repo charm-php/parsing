@@ -70,8 +70,6 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
             $result = $this->start();
             $cache[$hash] = $result;
             return $result;
-        } catch (GrammarError $e) {
-die("HER");
         } catch (ExceptionInterface $e) {
             /**
              * Rewrite the exception with correct location information.

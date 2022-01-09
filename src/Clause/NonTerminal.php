@@ -5,7 +5,6 @@ use Charm\Parsing\Clause;
 use Charm\Parsing\State;
 use Charm\Parsing\{
     Grammar,
-    GrammarError,
     InternalError
 };
 use Charm\Parsing\Clause\{

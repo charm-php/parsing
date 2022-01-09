@@ -2,7 +2,6 @@
 namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\State;
-use Charm\Parsing\GrammarError;
 use Charm\Parsing\Error;
 use Charm\Parsing\{
     ClauseInterface,

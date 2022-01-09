@@ -7,11 +7,7 @@ use Charm\Parsing\{
     Clause,
     Rule,
     BoxedResult,
-    Grammar,
-    GrammarError,
-    InternalError,
-    CommittedError,
-    ErrorInfo,
+    Grammar
 };
 use Charm\Parsing\Clause\OrderedChoice\{
     PreparedClause,
@@ -258,8 +254,6 @@ class OrderedChoice extends NonTerminal {
             $refersBack = function(Clause $clause, array $path=[]) use ($rule, &$refersBack, $grammar) {
                 if (in_array($clause, $path)) {
                     return null;
-                    throw new GrammarError("Found loop in grammar: ".implode("\n -> ", array_map(function($c) { return $c->asString(); }, $path)), self::GRAMMAR_LOOP_ERROR);
-                    return null;
                 }
                 $path[] = $clause;
                 if ($clause === $this) {
@@ -268,7 +262,7 @@ class OrderedChoice extends NonTerminal {
                 if ($clause instanceof Identifier) {
                     $nextRule = $grammar[$clause->getIdentifier()];
                     if ($nextRule === null) {
-                        throw new GrammarError("Rule `".$clause->getIdentifier()."` does not exist in the grammar", 0);
+                        throw new CustomError("Rule `".$clause->getIdentifier()."` does not exist in the grammar", 0);
                     }
                     return $refersBack($nextRule->getClause(), $path);
                 }

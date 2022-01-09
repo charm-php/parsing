@@ -3,7 +3,6 @@ namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\State;
 use Charm\Parsing\Clause;
-use Charm\Parsing\GrammarError;
 use Charm\Parsing\Error\CustomError;
 use Charm\Parsing\Grammar;
 
