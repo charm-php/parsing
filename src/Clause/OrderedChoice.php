@@ -9,6 +9,7 @@ use Charm\Parsing\{
     BoxedResult,
     Grammar
 };
+use Charm\Parsing\Error\CustomError;
 use Charm\Parsing\Clause\OrderedChoice\{
     PreparedClause,
     Result
