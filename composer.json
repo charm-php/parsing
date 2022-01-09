@@ -6,7 +6,7 @@
         "phpunit/phpunit": "^9",
         "nikic/php-parser": "^4.13"
     },
-    "license": "GPLv3",
+    "license": "GPL-3.0-only",
     "autoload": {
         "files": ["functions.php"],
         "classmap": ["Parser.php"],
