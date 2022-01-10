@@ -52,12 +52,10 @@ echo $parser->parse("1+2"); // output: 3
 ```
 
 
-
 Quick Start
 -----------
 
-The easiest way to begin parsing is using the `Charm\cpeg_parse()` method. This
-function is our equivalent of `preg_match_all`.
+The easiest way to begin parsing is using the `Charm\cpeg_parse()` method.
 
 Syntax:
 
@@ -88,9 +86,49 @@ Example for parsing an expression:
 use function Charm\cpeg_parse;
 
 $expression = '
-    Expr    =   Expr ("*" | "/") Expr
+    Expr    =   Expr "^" Expr                   %assoc=right
+            |   Expr ("*" | "/") Expr
             |   Expr ("+" | "-") Expr
             |   Number
+    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
+';
+
+$result = cpeg_parse($expression, '1*2+3*4');
+```
+
+Building a parse tree
+---------------------
+
+Generally, the parser will generate a structured array which you can traverse
+however you like directly from the terminal symbols you use in the grammar.
+
+If you would like to generate a parse tree or in other ways process the data
+while parsing is underway, you can embed snippets in the grammar by enclosing 
+PHP code inside `<?` and `?>` tokens.
+
+```
+use function Charm\cpeg_parse;
+
+$expression = '
+    Expr    =   Expr "^" Expr                   %assoc=right
+                <?
+                    return $_0 ^ $_2;
+                ?>
+            |   Expr ("*" | "/") Expr
+                <?
+                    if ($_1 === "*") return $_0 * $_2; ?>
+                    else return $_0 / $_2;
+                ?>
+            |   Expr ("+" | "-") Expr
+                <?
+                    if ($_1 === "+") return $_0 + $_2; ?>
+                    else return $_0 - $_2;
+                ?>
+            |   Number
+                <?
+                    return floatval($_0);
+                ?>
+
     Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
 ';
 
@@ -197,71 +235,40 @@ Operator
 : Parentheses can be used to group several clauses together.
 
 
-
-Example Grammar Syntax
-----------------------
-
-This basic syntax allows you to parse mathematical expressions. 
-
-```
-Expr
-  = Addition
-
-Addition
-  = Multiplication ( ( "+" / "-" ) Multiplication )
-
-Multiplication
-  = Primary (("*"/"/") Primary) 
-
-Primary
-  = Number
-
-Number
-  = Float
-  | Integer
-
-Float
-  = /0|[1-9][0-9]*(\.[0-9]+)/           { return floatval( $_0 ); }
-
-Integer
-  = /0|[1-9][0-9]*/                     { return intval( $_0 ); }
-```
-
 "Snippets" - inline PHP Code
 ----------------------------
 
 To build a better parse tree, or to implement functionality you can
-use embedded PHP code. The PHP code available is severely restricted,
-but it should be enough to let you do the most important things.
+use embedded PHP code.
 
-Code is embedded via curly braces:
+Code is embedded via short open and close tags:
 
 ```
-SumExpression = MulExpression "+" SumExpression { /* inline PHP code */ }
+SumExpression
+    = MulExpression "+" SumExpression
+      <?
+        /* inline PHP code */
+        ?>
 ```
 
-The PHP code can analyze previous matches and return values which will
-become part of the final result of the sequence.
+The PHP code has access to the value of the clauses that was previously
+matched via the variables `$_0`, `$_1` and so on.
 
-The most common use of this functionality is to finalize the sequence
-and provide a custom node for the parse tree or to provide customized
-parse errors.
+Clauses which don't capture data, such as `^` and `$` are not included.
 
-Essential return values:
+You can use a special variable named `$globals` to record global state
+which will remain availbale between different snippets.
 
- * `return false` will be interpreted by the sequence as a normal failed
-   clause.
- * `return true` will be interpreted by the sequence as a successful clause
-   which does not provide a result.
- * `return fail()` will stop the sequence with a negative result.
- * `return nothing()` will stop the sequence with a non-capturing positive
-   result.
- * `return done("Some value")` will stop the sequence and add "Some value"
-   to the parse tree.
- * Any other return value will be added to the sequence result as if it was
-   parsed by a normal terminal clause.
+The return value from a snippet will become the return value for the
+entire rule.
 
-Trigger a parse error:
+Return values `true` and `false` have special meaning:
 
- * `error("A parse error was raised");`
+ * Returning `true` will cause parsing to resume, but nothing will be
+   added to the result.
+ * Returning `false` will cause parsing of thae clause to fail and the
+   parser will attempt the next choice.
+ * Any other return value will be added to the parse tree.
+
+A snippet can trigger a parse error by calling the `error()` function.
 
