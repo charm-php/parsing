@@ -8,6 +8,7 @@ use Charm\Parsing\Util\{
     ExceptionTools,
     StringTools
 };
+use Charm\Parsing\GrammarParserOptions;
 
 abstract class Parser extends Parsing\CPEGParser {
     const GRAMMAR = null;
@@ -19,7 +20,10 @@ abstract class Parser extends Parsing\CPEGParser {
             throw new Parsing\Exception("`".static::class."`::GRAMMAR is not declared");
         }
 
-        $grammarParser = new Parsing\GrammarParser();
+        $rc = new \ReflectionClass($this);
+        $grammarParser = new Parsing\GrammarParser(new GrammarParserOptions([
+            "base_namespace" => $rc->getNamespaceName()
+        ]));
 
         try {
             $rc = new \ReflectionClass($this);

@@ -57,6 +57,15 @@ class GrammarParser extends RecursiveDescentParser {
     const T_WHITESPACE  = -17;
     const T_PRAGMA      = 18;
 
+    protected $options;
+    
+    public function __construct(GrammarParserOptions $options=null) {
+        if ($options === null) {
+            $options = new GrammarParserOptions();
+        }
+        $this->options = $options;
+    }
+
     public function getLexer(): LexerInterface {
         return new Lexer([
             new LexerPattern(
@@ -446,7 +455,7 @@ class GrammarParser extends RecursiveDescentParser {
                     return new Text($clause->getValue(), Clause::NONE, null);
 
                 case self::T_SNIPPET:
-                    return new Snippet($clause->getValue(), Clause::NONE, null);
+                    return new Snippet($clause->getValue(), Clause::NONE, null, $this->options->base_namespace);
 
                 case self::T_REGEX:
                     return new Regex($clause->getValue(), Clause::NONE, null);

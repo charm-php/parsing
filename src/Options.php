@@ -17,6 +17,13 @@ class Options extends AbstractOptions {
     public bool $auto_tokenize = true;
 
     /**
+     * Base namespace for snippets
+     *
+     * @var string
+     */
+    public string $base_namespace = '';
+
+    /**
      * Discard zero length matches
      */
 //    public bool $discard_empty = true;

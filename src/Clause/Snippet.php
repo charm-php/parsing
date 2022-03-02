@@ -46,11 +46,43 @@ class Snippet extends Terminal {
     protected $invoker;             // the compiled callback function
     protected $variables;           // the variables that the code tries to access
 
-    public function __construct(string $code, int $modifier, ?string $name) {
+    public function __construct(string $code, int $modifier, ?string $name, string $namespace='') {
         parent::__construct($modifier, $name);
+        $this->namespace = rtrim($namespace, "\\")."\\";
         assert(trim($code)!=='');
         $this->originalSource = $code;
         $this->build();
+    }
+
+    private function build() {
+        if ($this->invoker !== null) {
+            return;
+        }
+        $errorReporting = error_reporting(E_ALL);
+        $compileResult = $this->compile();
+        $this->compiledSource = $code = $compileResult['code'];
+        $variables = $compileResult['variables'];
+        $src =
+            // this quoting style is to protect the line numbering in parse error messages
+            '$this->invoker = function(Charm\Parsing\Clause\Snippet\Context $_context) {'.
+                $code.
+            "\n};";
+
+        try {
+            set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']), E_ALL);
+            $this->invokerSource = $src;
+            eval($src);
+        } catch (\Throwable $e) {
+            $message = $e->getMessage();
+            $message = strtr($message, [
+                '$this->fn_' => '',
+            ]);
+            throw new CustomError($message, $e->getCode(), $e);
+        } finally {
+            $this->state = null;
+            restore_error_handler();
+            error_reporting($errorReporting);
+        }
     }
 
     private function compile(): array {
@@ -68,7 +100,7 @@ class Snippet extends Terminal {
         $token = null;
         for ($i = 0; $i < $l; $i++) {
             if ($token !== null) {
-                $offset += isset($token[1]) ? strlen($token[1]) : 1;
+                $offset += is_array($token) ? strlen($token[1]) : strlen($token);
             }
             $token = $tokens[$i];
             if (isset($token[1])) {
@@ -145,9 +177,62 @@ class Snippet extends Terminal {
                     }
                 }
                 assert(false, "Failed parsing quoted string");
-            } elseif (isset(self::SPECIAL[$token[0]])) {
+            } elseif (isset(self::SPECIAL[$token[0]]) && in_array($token[1], self::SPECIAL[$token[0]])) {
+/*
                 if (!in_array($token[1], self::SPECIAL[$token[0]])) {
                     throw new ParseError($this->originalSource, 3 + $offset, "Illegal token ".self::tokenString($token)." on :location");
+                }
+*/
+            } elseif ($token[0] === \T_NEW) {
+                $i++;
+                $code .= "new";
+                $offset += 3;
+
+                // expect whitespace
+                for (; $tokens[$i][0] === T_WHITESPACE; $i++) {
+                    $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
+                    $code .= $tokens[$i][1];
+                }
+                // expect valid class identifier
+                switch ($tokens[$i][0]) {
+                    case \T_STRING :
+                    case \T_NAME_QUALIFIED :
+                        if (class_exists($this->namespace . $tokens[$i][1])) {
+                            $code .= $this->namespace . $tokens[$i][1];
+                            $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
+                            continue 2;
+                        } else {
+                            throw new ParseError($this->originalSource, 3 + $offset, "Unknown class ".self::tokenString($tokens[$i])." on :location");
+                        }
+                    case \T_NAME_FULLY_QUALIFIED :
+                        if ($this->namespace === "\\") {
+                            if (!class_exists($tokens[$i][1])) {
+                                throw new ParseError($this->originalSource, 3 + $offset, "Unknown class ".self::tokenString($tokens[$i])." on :location");
+                            } else {
+                                $code .= $tokens[$i][1];
+                                $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
+                                continue 2;
+                            }
+                        } else {
+                            throw new ParseError($this->originalSource, 3 + $offset, "Qualified class names are not allowed. Classes must exist in the '".$this->namespace."' namespace or below.");
+                        }
+                        break;
+                    default :
+                        throw new ParseError($this->originalSource, 3 + $offset, "Illegal class identifier ".self::tokenString($tokens[$i])." on :location");
+                }
+            } elseif ($token[0] === \T_STRING) {
+                // A function or a class in the current namespace
+                if ($this->namespace !== "") {
+                    $finalName = $this->namespace . $token[1];
+                } else {
+                    $finalName = $token[1];
+                }
+                if (class_exists($finalName)) {
+                    $token[1] = $finalName;
+                } elseif (function_exists($finalName)) {
+                    $token[1] = $finalName;
+                } else {
+                    throw new ParseError($this->originalSource, 3 + $offset, "Unknown identifier ".self::tokenString($token)." on :location");
                 }
             } elseif ($token[0] === ($stack[$stackLength-1] ?? null)) {
                 if ($token[0] === '"') {
@@ -210,37 +295,6 @@ class Snippet extends Terminal {
         $this->build();
     }
 
-    private function build() {
-        if ($this->invoker !== null) {
-            return;
-        }
-        $errorReporting = error_reporting(E_ALL);
-        $compileResult = $this->compile();
-        $this->compiledSource = $code = $compileResult['code'];
-        $variables = $compileResult['variables'];
-        $src =
-            // this quoting style is to protect the line numbering in parse error messages
-            '$this->invoker = function(Charm\Parsing\Clause\Snippet\Context $_context) {'.
-                $code.
-            "\n};";
-
-        try {
-            set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']), E_ALL);
-            $this->invokerSource = $src;
-            eval($src);
-        } catch (\Throwable $e) {
-            $message = $e->getMessage();
-            $message = strtr($message, [
-                '$this->fn_' => '',
-            ]);
-            throw new CustomError($message, $e->getCode(), $e);
-        } finally {
-            $this->state = null;
-            restore_error_handler();
-            error_reporting($errorReporting);
-        }
-    }
-
     /**
      * Snippet function for raising a custom parse error.
      */
@@ -276,6 +330,10 @@ class Snippet extends Terminal {
         try {
             $ctx = new Snippet\Context($context + [ 'context' => $context, 'state' => &$state->globals ]);
             return ($this->invoker)($ctx);
+        } catch (\Throwable $e) {
+            echo $e->getMessage()."\n";
+            var_dump($ctx, $this->invokerSource);
+            die();
         } finally {
             $this->state = $previousState;
             restore_error_handler();
@@ -329,6 +387,7 @@ class Snippet extends Terminal {
         T_DOUBLE_CAST, T_INT_CAST,
         T_ELLIPSIS,
         T_POW, T_SL, T_SR, T_LOGICAL_AND, T_LOGICAL_XOR, T_LOGICAL_OR,
+        T_NEW,
     ];
     const SPECIAL = [
         T_STRING => [

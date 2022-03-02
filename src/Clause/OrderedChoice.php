@@ -32,15 +32,15 @@ class OrderedChoice extends NonTerminal {
             //echo " (p=".$prep->precedence.")   {$prep->clause}\n";
         //}
         //echo "******************************************\n";
-
-
-
+            $result = $this->lrParse($state);
+            /*
             foreach ($this->prepared as $prep) {
                 $result = $this->lrParse($state, 0, $prep->clause->pragma('assoc') !== null && $prep->clause->pragma('assoc')[0] === 'right');
                 if ($result !== null) {
                     break;
                 }
             }
+            */
             if ($result === null) {
                 return false;
             }
@@ -68,6 +68,7 @@ class OrderedChoice extends NonTerminal {
      * @param $floor The lowest precedence we're allowed to return
      */
     private function lrParse(State $state, int $floor=0, bool $rightAssociative=false): ?Result {
+        static $startingDepth = 0;
         $prefix = function() use ($state) {
             return substr($state->source, 0, $state->offset)."¤".substr($state->source, $state->offset).str_repeat("  ", count(debug_backtrace())-8)." ";
         };
@@ -78,12 +79,12 @@ class OrderedChoice extends NonTerminal {
         //echo $prefix()." - searching for a \$start clause\n";
         $start = null;
 
-        $didSkip = false;
+        $startingDepth++;
         foreach ($this->prepared as $i => $prep) {
             if ($prep->isLeftRecursive) {
-                $didSkip = true;
                 continue;
             }
+
             //echo $prefix()." - trying $i at ".$state->offset." `".$prep->clause."`\n";
             $start = $this->parsePreparedClause($state, $prep, null);
             if ($start !== null) {
@@ -92,6 +93,11 @@ class OrderedChoice extends NonTerminal {
             } else {
                 //echo $prefix()." - did not match\n";
             }
+        }
+
+        if ($startingDepth-- > 1) {
+            //echo "Returning starting depth $startingDepth with"; var_dump($start);
+            return $start;
         }
 
         if ($start === null) {
