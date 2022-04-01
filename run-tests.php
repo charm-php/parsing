@@ -66,7 +66,7 @@ foreach ($testFiles as $number => $testFile) {
                 $startTime = microtime(true);
                 do {
                     $runTime = microtime(true) - $startTime;
-                    out("\r<!white>Running <!bwhite>".str_pad(basename($testFile), 40)."<!>:<!> <!byellow>".number_format($runTime, 2)." sec<!>");
+                    out("\r<!white>Running <!bwhite>".str_pad(basename($testFile), 40)."<!>:<!> <!byellow>".number_format($runTime, 3)." sec<!>");
                     usleep(10000);
                     $result = pcntl_waitpid($pid, $status, WUNTRACED|WNOHANG);
                     if ($result !== 0) {
@@ -87,14 +87,44 @@ foreach ($testFiles as $number => $testFile) {
         run_test:
 
             $startTime = microtime(true);
-            ob_start();
+            $outputBuffer = '';
+            $outputStarted = false;
+            ob_start(function($buffer) use (&$outputBuffer, &$outputStarted) {
+                if (!$outputStarted && $buffer !== '') {
+                    $outputStarted = true;
+                    out("\n\n<!byellow>UNEXPECTED OUTPUT\n=================<!>\n");
+                }
+
+                $lastLinePos = strrpos($outputBuffer, "\n");
+                if (is_int($lastLinePos)) {
+                    $lastLine = substr($outputBuffer, $lastLinePos + 1);
+                } else {
+                    $lastLine = false;
+                }
+
+                $outputBuffer .= $buffer;
+
+                if ($lastLine !== false) {
+                    $buffer = "\r".CSI::clearRight().$lastLine.$buffer;
+                } else {
+                    $buffer = strtr($buffer, [
+                        "\n" => "\n".CSI::clearRight()
+                    ]);
+                }
+
+                fwrite(STDERR, $buffer);
+            }, 1, PHP_OUTPUT_HANDLER_REMOVABLE);
+
             try {
                 $result = $test[1]($testData[0]);
             } catch (\Throwable $e) {
                 $result = $e;
             }
-            $outputBuffer = ob_get_contents();
+//            $outputBuffer = ob_get_contents();
             ob_end_clean();
+            if ($outputStarted) {
+                out("\n<!byellow>=================<!>\n");
+            }
             $success = var_export($result, true) === var_export($testData[1], true);
 
             if (!$success) {
@@ -104,7 +134,6 @@ foreach ($testFiles as $number => $testFile) {
             }
 
             if ($outputBuffer !== '') {
-                out("\n\n<!byellow><!underline>UNEXPECTED OUTPUT<!><!>\n\n$outputBuffer\n\n");
 /*
 
 die("OWERWER
@@ -136,7 +165,7 @@ function out(string $out) {
         // remove lines that contain a \r without a \n at the end of the line
         $out = preg_replace('/^[^\r\n]*\r[^\n]*(?!\n)$/m', '', $out);
     }
-    echo CSI::parse($out);
+    fwrite(STDERR, CSI::parse($out));
 }
 
 function compare($funcResult, $expected) {
