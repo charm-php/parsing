@@ -152,6 +152,29 @@ class GrammarCompiler
         }
     }
 
+    /**
+     * Check if a clause references a rule marked with %silent pragma
+     */
+    private function isSilentReference(Clause $clause): bool
+    {
+        if (!($clause instanceof Identifier)) {
+            return false;
+        }
+        $targetRule = $this->grammar[$clause->getIdentifier()] ?? null;
+        return $targetRule !== null && $targetRule->getClause()->pragma('silent') !== null;
+    }
+
+    /**
+     * Check if a clause always returns Signal::HIT (no value)
+     * SOF (^), EOF ($), and Nothing (\nothing) always return HIT
+     */
+    private function alwaysReturnsHit(Clause $clause): bool
+    {
+        return $clause instanceof SOF
+            || $clause instanceof EOF
+            || $clause instanceof Nothing;
+    }
+
     private function isLeftRecursive(Clause $clause, string $ruleName, array $visited = []): bool
     {
         if (in_array($clause, $visited, true)) {
@@ -252,6 +275,8 @@ class GrammarCompiler
         foreach ($this->snippetMethods as $method) {
             $this->emitter->line("private function {$method['name']}({$method['params']}): mixed");
             $this->emitter->openBlock();
+            // Make $state available as alias to $this->globals
+            $this->emitter->line('$state = &$this->globals;');
             $this->emitter->line($method['code']);
             $this->emitter->closeBlock();
             $this->emitter->line();
@@ -295,10 +320,18 @@ class GrammarCompiler
         // Collect primary (non-left-recursive) and operator (left-recursive) alternatives
         $primaryAlts = [];
         $operatorAlts = [];
-        $precedence = count($clause);
+        $numAlts = count($clause);
 
         foreach ($clause as $index => $choice) {
-            $prec = $precedence - $index;
+            // Check for explicit %prec pragma, otherwise use position-based precedence
+            $explicitPrec = $choice->pragma('prec');
+            if ($explicitPrec !== null) {
+                $prec = (int) $explicitPrec[0];
+            } else {
+                // First alternative gets highest precedence (binds tightest)
+                // This matches standard operator precedence convention
+                $prec = $numAlts - $index;
+            }
             if ($this->isLeftRecursive($choice, $ruleName)) {
                 $operatorAlts[] = ['clause' => $choice, 'precedence' => $prec];
             } else {
@@ -354,7 +387,13 @@ class GrammarCompiler
             if ($i > 0) {
                 $this->emitter->line('$this->offset = $_offset;');
             }
-            $this->generateClauseCode($alt['clause'], '$_result');
+            // For prefix operators (non-LR clauses containing recursive reference),
+            // generate specialized code that passes precedence
+            if ($this->containsRecursiveReference($alt['clause'], $ruleName)) {
+                $this->generatePrattPrimarySequence($alt['clause'], $ruleName, $alt['precedence'], '$_result');
+            } else {
+                $this->generateClauseCode($alt['clause'], '$_result');
+            }
             $this->emitter->line('if ($_result !== ' . $this->signalMiss() . ') {');
             $this->emitter->indent()->line('return $_result;');
             $this->emitter->closeBlock();
@@ -364,6 +403,97 @@ class GrammarCompiler
         $this->emitter->line('$this->offset = $_offset;');
         $this->emitter->line('return ' . $this->signalMiss() . ';');
         $this->emitter->closeBlock();
+    }
+
+    /**
+     * Check if a clause contains a recursive reference to the given rule
+     */
+    private function containsRecursiveReference(Clause $clause, string $ruleName): bool
+    {
+        if ($clause instanceof Identifier && $clause->getIdentifier() === $ruleName) {
+            return true;
+        }
+        if ($clause instanceof Sequence) {
+            foreach ($clause as $sub) {
+                if ($this->containsRecursiveReference($sub, $ruleName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Generate code for a prefix operator sequence (non-LR with recursive reference)
+     */
+    private function generatePrattPrimarySequence(Clause $clause, string $ruleName, int $precedence, string $resultVar): void
+    {
+        if (!($clause instanceof Sequence)) {
+            // Single clause - just generate normal code
+            $this->generateClauseCode($clause, $resultVar);
+            return;
+        }
+
+        $seqId = ++$this->tempVarCounter;
+        $tempOffset = '$_seqOffset' . $seqId;
+        $savedCommit = '$_seqCommit' . $seqId;
+        $this->emitter->line("$tempOffset = \$this->offset;");
+        $this->emitter->line("$savedCommit = \$this->commitOffset;");
+        $this->emitter->line("$resultVar = [];");
+
+        $context = [];
+        $contextNames = [];
+        $hasSnippet = false;
+        $methodName = 'parse' . $this->toMethodName($ruleName);
+
+        foreach ($clause as $i => $subClause) {
+            if ($subClause instanceof Snippet) {
+                $hasSnippet = true;
+                $this->generateSnippetCode($subClause, $context, $contextNames, $resultVar);
+                continue;
+            }
+
+            $itemVar = '$_seq' . $seqId . '_' . $i;
+
+            // Check if this is a recursive reference - pass precedence
+            if ($subClause instanceof Identifier && $subClause->getIdentifier() === $ruleName && $subClause->getModifier() === Clause::NONE) {
+                $this->emitter->line("$itemVar = \$this->$methodName($precedence);");
+            } else {
+                $this->generateClauseCode($subClause, $itemVar);
+            }
+
+            $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
+            $this->emitter->indent();
+            $this->emitter->line("if (\$this->commitOffset === $savedCommit || $tempOffset >= \$this->commitOffset) {");
+            $this->emitter->indent();
+            $this->emitter->line("\$this->offset = $tempOffset;");
+            $this->emitter->closeBlock();
+            $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
+            $this->emitter->line("goto _seqEnd{$seqId};");
+            $this->emitter->closeBlock();
+
+            // Add to result/context
+            $this->emitter->line("if ($itemVar !== " . $this->signalHit() . ") {");
+            $this->emitter->indent();
+            $isSilent = $this->isSilentReference($subClause);
+            if ($name = $subClause->getName()) {
+                $this->emitter->line("{$resultVar}[" . var_export($name, true) . "] = $itemVar;");
+                $contextNames[$name] = $itemVar;
+                $context[] = $itemVar;
+            } elseif (!$isSilent) {
+                $this->emitter->line("{$resultVar}[] = $itemVar;");
+            }
+            if (!$this->alwaysReturnsHit($subClause) && !$isSilent) {
+                $context[] = $itemVar;
+            }
+            $this->emitter->closeBlock();
+        }
+
+        if (!$hasSnippet) {
+            $this->emitter->line("if ($resultVar === []) { $resultVar = null; }");
+        }
+
+        $this->emitter->line("_seqEnd{$seqId}:");
     }
 
     private function generatePrattOperatorCase(array $alt, string $ruleName, bool $first): void
@@ -418,44 +548,62 @@ class GrammarCompiler
             $contextNames[$name] = '$_left';
         }
 
+        // Save commitOffset - commits inside this Pratt alternative shouldn't leak out if parsing fails
+        $counter = ++$this->tempVarCounter;
+        $savedCommit = '$_prattCommit' . $counter;
+        $this->emitter->line("$savedCommit = \$this->commitOffset;");
+
         $this->emitter->line('do {');
         $this->emitter->indent();
 
         // Parse middle elements (operators, etc.)
+        $hasSnippet = false;
         for ($i = 1; $i < count($parts); $i++) {
             $part = $parts[$i];
 
             // Check if this is a recursive reference to the same rule
             if ($part instanceof Identifier && $part->getIdentifier() === $ruleName && $part->getModifier() === Clause::NONE) {
                 // Right operand - recursive call with precedence
-                $nextPrec = $rightAssoc ? $precedence : $precedence;
+                // For right-associativity, use lower precedence to allow same-precedence operators to bind
+                $nextPrec = $rightAssoc ? ($precedence - 1) : $precedence;
                 $methodName = 'parse' . $this->toMethodName($ruleName);
                 $varName = '$_r' . $i;
                 $this->emitter->line("$varName = \$this->$methodName($nextPrec);");
-                $this->emitter->line("if ($varName === " . $this->signalMiss() . ") { \$this->offset = \$_offset; break; }");
+                $this->emitter->line("if ($varName === " . $this->signalMiss() . ") { \$this->offset = \$_offset; \$this->commitOffset = $savedCommit; break; }");
                 $context[] = $varName;
                 if ($name = $part->getName()) {
                     $contextNames[$name] = $varName;
                 }
             } elseif ($part instanceof Snippet) {
-                // Execute snippet code
-                $this->generateSnippetCode($part, $context, $contextNames);
+                // Execute snippet code - assign result to $_left
+                $hasSnippet = true;
+                $this->generateSnippetCode($part, $context, $contextNames, '$_left');
             } else {
                 // Regular clause
                 $varName = '$_m' . $i;
                 $this->generateClauseCode($part, $varName);
-                $this->emitter->line("if ($varName === " . $this->signalMiss() . ") { \$this->offset = \$_offset; break; }");
-                if ($part->getModifier() === Clause::NONE) {
+                $this->emitter->line("if ($varName === " . $this->signalMiss() . ") { \$this->offset = \$_offset; \$this->commitOffset = $savedCommit; break; }");
+                // Add to context unless it's a predicate or %silent rule
+                $isPredicate = $part->hasAndPredicate() || $part->hasNotPredicate();
+                $isSilent = $this->isSilentReference($part);
+                if (!$isPredicate && !$isSilent) {
                     $context[] = $varName;
                     if ($name = $part->getName()) {
                         $contextNames[$name] = $varName;
                     }
+                } elseif ($name = $part->getName()) {
+                    // Named elements are always captured
+                    $contextNames[$name] = $varName;
                 }
             }
         }
 
-        // Success - update $_left
-        $this->emitter->line('$_left = [' . implode(', ', $context) . '];');
+        // Success - update $_left (only if no snippet already set it)
+        if (!$hasSnippet) {
+            $this->emitter->line('$_left = [' . implode(', ', $context) . '];');
+        }
+        // Restore commitOffset on success - commits only matter if this alternative fails
+        $this->emitter->line("\$this->commitOffset = $savedCommit;");
         $this->emitter->line('$_matched = true;');
         $this->emitter->line('continue;');
         $this->emitter->closeBlock(' while (false);');
@@ -657,7 +805,9 @@ class GrammarCompiler
     {
         $seqId = ++$this->tempVarCounter;
         $tempOffset = '$_seqOffset' . $seqId;
+        $savedCommit = '$_seqCommit' . $seqId;
         $this->emitter->line("$tempOffset = \$this->offset;");
+        $this->emitter->line("$savedCommit = \$this->commitOffset;");
         $this->emitter->line("$resultVar = [];");
 
         $context = [];
@@ -676,8 +826,9 @@ class GrammarCompiler
 
             $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
             $this->emitter->indent();
-            // Only backtrack if we haven't committed past the sequence start
-            $this->emitter->line("if (\$this->commitOffset === null || $tempOffset >= \$this->commitOffset) {");
+            // Only backtrack if we haven't committed IN THIS SEQUENCE past the sequence start
+            // Use savedCommit to ignore commits from successful sub-parses
+            $this->emitter->line("if (\$this->commitOffset === $savedCommit || $tempOffset >= \$this->commitOffset) {");
             $this->emitter->indent();
             $this->emitter->line("\$this->offset = $tempOffset;");
             $this->emitter->closeBlock();
@@ -713,13 +864,24 @@ class GrammarCompiler
                 $this->emitter->line("{$resultVar}[] = $itemVar;");
                 $this->emitter->closeBlock();
                 $this->emitter->closeBlock();
+                // Spread clauses still need to be in snippet context
+                $context[] = $itemVar;
             } elseif ($name = $subClause->getName()) {
                 $this->emitter->line("{$resultVar}[" . var_export($name, true) . "] = $itemVar;");
                 $contextNames[$name] = $itemVar;
+                $context[] = $itemVar;
             } else {
-                $this->emitter->line("{$resultVar}[] = $itemVar;");
+                // Check if this is a reference to a %silent rule
+                $isSilent = $this->isSilentReference($subClause);
+                if (!$isSilent) {
+                    $this->emitter->line("{$resultVar}[] = $itemVar;");
+                }
+                // Only add to snippet context if clause produces a value
+                // (not SOF/EOF/Nothing, and not %silent rules)
+                if (!$this->alwaysReturnsHit($subClause) && !$isSilent) {
+                    $context[] = $itemVar;
+                }
             }
-            $context[] = $itemVar;
             $this->emitter->closeBlock();
         }
 
@@ -758,6 +920,8 @@ class GrammarCompiler
             $this->emitter->line("if ($choiceVar !== " . $this->signalMiss() . ") {");
             $this->emitter->indent();
             $this->emitter->line("$resultVar = $choiceVar;");
+            // Restore commitOffset on success - commits only matter if parsing fails after them
+            $this->emitter->line("\$this->commitOffset = $savedCommit;");
             $this->emitter->line("goto _choiceEnd{$counter};");
             $this->emitter->closeBlock();
 
@@ -962,8 +1126,8 @@ class GrammarCompiler
             $code = str_replace("\$_context[\"$name\"]", $paramNames[$var], $code);
         }
 
-        // Replace $state reference with $this->globals
-        $code = str_replace("\$_context['state']", '$this->globals', $code);
+        // Replace $state reference - $state is available as reference to $this->globals in snippet methods
+        $code = str_replace("\$_context['state']", '$state', $code);
 
         // Transform remaining $_context['name'] references (user-defined variables) to local vars
         $code = preg_replace('/\$_context\[\'([a-zA-Z_][a-zA-Z0-9_]*)\'\]/', '\$$1', $code);

@@ -20,7 +20,7 @@
     /** @var array<string, string> Rule name to description mapping */
     private const DESCRIPTIONS = {{DESCRIPTIONS}};
 
-    public function parse(string $source): mixed
+    public function parse(string $source, array $initialState = []): mixed
     {
         $this->source = $source;
         $this->offset = 0;
@@ -28,11 +28,17 @@
         $this->maxOffset = 0;
         $this->expected = null;
         $this->commitOffset = null;
+        $this->globals = array_merge($this->globals, $initialState);
 {{INIT_CODE}}
         $result = $this->parse{{GOAL_RULE}}();
 
         if ($result === {{CLASS_NAME}}Signal::MISS) {
             $this->fail('{{GOAL_DESCRIPTION}}');
+        }
+
+        // Signal::HIT means success with no value - return null
+        if ($result === {{CLASS_NAME}}Signal::HIT) {
+            return null;
         }
 
         return $result;

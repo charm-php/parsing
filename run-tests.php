@@ -13,12 +13,21 @@ use Charm\Parsing\Util\CSI;
 
 require(__DIR__.'/vendor/autoload.php');
 
+// Support filtering tests by pattern: php run-tests.php "0004*" or php run-tests.php 0004
+$filter = $argv[1] ?? null;
+
 out("<!bwhite>Charm/Parsing regression test suite report<!>\n");
 out("<!bwhite>------------------------------------------<!>\n\n");
 out("<!white>Tests started <!bwhite>".gmdate('Y-m-d H:i:s')." GMT<!><!>\n");
 out("\n");
 
-$testFiles = glob(__DIR__.'/charm-tests/*.php'); /**/
+$testFiles = glob(__DIR__.'/charm-tests/*.php');
+if ($filter !== null) {
+    $testFiles = array_filter($testFiles, function($file) use ($filter) {
+        return fnmatch("*$filter*", basename($file));
+    });
+    $testFiles = array_values($testFiles);
+}
 
 foreach ($testFiles as $number => $testFile) {
     $test = require($testFile);

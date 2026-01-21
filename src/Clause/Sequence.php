@@ -103,7 +103,11 @@ class Sequence extends NonTerminal {
                     }
                 } elseif ($subClause->getName() === null) {
                     // No spread, no name - add as positional
-                    $result[] = $match;
+                    // Check if this is a reference to a %silent rule
+                    $isSilent = ($subClause instanceof Identifier && $subClause->isSilent());
+                    if (!$isSilent) {
+                        $result[] = $match;
+                    }
                 }
             }
             if ($result === []) {
@@ -150,6 +154,10 @@ class Sequence extends NonTerminal {
             if ($subClause instanceof Snippet || $subClause instanceof Commit) {
                 continue;
             }
+            // Predicates don't consume input
+            if ($subClause->hasAndPredicate() || $subClause->hasNotPredicate()) {
+                continue;
+            }
             // Optional elements don't contribute to minimum
             if ($subClause->isOptional()) {
                 continue;
@@ -163,6 +171,10 @@ class Sequence extends NonTerminal {
         $chars = '';
         foreach ($this as $subClause) {
             if ($subClause instanceof Snippet || $subClause instanceof Commit) {
+                continue;
+            }
+            // Predicates don't consume input
+            if ($subClause->hasAndPredicate() || $subClause->hasNotPredicate()) {
                 continue;
             }
             // Skip optional elements - they might not be present

@@ -8,9 +8,9 @@
     // Basic \nothing - always succeeds, returns true (excluded from sequence arrays)
     [ ['R = "a" \\nothing "b"', 'ab'], ['a', 'b'] ],
 
-    // \nothing as fallback in choice - returns Signal::HIT when chosen
+    // \nothing as fallback in choice - returns null when chosen (no value)
     [ ['R = "x" | \\nothing', 'x'], 'x' ],
-    [ ['R = "x" | \\nothing', ''], \Charm\Parsing\Signal::HIT ],
+    [ ['R = "x" | \\nothing', ''], null ],
 
     // \nothing in optional context (a bit redundant but should work)
     [ ['R = "a" \\nothing? "b"', 'ab'], ['a', 'b'] ],

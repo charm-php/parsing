@@ -75,11 +75,11 @@
             CHAR
             =   /'[^']*'/                                                                                   <? return $_0; ?>
 
-            _ // optional whitespace
-            =   /\s*/                                                                                       <? return true; ?>
+            _
+            =   /\s*/                                                                                       %silent
 
-            __ "whitespace"
-            =   /\s+/                                                                                       <? return true; ?>
+            __
+            =   /\s+/                                                                                       %silent
 
             GRAMMAR,
 

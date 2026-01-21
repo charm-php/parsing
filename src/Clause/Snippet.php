@@ -9,7 +9,8 @@ use Charm\Parsing\Error\{
 };
 use Charm\Parsing\{
     State,
-    Clause
+    Clause,
+    Signal
 };
 
 /**
@@ -228,7 +229,12 @@ class Snippet extends Terminal {
         set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']));
 
         try {
-            $ctx = new Snippet\Context($context + [ 'context' => $context, 'state' => &$state->globals ]);
+            $ctx = new Snippet\Context($context + [
+                'context' => $context,
+                'state' => &$state->globals,
+                'HIT' => Signal::HIT,
+                'MISS' => Signal::MISS,
+            ]);
             return ($this->invoker)($ctx);
         } catch (\Throwable $e) {
             // Wrap the exception with snippet context for better error messages

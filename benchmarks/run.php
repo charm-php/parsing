@@ -15,6 +15,7 @@ $benchmarks = [
     'grammar'    => __DIR__.'/grammar-compilation.php',
     'json'       => __DIR__.'/json-parsing.php',
     'expression' => __DIR__.'/expression-parsing.php',
+    'expr-eval'  => __DIR__.'/expression-eval-benchmark.php',
 ];
 
 $requested = $argv[1] ?? 'all';

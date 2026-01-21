@@ -77,6 +77,13 @@ class Identifier extends NonTerminal {
         return $this->identifier;
     }
 
+    /**
+     * Check if the referenced rule is marked as %silent
+     */
+    public function isSilent(): bool {
+        return $this->targetClause !== null && $this->targetClause->pragma('silent') !== null;
+    }
+
     public function interpret(State $state, array $context, array $args=null) {
         $offset = $state->offset;
 
@@ -98,8 +105,14 @@ class Identifier extends NonTerminal {
 
     private static array $visitedMinLength = [];
     private static array $visitedFirstChars = [];
+    private static array $minLengthCache = [];
+    private static array $firstBytesCache = [];
 
     public function getMinByteLength(): int {
+        // Return cached result if available
+        if (isset(self::$minLengthCache[$this->identifier])) {
+            return self::$minLengthCache[$this->identifier];
+        }
         // Cycle detection for left-recursive rules
         if (isset(self::$visitedMinLength[$this->identifier])) {
             return 0; // Conservative for recursive references
@@ -107,7 +120,9 @@ class Identifier extends NonTerminal {
         if ($this->targetClause !== null) {
             self::$visitedMinLength[$this->identifier] = true;
             try {
-                return $this->targetClause->getMinByteLength();
+                $result = $this->targetClause->getMinByteLength();
+                self::$minLengthCache[$this->identifier] = $result;
+                return $result;
             } finally {
                 unset(self::$visitedMinLength[$this->identifier]);
             }
@@ -116,6 +131,10 @@ class Identifier extends NonTerminal {
     }
 
     public function getFirstBytes(): ?string {
+        // Return cached result if available (use array_key_exists since null is valid)
+        if (array_key_exists($this->identifier, self::$firstBytesCache)) {
+            return self::$firstBytesCache[$this->identifier];
+        }
         // Cycle detection for left-recursive rules
         if (isset(self::$visitedFirstChars[$this->identifier])) {
             return null; // Unknown for recursive references
@@ -123,7 +142,9 @@ class Identifier extends NonTerminal {
         if ($this->targetClause !== null) {
             self::$visitedFirstChars[$this->identifier] = true;
             try {
-                return $this->targetClause->getFirstBytes();
+                $result = $this->targetClause->getFirstBytes();
+                self::$firstBytesCache[$this->identifier] = $result;
+                return $result;
             } finally {
                 unset(self::$visitedFirstChars[$this->identifier]);
             }

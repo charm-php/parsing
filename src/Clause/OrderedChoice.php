@@ -229,9 +229,14 @@ class OrderedChoice extends NonTerminal {
                 } else {
                     //echo $prefix()." - matched\n";
                     if (null !== ($name = $subClause->getName())) {
+                        // Named elements always get captured
                         $result[$name] = $match;
                     } else {
-                        $result[] = $match;
+                        // Check if this is a reference to a %silent rule
+                        $isSilent = ($subClause instanceof Identifier && $subClause->isSilent());
+                        if (!$isSilent) {
+                            $result[] = $match;
+                        }
                     }
                 }
             }

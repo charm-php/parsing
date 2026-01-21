@@ -17,8 +17,19 @@ final class Pragma implements \ArrayAccess {
                 }
                 $params[0] = (string) $params[0];
                 break;
+            case 'prec':
+                $value = (string) $params[0];
+                if ($params[0] === null || !ctype_digit($value)) {
+                    throw new \LogicException("Pragma directive %prec requires a numeric precedence level, e.g. '%prec=5'");
+                }
+                $params[0] = (int) $value;
+                break;
+            case 'silent':
+                // %silent marks a rule's result as not to be captured in sequences
+                // No parameters required
+                break;
             default:
-                throw new \LogicException("Unknown pragma directive %$name. Currently only %assoc=left and %assoc=right is supported.");
+                throw new \LogicException("Unknown pragma directive %$name. Supported: %assoc=left|right|none, %prec=N, %silent");
         }
         return new self($name, $params);
     }
