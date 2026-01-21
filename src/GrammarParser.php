@@ -280,6 +280,17 @@ class GrammarParser extends RecursiveDescentParser {
                 }
             }
 
+            // Validate: snippets must be the last clause in a sequence
+            $lastSnippetIndex = -1;
+            foreach ($subs as $i => $sub) {
+                if ($sub instanceof Snippet) {
+                    $lastSnippetIndex = $i;
+                }
+            }
+            if ($lastSnippetIndex !== -1 && $lastSnippetIndex !== count($subs) - 1) {
+                throw new Error\CustomError("Snippet must be the last clause in a sequence. Found snippet at position " . ($lastSnippetIndex + 1) . " of " . count($subs) . " clauses.");
+            }
+
             if (count($subs) === 1) {
                 foreach ($pragmas as $pragma) {
                     $subs[0]->addPragma($pragma);
