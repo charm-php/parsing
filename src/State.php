@@ -44,12 +44,6 @@ class State implements StateInterface {
      */
     public array $globals = [];
 
-    /**
-     * Rule failure cache - remembers which rules failed at which offsets.
-     * Structure: [ ruleId => [ offset => true ] ]
-     * If a rule fails at an offset, it will always fail there - skip re-parsing.
-     */
-    public array $failCache = [];
 
     /**
      * @internal

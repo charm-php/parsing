@@ -32,6 +32,8 @@ class GrammarCompiler
     private array $leftRecursiveRules = [];
     private string $className;
     private array $snippetMethods = []; // Collected snippet methods to generate
+    private ?string $currentRuleName = null; // Track current rule for snippet naming
+    private array $snippetCounters = []; // Per-rule snippet counters
 
     /**
      * Compile a grammar to PHP code
@@ -60,6 +62,8 @@ class GrammarCompiler
         $this->tempVarCounter = 0;
         $this->leftRecursiveRules = [];
         $this->snippetMethods = [];
+        $this->currentRuleName = null;
+        $this->snippetCounters = [];
         $this->emitter = new CodeEmitter(1);
 
         // Detect left-recursive rules
@@ -287,6 +291,7 @@ class GrammarCompiler
 
     private function generateRuleMethod(string $ruleName, Rule $rule): void
     {
+        $this->currentRuleName = $ruleName;
         $methodName = 'parse' . $this->toMethodName($ruleName);
         $clause = $rule->getClause();
         $isLeftRecursive = isset($this->leftRecursiveRules[$ruleName]);
@@ -1135,8 +1140,15 @@ class GrammarCompiler
 
         // Handle the return value
         if (strpos($code, 'return') !== false) {
-            // Generate a snippet method
-            $methodName = 'snippet' . (++$this->tempVarCounter);
+            // Generate a snippet method with meaningful name based on current rule
+            $ruleBaseName = $this->currentRuleName
+                ? $this->toMethodName($this->currentRuleName)
+                : 'anon';
+            if (!isset($this->snippetCounters[$ruleBaseName])) {
+                $this->snippetCounters[$ruleBaseName] = 0;
+            }
+            $snippetNum = ++$this->snippetCounters[$ruleBaseName];
+            $methodName = lcfirst($ruleBaseName) . '_snippet' . $snippetNum;
             $params = implode(', ', array_values($paramNames));
             $args = implode(', ', array_keys($paramNames));
 
