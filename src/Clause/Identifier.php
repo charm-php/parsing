@@ -6,7 +6,8 @@ use Charm\Parsing\Error;
 use Charm\Parsing\{
     ClauseInterface,
     GrammarInterface,
-    Grammar
+    Grammar,
+    Signal
 };
 
 /**
@@ -87,8 +88,19 @@ class Identifier extends NonTerminal {
     public function interpret(State $state, array $context, array $args=null) {
         $offset = $state->offset;
 
+        // Check fail cache - if this rule failed at this offset before, fail fast
+        if (isset($state->failCache[$this->identifier][$offset])) {
+            return Signal::MISS;
+        }
+
         // Use args as context for the rule clause, if provided
         $result = $this->targetClause->parse($state, $args ?? []);
+
+        // Cache failures - if the rule failed, remember it for this offset
+        if ($result === Signal::MISS) {
+            $state->failCache[$this->identifier][$offset] = true;
+        }
+
         return $result;
     }
 
