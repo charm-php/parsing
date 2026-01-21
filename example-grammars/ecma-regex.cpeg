@@ -1,0 +1,123 @@
+# ECMA-262 Regular Expression Grammar
+# Parses JavaScript regex patterns into an AST
+# Reference: https://tc39.es/ecma262/#sec-patterns
+
+Pattern
+    = Disjunction
+
+Disjunction
+    = first:Alternative rest:("|" alt:Alternative)* <?
+        if (!$rest) return $first;
+        return ['type' => 'disjunction', 'alternatives' => array_merge([$first], array_column($rest, 'alt'))];
+    ?>
+
+Alternative
+    = terms:Term* <?
+        if (count($terms) === 0) return ['type' => 'empty'];
+        if (count($terms) === 1) return $terms[0];
+        return ['type' => 'sequence', 'terms' => $terms];
+    ?>
+
+Term
+    = Assertion
+    | Atom quantifier:Quantifier? <?
+        if ($quantifier === null) return $_0;
+        return ['type' => 'quantified', 'atom' => $_0, 'quantifier' => $quantifier];
+    ?>
+
+Assertion
+    = "^" <? return ['type' => 'anchor', 'kind' => 'start']; ?>
+    | "$" <? return ['type' => 'anchor', 'kind' => 'end']; ?>
+    | "\\b" <? return ['type' => 'anchor', 'kind' => 'wordBoundary']; ?>
+    | "\\B" <? return ['type' => 'anchor', 'kind' => 'nonWordBoundary']; ?>
+    | "(?=" inner:Disjunction ")" <? return ['type' => 'lookahead', 'positive' => true, 'pattern' => $inner]; ?>
+    | "(?!" inner:Disjunction ")" <? return ['type' => 'lookahead', 'positive' => false, 'pattern' => $inner]; ?>
+    | "(?<=" inner:Disjunction ")" <? return ['type' => 'lookbehind', 'positive' => true, 'pattern' => $inner]; ?>
+    | "(?<!" inner:Disjunction ")" <? return ['type' => 'lookbehind', 'positive' => false, 'pattern' => $inner]; ?>
+
+Atom
+    = PatternCharacter
+    | "." <? return ['type' => 'any']; ?>
+    | "\\" escape:AtomEscape <? return $escape; ?>
+    | CharacterClass
+    | "(?:" inner:Disjunction ")" <? return ['type' => 'nonCapturingGroup', 'pattern' => $inner]; ?>
+    | "(" inner:Disjunction ")" <? return ['type' => 'capturingGroup', 'pattern' => $inner]; ?>
+
+PatternCharacter
+    = char:/[^\\^$.*+?()[\]{}|]/ <? return ['type' => 'literal', 'char' => $char]; ?>
+
+AtomEscape
+    = DecimalEscape
+    | CharacterClassEscape
+    | CharacterEscape
+
+DecimalEscape
+    # Could be backreference or octal - needs semantic resolution based on capture count
+    = digits:/[1-9][0-9]*/ <? return ['type' => 'decimalEscape', 'value' => (int)$digits]; ?>
+
+CharacterClassEscape
+    = "d" <? return ['type' => 'charClassEscape', 'kind' => 'digit']; ?>
+    | "D" <? return ['type' => 'charClassEscape', 'kind' => 'nonDigit']; ?>
+    | "w" <? return ['type' => 'charClassEscape', 'kind' => 'word']; ?>
+    | "W" <? return ['type' => 'charClassEscape', 'kind' => 'nonWord']; ?>
+    | "s" <? return ['type' => 'charClassEscape', 'kind' => 'whitespace']; ?>
+    | "S" <? return ['type' => 'charClassEscape', 'kind' => 'nonWhitespace']; ?>
+
+CharacterEscape
+    = "n" <? return ['type' => 'literal', 'char' => "\n"]; ?>
+    | "r" <? return ['type' => 'literal', 'char' => "\r"]; ?>
+    | "t" <? return ['type' => 'literal', 'char' => "\t"]; ?>
+    | "f" <? return ['type' => 'literal', 'char' => "\f"]; ?>
+    | "v" <? return ['type' => 'literal', 'char' => "\v"]; ?>
+    | "0" !/[0-9]/ <? return ['type' => 'literal', 'char' => "\0"]; ?>
+    | "x" hex:/[0-9a-fA-F]{2}/ <? return ['type' => 'literal', 'char' => chr(hexdec($hex))]; ?>
+    | "u" hex:/[0-9a-fA-F]{4}/ <? return ['type' => 'literal', 'char' => mb_chr(hexdec($hex), 'UTF-8')]; ?>
+    | "u{" hex:/[0-9a-fA-F]+/ "}" <? return ['type' => 'literal', 'char' => mb_chr(hexdec($hex), 'UTF-8')]; ?>
+    | "c" ctrl:/[A-Za-z]/ <? return ['type' => 'literal', 'char' => chr(ord(strtoupper($ctrl)) - 64)]; ?>
+    | char:/[^a-zA-Z0-9]/ <? return ['type' => 'literal', 'char' => $char]; ?>
+
+Quantifier
+    = kind:QuantifierPrefix greedy:"?"? <?
+        return array_merge($kind, ['greedy' => $greedy === null]);
+    ?>
+
+QuantifierPrefix
+    = "*" <? return ['min' => 0, 'max' => null]; ?>
+    | "+" <? return ['min' => 1, 'max' => null]; ?>
+    | "?" <? return ['min' => 0, 'max' => 1]; ?>
+    | "{" n:/[0-9]+/ "}" <? return ['min' => (int)$n, 'max' => (int)$n]; ?>
+    | "{" min:/[0-9]+/ "," "}" <? return ['min' => (int)$min, 'max' => null]; ?>
+    | "{" min:/[0-9]+/ "," max:/[0-9]+/ "}" <? return ['min' => (int)$min, 'max' => (int)$max]; ?>
+
+CharacterClass
+    = "[" negated:"^"? ranges:ClassContents "]" <?
+        return ['type' => 'charClass', 'negated' => $negated !== null, 'ranges' => $ranges];
+    ?>
+
+# Handle ] as first char (literal), then rest of class
+ClassContents
+    = "]" rest:ClassRanges <? return array_merge([['type' => 'literal', 'char' => ']']], $rest); ?>
+    | ClassRanges
+
+ClassRanges
+    = ranges:ClassAtom* <? return $ranges; ?>
+
+ClassAtom
+    # Range: a-b (but not if - is at start/end)
+    = start:ClassAtomNoDash "-" !"]" end:ClassAtomNoDash <?
+        return ['type' => 'range', 'start' => $start, 'end' => $end];
+    ?>
+    # Literal - at end of class (before ])
+    | "-" &"]" <? return ['type' => 'literal', 'char' => '-']; ?>
+    # Literal - at start (first atom)
+    | "-" <? return ['type' => 'literal', 'char' => '-']; ?>
+    | ClassAtomNoDash
+
+ClassAtomNoDash
+    = "\\" escape:ClassEscape <? return $escape; ?>
+    | char:/[^\]\\\-]/ <? return ['type' => 'literal', 'char' => $char]; ?>
+
+ClassEscape
+    = "b" <? return ['type' => 'literal', 'char' => "\x08"]; ?>  # backspace in char class
+    | CharacterClassEscape
+    | CharacterEscape

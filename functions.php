@@ -31,8 +31,10 @@ function cpeg_parse(string $expression, string $subject, array $initialState=[])
  */
 function cpeg_create(string $expression): Parsing\CPEGParser {
     static $grammarParser = null;
+    static $preprocessor = null;
     if ($grammarParser === null) {
         $grammarParser = new Parsing\GrammarParser();
+        $preprocessor = new Parsing\GrammarPreprocessor();
     }
     foreach (debug_backtrace(0) as $t) {
         if ($t['file'] !== __FILE__) {
@@ -41,6 +43,9 @@ function cpeg_create(string $expression): Parsing\CPEGParser {
     }
     $filename = $t['file'];
     $lineOffset = $t['line'];
+
+    // Preprocess to expand templates
+    $expression = $preprocessor->process($expression);
 
     $grammar = $grammarParser->parse($expression, $filename, $lineOffset);
 

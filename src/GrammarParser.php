@@ -7,6 +7,7 @@ use Charm\Parsing\Clause\{
     Snippet,
     SOF,
     EOF,
+    Nothing,
     Identifier,
     OrderedChoice,
     Sequence,
@@ -56,6 +57,8 @@ class GrammarParser extends RecursiveDescentParser {
     const T_TOKEN       = 16;
     const T_WHITESPACE  = -17;
     const T_PRAGMA      = 18;
+    const T_SPREAD      = 19;
+    const T_NOTHING     = 20;
 
     protected $options;
     
@@ -71,6 +74,11 @@ class GrammarParser extends RecursiveDescentParser {
             new LexerPattern(
                 self::T_COMMENT, 'T_COMMENT',
                 '(?<COMMENT>(\#|\/\/)[^\n]*+|\/\*((?!\*\/)[\s\S])*\*\/)'
+                ),
+
+            new LexerPattern(
+                self::T_NOTHING, 'T_NOTHING',
+                '\\\\nothing|ε'
                 ),
 
             new LexerPattern(
@@ -155,6 +163,7 @@ class GrammarParser extends RecursiveDescentParser {
 
             new LexerPattern(self::T_OR, 'T_OR', '\||\/'),
 
+            new LexerPattern(self::T_SPREAD, 'T_SPREAD', '\.\.\.'),
             new LexerPattern(self::T_TOKEN, 'T_TOKEN', '\.|,'),
 
             new LexerPattern(self::T_WHITESPACE, 'T_WHITESPACE', '\\s+'),
@@ -362,14 +371,21 @@ class GrammarParser extends RecursiveDescentParser {
     }
 
     private function _FullClause() {
-        if (!in_array($this->type(), [self::T_IDENT, self::T_STRING, self::T_REGEX, self::T_SNIPPET, self::T_PREDICATE, self::T_BRACE_OPEN])) {
+        if (!in_array($this->type(), [self::T_IDENT, self::T_STRING, self::T_REGEX, self::T_SNIPPET, self::T_PREDICATE, self::T_SPREAD, self::T_NOTHING, self::T_BRACE_OPEN])) {
             return null;
         }
+        $spread = $this->_Spread();
         $label = $this->_Label();
+
+        // Check for invalid syntax: label:...clause (should be ...label:clause)
+        if ($label !== null && $this->typeIs(self::T_SPREAD)) {
+            throw new ParseError($this, "Invalid syntax 'name:...' on :location. Use '...name:clause' instead");
+        }
+
         $predicate = $this->_Predicate();
         $clause = $this->_Clause();
 
-        if ($clause === null && ($label !== null || $predicate !== null)) {
+        if ($clause === null && ($label !== null || $predicate !== null || $spread !== null)) {
             throw new ParseError($this, "Excpected clause on :location, got :source_description");
         } elseif ($clause === null) {
             return null;
@@ -378,6 +394,10 @@ class GrammarParser extends RecursiveDescentParser {
         $operator = $this->_Operator();
 
         $modifier = 0;
+
+        if ($spread !== null) {
+            $modifier |= Clause::SPREAD;
+        }
 
         if ($predicate !== null) {
             switch ($predicate->text) {
@@ -429,7 +449,19 @@ class GrammarParser extends RecursiveDescentParser {
         return $res;
     }
 
+    private function _Spread() {
+        if (!$this->typeIs(self::T_SPREAD)) {
+            return null;
+        }
+        return $this->accept();
+    }
+
     private function _Clause() {
+        if ($this->typeIs(self::T_NOTHING)) {
+            $this->accept();
+            return new Nothing(Clause::NONE, null);
+        }
+
         if (in_array($this->type(), [self::T_STRING, self::T_IDENT, self::T_REGEX, self::T_SNIPPET])) {
             if ($this->typeIs(self::T_BEGIN, 1)) {
                 // look forward and avoid parsing a rule name as a clause

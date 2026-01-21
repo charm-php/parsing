@@ -46,21 +46,24 @@ class GrammarTools {
         }
     }
 
-    public function checkParentRefs() {
-        $t = microtime(true);
+    /**
+     * Validates that all parent-child relationships in the grammar are correct.
+     * This is a diagnostic tool for development - throws exceptions on invalid state.
+     *
+     * @throws \LogicException if parent references are inconsistent
+     */
+    public function checkParentRefs(): void {
         foreach ($this->getAllClausesRecursively() as $clause) {
             if ($clause instanceof NonTerminal) {
                 foreach ($clause as $child) {
                     if ($child->getParent() !== $clause) {
-                        die("PROBLEM: child with wrong parent\n");
+                        throw new \LogicException(
+                            "Parent reference mismatch: child clause has wrong parent in " .
+                            $this->renderClause($clause)
+                        );
                     }
                 }
             }
-
-            
-
-
-
 
             $childrenByParent = iterator_to_array($this->childrenByParent($clause));
             $childrenByClause = is_iterable($clause) ? iterator_to_array($clause) : [];
@@ -68,15 +71,7 @@ class GrammarTools {
             $missing = $this->findMissingItems($childrenByParent, $childrenByClause);
 
             if (count($missing->left) > 0 || count($missing->right) > 0) {
-                echo "PROBLEM WITH CLAUSE ".$this->renderClause($clause)."\n";
-print_r($clause);
-var_dump($childrenByParent);
-var_dump(iterator_to_array($this->childrenByParent($clause)));
-die();
-
-
-                echo " - checking rule\n";
-
+                // Check if clause's rule exists in grammar
                 $grammar = $this->getGrammar();
                 $foundRule = false;
                 foreach ($grammar as $rule) {
@@ -86,9 +81,12 @@ die();
                     }
                 }
                 if (!$foundRule) {
-                    die(" - FATAL: rule for this clause is not in grammar\n");
+                    throw new \LogicException(
+                        "Clause's rule not found in grammar: " . $this->renderClause($clause)
+                    );
                 }
-                echo " - checking ancestors\n";
+
+                // Check ancestor chain
                 $ancestors = $this->getAncestors($clause);
                 $current = $clause;
                 foreach ($ancestors as $ancestor) {
@@ -100,20 +98,18 @@ die();
                         }
                     }
                     if ($foundChild === false) {
-                        die(" - FATAL:  clause $ancestor does not have $current as a child\n");
+                        throw new \LogicException(
+                            "Broken ancestor chain: ancestor does not have clause as child in " .
+                            $this->renderClause($clause)
+                        );
                     }
+                    $current = $ancestor;
                 }
+
+                throw new \LogicException(
+                    "Parent-child mismatch in clause: " . $this->renderClause($clause)
+                );
             }
-        }
-
-        $childrenByParent = iterator_to_array($this->childrenByParent());
-        $rootClauses = iterator_to_array($this->getRootClauses());
-
-        $missing = $this->findMissingItems($childrenByParent, $rootClauses);
-
-        $map = new Map();
-        foreach ($this->getAllClausesRecursively() as $subClause) {
-            $map[$subClause] = [ $subClause, $subClause->getParent() ];
         }
     }
 

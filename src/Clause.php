@@ -19,6 +19,7 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
     const AND = 4;          // the pattern does not consume input
     const NOT = 8;          // negate the result, and don't consume input
     const CASE_INSENSITIVE = 16;
+    const SPREAD = 32;      // spread array results into parent sequence
 
     private static $_grammarIdCounter = 0;
     protected $grammarId;   // unique number to identifiy this particular clause in the grammar
@@ -132,31 +133,60 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
      * Function to evaluate the clause. Return values have the
      * following meanings:
      *
-     * - `false` means that the clause did not match the source.
-     * - `true` means that the clause matched the source but
+     * - `Signal::MISS` means that the clause did not match the source.
+     * - `Signal::HIT` means that the clause matched the source but
      *   does not have a value.
-     * - `instanceof BoxedResult` is used if the clause returns
-     *   a boolean `true` or `false` value.
      * - `instanceof SequenceIgnore` instructs the calling clause
-     *   that it should return `true`.
-     * - `instanceof Sequence
-     * - any other value is considered a successful match.
+     *   that it should return `Signal::HIT`.
+     * - any other value (including true/false) is the match result.
      */
     public final function parse(State $parser, array $context) {
         $offset = $parser->offset;
         $doTrace = $parser->trace;
         if ($doTrace) $parser->traceStart($this, $parser->offset);
 
-        if ($this->modifier === self::NONE) {
+        // Handle predicates (& and !) - these don't consume input
+        $isPredicate = ($this->modifier & (self::AND | self::NOT)) !== 0;
+
+        if ($isPredicate) {
             try {
                 $result = $this->interpret($parser, $context);
-                
-                if ($doTrace) $parser->traceEnd($this, $result);
-                if ($result === false) {
-                    if ($parser->offset !== $offset) {
-                        die("1incorrect parser offset after fail in ".$this::class);
-                    }
+                // Restore offset - predicates never consume input
+                $parser->offset = $offset;
+
+                $matched = ($result !== Signal::MISS);
+
+                // NOT predicate inverts the result
+                if ($this->modifier & self::NOT) {
+                    $matched = !$matched;
                 }
+
+                if ($doTrace) $parser->traceEnd($this, $matched);
+                return $matched ? Signal::HIT : Signal::MISS;
+            } catch (ExceptionInterface $e) {
+                $parser->offset = $offset;
+                if ($doTrace) $parser->traceEnd($this, false);
+                // For predicates, exceptions mean "didn't match"
+                $matched = false;
+                if ($this->modifier & self::NOT) {
+                    return Signal::HIT; // NOT predicate succeeds if inner failed
+                }
+                return Signal::MISS;
+            }
+        }
+
+        // Handle quantifiers (?, *, +) - SPREAD doesn't affect parsing, only result collection
+        $isOptional = ($this->modifier & self::OPTIONAL) !== 0;
+        $isRepeating = ($this->modifier & self::REPEATING) !== 0;
+
+        // No quantifiers - simple case (SPREAD and CASE_INSENSITIVE don't affect parsing flow)
+        if (!$isOptional && !$isRepeating) {
+            try {
+                $result = $this->interpret($parser, $context);
+
+                if ($doTrace) $parser->traceEnd($this, $result);
+                assert($result !== Signal::MISS || $parser->offset === $offset,
+                    "Parser offset not restored after fail in ".$this::class);
                 return $result;
             } catch (ExceptionInterface $e) {
                 $parser->offset = $offset;
@@ -165,54 +195,54 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
             }
         }
 
-
+        // Handle quantifiers (?, *, +)
         try {
-            if ($this->modifier === self::OPTIONAL) {
-                $offset = $parser->offset;
+            if ($isOptional && !$isRepeating) {
+                // ? - zero or one
                 $result = $this->interpret($parser, $context);
-                if ($result !== false) {
+                if ($result !== Signal::MISS) {
                     if ($doTrace) $parser->traceEnd($this, $result);
                     return $result;
                 }
                 if ($doTrace) $parser->traceEnd($this, null);
                 return null;
-            } elseif ($this->modifier === (self::OPTIONAL | self::REPEATING)) {
+            } elseif ($isOptional && $isRepeating) {
+                // * - zero or more
                 $result = [];
                 do {
-                    $offset = $parser->offset;
+                    $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
-                    if ($partial !== false) {
+                    if ($partial !== Signal::MISS) {
                         $result[] = $partial;
                     } else {
                         if ($doTrace) $parser->traceEnd($this, $result);
                         return $result;
                     }
                 } while(true);
-            } elseif ($this->modifier === self::REPEATING) {
-                $result = false;
+            } elseif ($isRepeating) {
+                // + - one or more
+                $result = [];
                 do {
-                    $offset = $parser->offset;
+                    $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
-                    if ($partial !== false) {
+                    if ($partial !== Signal::MISS) {
                         $result[] = $partial;
                     } else {
+                        // Return Signal::MISS if no matches, otherwise return the array
+                        if ($result === []) {
+                            $result = Signal::MISS;
+                        }
                         if ($doTrace) $parser->traceEnd($this, $result);
                         return $result;
                     }
                 } while(true);
             } else {
-                assert(false, "Unhandled modifier ".$this->modifier);
+                throw new \LogicException("Unhandled modifier combination: ".$this->modifier);
             }
-
-            echo "Modifier is: ".$this->modifier."\n";
-            echo "Is repeating: ".($this->modifier & self::REPEATING ? "true" : "false")."\n";
-            echo "Is optional: ".($this->modifier & self::OPTIONAL ? "true" : "false")."\n";
-            echo "Is positive lookahead (&): ".($this->modifier & self::AND ? "true" : "false")."\n";
-            echo "Is negative lookahead (!): ".($this->modifier & self::NOT ? "true" : "false")."\n";
-            die();
         } catch (ExceptionInterface $e) {
             $parser->offset = $offset;
             if ($doTrace) $parser->traceEnd($this, false);
+            throw $e;
         }
     }
 
@@ -231,6 +261,19 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
      * invoke other clauses.
      */
     abstract public function isTerminal(): bool;
+
+    /**
+     * Returns the minimum number of bytes this clause will consume if it matches.
+     * Used for optimization - if remaining input is shorter, we can fail fast.
+     */
+    abstract public function getMinByteLength(): int;
+
+    /**
+     * Returns the set of possible first bytes this clause could match,
+     * or null if unknown/any byte is possible.
+     * Used for optimization - if first byte isn't in set, we can fail fast.
+     */
+    abstract public function getFirstBytes(): ?string;
 
     public function __construct(int $modifier, ?string $name) {
         $this->grammarId = self::$_grammarIdCounter++;
@@ -456,6 +499,10 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
 
     public final function isCaseInsensitive(): bool {
         return 0 < ($this->modifier & self::CASE_INSENSITIVE);
+    }
+
+    public final function hasSpread(): bool {
+        return 0 < ($this->modifier & self::SPREAD);
     }
 
     public function jsonSerialize() {

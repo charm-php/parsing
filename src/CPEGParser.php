@@ -6,6 +6,7 @@ use Charm\Parsing\{
     Grammar,
     ParserInterface,
     Options,
+    Signal,
     SequenceIgnore
 };
 use Charm\Parsing\Error\ParseError;
@@ -53,7 +54,7 @@ class CPEGParser implements ParserInterface {
 
         $result = $goal->getClause()->parse($state, $vars, []);
 
-        if ($result !== false) {
+        if ($result !== Signal::MISS) {
 //            echo "Got final result:\n".json_encode($result, JSON_PRETTY_PRINT)."\n";
             return $result;
         }
@@ -80,7 +81,7 @@ class CPEGParser implements ParserInterface {
         $deepestPartialNodes = [];
         $deepestPartialOffset = -1;
         foreach ($trace->visitPreOrder() as $node) {
-            if ($node->result === false && $node->isPartialSuccess()) {
+            if ($node->result === Signal::MISS && $node->isPartialSuccess()) {
                 if ($node->offset < $deepestPartialOffset) {
                     continue;
                 }
@@ -131,160 +132,7 @@ class CPEGParser implements ParserInterface {
             $endDesc = json_encode($source[$endOffset]);
         }
 
-        $errorString = "Line $startLine, column $startCol: Failed parsing $startDesc, unexpected $endDesc";
         throw new ParseError($state->source, $failingNode->offset, "Failed parsing $startDesc on :location, unexpected $endDesc");
-
-
-
-        echo $errorString."\n";die();
-
-
-
-
-        $describeNodes = function(array $nodes) {
-            $names = [];
-            foreach ($nodes as $node) {
-                $name = $node->clause->getRule()->getRuleName();
-                $description = $node->clause->getRule()->getDescription();
-                $names[$name] = $description ?? json_encode($name);
-            }
-            return implode(" or ", $names);
-        };
-
-
-        // select the deepest partial node that got furthest
-        $deepestPartialNode = $deepestPartialNodes;
-
-        $failedParsing = $describeNodes($deepestPartialNodes);
-        $failedStartOffset = $deepestPartialOffset;
-
-        echo "Failed parsing $failedParsing at offset $failedStartOffset\n";
-
-
-
-
-        
-
-die();
-
-
-
-        /**
-         * Try to present a proper and helpful error message when parsing failed.
-         */
-        $fixException = function(ExceptionInterface $e, int $offset) use ($filename, $source, $lineOffset, $columnOffset) {
-            $et = new Util\ExceptionTools($e);
-            $st = new Util\StringTools($source);
-            $lineNumber = $st->getLineNumberAt($offset);
-            $et->setLine($lineNumber + $lineOffset);
-            $et->setFileName($filename);
-            return $e;
-        };
-
-        /**
-         * prepare a string from the source file for being included in an error message
-         */
-        $fixSource = function(string $source) {
-            if ($source === '') {
-                return 'END-OF-FILE';
-            }
-            if (trim($source) === '') {
-                return "whitespace";
-            }
-            $st = new StringTools($source);
-            return '`'.$st->escape().'`';
-        };
-
-        /**
-         * Prefer a labeled clause if we can find one
-         */
-        foreach (array_reverse(array_keys($this->cache)) as $offset) {
-            $cache = $this->cache[$offset];
-
-            $anyFailed = false;
-            foreach ($cache as $parse) {
-                if ($parse[2] === false) {
-                    if ($parse[1]->getRule()->getDescription()) {
-                        $anyFailed = true;
-                        break;
-                    }
-                }
-            }
-            if (!$anyFailed) {
-                continue;
-            }
-
-            usort($cache, function($a, $b) {
-                return $a[0] - $b[0];
-            });
-
-            $shallowest = null;
-            foreach ($cache as $depth) {
-                if ($depth[1]->getRule()->getDescription()) {
-                    if ($shallowest === null || ($shallowest[0] > $depth[0])) {
-                        $shallowest = [ $depth[0], [ $depth[1] ] ];
-                    } elseif ($shallowest[0] === $depth[0]) {
-                        $shallowest[1][] = $depth[1];
-                    }
-                }
-            }
-
-            if ($shallowest !== null) {
-                $descriptions = array_map(function($clause) {
-                    return $clause->getRule()->getDescription();
-                }, $shallowest[1]);
-                $this->offset = $offset;
-                $unexpected = $fixSource((new StringTools(substr($this->source, $offset, 1000)))->first());
-
-echo "SUCCESSFULLY PARSED:
-`".substr($this->source, 0, $offset)."`
-FAILED:
-`".substr($this->source, $offset, 10)."`
-
-";
-                throw $fixException(new SyntaxError("unexpected $unexpected, expecting ".implode(" or ", $descriptions), 2), $offset);
-            }
-        }
-        /**
-         * Prefer shallowest non-terminal clause
-         */
-        foreach (array_reverse(array_keys($this->cache)) as $offset) {
-            $cache = $this->cache[$offset];
-            usort($cache, function($a, $b) {
-                return $a[0] - $b[0];
-            });
-
-            $shallowest = null;
-            foreach ($cache as $depth) {
-                if ($depth[1] instanceof Clause\NonTerminal) {
-                    if ($shallowest === null || ($shallowest[0] > $depth[0])) {
-                        $shallowest = [ $depth[0], [ $depth[1] ] ];
-                    } elseif ($shallowest[0] === $depth[0]) {
-                        $shallowest[1][] = $depth[1];
-                    }
-                }
-            }
-
-            if ($shallowest !== null) {
-                $descriptions = array_map(function($clause) {
-                    return $clause->getRule()->getRuleName();
-                }, $shallowest[1]);
-                $this->offset = $offset;
-                $unexpected = $fixSource((new StringTools(substr($this->source, $offset, 1000)))->first());
-                throw $fixException(new SyntaxError("2unexpected $unexpected, expecting `".implode("` or `", $descriptions)."`", 2), $offset);
-            }
-        }
-
-        /**
-         * Get longest successful parse as fallback error message
-         */
-        if ($this->longestParse >= 0) {
-            $this->offset = $offset = $this->longestParse;
-            $unexpected = $fixSource((new StringTools(substr($this->source, $offset, 1000)))->first());
-            throw $fixException(new SyntaxError("3unexpected $unexpected", 0), $offset);
-        }
-
-        return null;
     }
 
     private function dumpTrace(string $source, Trace $trace): string {
@@ -300,7 +148,7 @@ FAILED:
             $ruleStr = "[$ruleStr]";
         }
 
-        if ($trace->result === false) {
+        if ($trace->result === Signal::MISS) {
             if ($trace->isPartialSuccess()) {
                 $clauseStr = '<!bred>'.$clauseStr.' (partial)<!>';
             } else {

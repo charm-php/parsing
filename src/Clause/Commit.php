@@ -14,4 +14,11 @@ class Commit extends Terminal {
         throw new InternalError("`".$this->toLocationString()."` commit symbol not handled");
     }
 
+    public function getMinByteLength(): int {
+        return 0; // Commit doesn't consume input
+    }
+
+    public function getFirstBytes(): ?string {
+        return null; // Commit doesn't consume input
+    }
 }

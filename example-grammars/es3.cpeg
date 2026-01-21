@@ -1,0 +1,139 @@
+# ==========================================
+# Charm PEG - Full ES3 AST Grammar
+# ==========================================
+
+Program = _ ...body:SourceElement* $ 
+    <? return ['type' => 'Program', 'body' => $body]; ?>
+
+SourceElement = FunctionDeclaration | Statement
+
+# --- Expressions ---
+# Precedence is defined by the order of alternatives (first = highest)
+Expression = 
+      # 1. Assignment (Right-associative)
+      left:Expression _ op:AssignmentOp _ right:Expression %assoc=right
+      <? return ['type' => 'AssignmentExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+
+    | test:Expression _ "?" _ consequent:Expression _ ":" _ alternate:Expression %assoc=right
+      <? return ['type' => 'ConditionalExpression', 'test' => $test, 'consequent' => $consequent, 'alternate' => $alternate]; ?>
+
+    # 2. Logical Operators
+    | left:Expression _ op:"||" _ right:Expression %assoc=left 
+      <? return ['type' => 'LogicalExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+    | left:Expression _ op:"&&" _ right:Expression %assoc=left 
+      <? return ['type' => 'LogicalExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+
+    # 3. Bitwise & Equality
+    | left:Expression _ op:("|" | "^" | "&") _ right:Expression %assoc=left 
+      <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+    | left:Expression _ op:("==" | "!=" | "===" | "!==") _ right:Expression %assoc=left 
+      <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+
+    # 4. Relational
+    | left:Expression _ op:("<=" | ">=" | "<" | ">" | "instanceof" | "in") _ right:Expression %assoc=left 
+      <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+
+    # 5. Math & Shift
+    | left:Expression _ op:(">>>" | ">>" | "<<") _ right:Expression %assoc=left <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+    | left:Expression _ op:("+" | "-") _ right:Expression %assoc=left <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+    | left:Expression _ op:("*" | "/" | "%") _ right:Expression %assoc=left <? return ['type' => 'BinaryExpression', 'operator' => $op, 'left' => $left, 'right' => $right]; ?>
+
+    # 6. Unary Prefix
+    | op:("delete" | "void" | "typeof" | "++" | "--" | "+" | "-" | "~" | "!") _ argument:Expression
+      <? return ['type' => 'UnaryExpression', 'operator' => $op, 'argument' => $argument, 'prefix' => true]; ?>
+
+    # 7. Postfix Update
+    | argument:Expression _ op:("++" | "--")
+      <? return ['type' => 'UpdateExpression', 'operator' => $op, 'argument' => $argument, 'prefix' => false]; ?>
+
+    # 8. New Operator (With Arguments)
+    | "new" _ callee:Expression args:Arguments
+      <? return ['type' => 'NewExpression', 'callee' => $callee, 'arguments' => $args]; ?>
+
+    # 9. Call, Member Access, and New (No Arguments)
+    | callee:Expression args:Arguments
+      <? return ['type' => 'CallExpression', 'callee' => $callee, 'arguments' => $args]; ?>
+    | object:Expression _ "." _ property:Identifier
+      <? return ['type' => 'MemberExpression', 'object' => $object, 'property' => $property, 'computed' => false]; ?>
+    | object:Expression _ "[" _ property:Expression _ "]"
+      <? return ['type' => 'MemberExpression', 'object' => $object, 'property' => $property, 'computed' => true]; ?>
+    | "new" _ callee:Expression
+      <? return ['type' => 'NewExpression', 'callee' => $callee, 'arguments' => []]; ?>
+
+    | Primary
+
+# --- Core Structures ---
+Primary = Identifier
+        | Literal
+        | ArrayLiteral
+        | ObjectLiteral
+        | "(" _ Expression _ ")" <? return $_2; ?>
+
+ArrayLiteral = "[" _ elements:List<Expression, ",">? _ "]"
+    <? return ['type' => 'ArrayExpression', 'elements' => $elements ?? []]; ?>
+
+ObjectLiteral = "{" _ properties:List<Property, ",">? _ "}"
+    <? return ['type' => 'ObjectExpression', 'properties' => $properties ?? []]; ?>
+
+Property = key:(Identifier | StringLiteral) _ ":" _ value:Expression
+    <? return ['type' => 'Property', 'key' => $key, 'value' => $value]; ?>
+
+# --- Functions & Statements ---
+FunctionDeclaration = "function" _ id:Identifier _ "(" _ params:FormalParameterList? _ ")" _ "{" _ ...body:SourceElement* _ "}"
+    <? return ['type' => 'FunctionDeclaration', 'id' => $id, 'params' => $params ?? [], 'body' => $body]; ?>
+
+FormalParameterList = List<Identifier, ",">
+
+Statement = Block | VarStatement | IfStatement | WhileStatement | ReturnStatement | ExpressionStatement
+
+Block = "{" _ ...body:Statement* _ "}"
+    <? return ['type' => 'BlockStatement', 'body' => $body]; ?>
+
+VarStatement = "var" _ declarations:List<VariableDeclarator, ","> SC
+    <? return ['type' => 'VariableDeclaration', 'declarations' => $declarations, 'kind' => 'var']; ?>
+
+VariableDeclarator = id:Identifier init:(_ "=" _ Expression)?
+    <? return ['type' => 'VariableDeclarator', 'id' => $id, 'init' => $init ? $init[3] : null]; ?>
+
+IfStatement = "if" _ "(" _ test:Expression _ ")" _ consequent:Statement alternate:(_ "else" _ Statement)?
+    <? return ['type' => 'IfStatement', 'test' => $test, 'consequent' => $consequent, 'alternate' => $alternate ? $alternate[3] : null]; ?>
+
+WhileStatement = "while" _ "(" _ test:Expression _ ")" _ body:Statement
+    <? return ['type' => 'WhileStatement', 'test' => $test, 'body' => $body]; ?>
+
+ReturnStatement = "return" _ argument:Expression? SC
+    <? return ['type' => 'ReturnStatement', 'argument' => $argument]; ?>
+
+ExpressionStatement = !("{" | "function") expr:Expression SC
+    <? return ['type' => 'ExpressionStatement', 'expression' => $expr]; ?>
+
+# --- Terminals ---
+Identifier = !ReservedWord name:/[a-zA-Z_$][a-zA-Z0-9_$]*/
+    <? return ['type' => 'Identifier', 'name' => $name]; ?>
+
+Literal = Number | StringLiteral | BooleanLiteral | NullLiteral
+
+Number = /-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/
+    <? return ['type' => 'Literal', 'value' => floatval($_0)]; ?>
+
+StringLiteral = /'([^'\\]|\\.)*'/ | /"([^"\\]|\\.)*"/
+    <? return ['type' => 'Literal', 'value' => substr($_0, 1, -1)]; ?>
+
+BooleanLiteral = ("true" | "false") <? return ['type' => 'Literal', 'value' => $_0 === 'true']; ?>
+NullLiteral    = "null" <? return ['type' => 'Literal', 'value' => null]; ?>
+
+ReservedWord = ("var" | "function" | "if" | "else" | "while" | "for" | "return" | "null" | "true" | "false" | "in" | "instanceof" | "typeof" | "new" | "delete" | "void") ![a-zA-Z0-9_$]
+
+AssignmentOp = "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | ">>>=" | "&=" | "^=" | "|="
+
+# --- Infrastructure ---
+SC = _ ";" | _ &"}" | _ &"$" 
+_  = (/[ \t\n\r]+/ | /\/\*.*?\*\// | /\/\/.*/)*
+
+List<T, Sep> = first:T rest:(_ Sep _ T)* <? 
+    $items = [$first];
+    foreach($rest as $r) $items[] = $r[3];
+    return $items;
+?>
+
+Arguments = "(" _ list:List<Expression, ",">? _ ")" <? return $list ?? []; ?>

@@ -43,7 +43,7 @@
                 =   /(0|[1-9][0-9]*)/               <? return intval($_0); ?>
 
                 _
-                =   /\s*/                           <? return true; ?>
+                =   /\s*/
             GRAMMAR,
 
             $input,

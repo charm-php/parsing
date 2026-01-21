@@ -12,6 +12,15 @@ use Charm\Parsing\Util\{
  */
 abstract class RecursiveDescentParser extends State implements ParserInterface {
 
+    private static array $cache = [];
+
+    /**
+     * Clear the parse result cache. Useful for benchmarking or freeing memory.
+     */
+    public static function clearCache(): void {
+        self::$cache = [];
+    }
+
     /**
      * The initial parsing function. It normally just calls the first production rule function.
      */
@@ -53,10 +62,9 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * @param $grammarLineNumber The line number where the grammar definition begins
      */
     public function parse(string $source, string $filename, int $lineOffset=0, int $columnOffset=0) {
-        static $cache = [];
-        $hash = md5($source.$filename.$lineOffset.$columnOffset);
-        if (isset($cache[$hash])) {
-            return $cache[$hash];
+        $hash = md5($source."\0".$filename."\0".$lineOffset."\0".$columnOffset);
+        if (isset(self::$cache[$hash])) {
+            return self::$cache[$hash];
         }
         $lexer = $this->getLexer();
         $tokens = $lexer->tokenize($source, $filename, $lineOffset, $columnOffset);
@@ -68,7 +76,7 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
 
         try {
             $result = $this->start();
-            $cache[$hash] = $result;
+            self::$cache[$hash] = $result;
             return $result;
         } catch (ExceptionInterface $e) {
             /**

@@ -69,7 +69,9 @@ class CSI {
                 // buffer any tokens that may not affect the result, and remove useless tokens
                 $instructions = preg_split("/\s+/", trim(substr($token[0], 2, -1)));
                 if ($instructions[0] === '') {
-                    if ($stack === []) die("STACK MISMATCH");
+                    if ($stack === []) {
+                        throw new \RuntimeException("CSI stack mismatch: unmatched closing tag");
+                    }
                     array_pop($stack);
                 } else {
                     $stack[] = $token[0];

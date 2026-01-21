@@ -206,7 +206,6 @@ class State implements StateInterface {
     }
 
     private function _dumpStack(): string {
-die("dump stack");
         $r = '';
         $r .= "Stack length: ".$this->stackLength."\n";
         foreach ($this->stack as $i => $s) {

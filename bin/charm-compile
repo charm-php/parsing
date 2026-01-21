@@ -1,0 +1,229 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Charm Grammar Compiler CLI
+ *
+ * Compiles PEG grammars into standalone PHP parser classes.
+ *
+ * Usage:
+ *   charm-compile <grammar-file> [options]
+ *   charm-compile -                         # Read grammar from stdin
+ *
+ * Options:
+ *   -o, --output <file>     Output file (default: stdout)
+ *   -c, --class <name>      Class name (default: derived from grammar filename)
+ *   -n, --namespace <ns>    PHP namespace for the class
+ *   -e, --extends <class>   Base class to extend
+ *   -i, --implements <if>   Interface(s) to implement (comma-separated)
+ *   -h, --help              Show this help message
+ *   -q, --quiet             Suppress informational messages
+ *
+ * Examples:
+ *   charm-compile grammar.peg -o Parser.php -c MyParser
+ *   charm-compile grammar.peg -n "App\\Parser" -c ExprParser
+ *   cat grammar.peg | charm-compile - -c MyParser > Parser.php
+ */
+
+// Find autoloader
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoloaded = false;
+foreach ($autoloadPaths as $path) {
+    if (file_exists($path)) {
+        require $path;
+        $autoloaded = true;
+        break;
+    }
+}
+
+if (!$autoloaded) {
+    fwrite(STDERR, "Error: Could not find Composer autoloader.\n");
+    fwrite(STDERR, "Run 'composer install' first.\n");
+    exit(1);
+}
+
+use Charm\Parsing\GrammarParser;
+use Charm\Parsing\Compiler\GrammarCompiler;
+
+// Parse command line arguments
+$options = [
+    'input' => null,
+    'output' => null,
+    'class' => null,
+    'namespace' => null,
+    'extends' => null,
+    'implements' => [],
+    'help' => false,
+    'quiet' => false,
+];
+
+$args = array_slice($argv, 1);
+$positional = [];
+
+for ($i = 0; $i < count($args); $i++) {
+    $arg = $args[$i];
+
+    if ($arg === '-h' || $arg === '--help') {
+        $options['help'] = true;
+    } elseif ($arg === '-q' || $arg === '--quiet') {
+        $options['quiet'] = true;
+    } elseif ($arg === '-o' || $arg === '--output') {
+        $options['output'] = $args[++$i] ?? null;
+    } elseif ($arg === '-c' || $arg === '--class') {
+        $options['class'] = $args[++$i] ?? null;
+    } elseif ($arg === '-n' || $arg === '--namespace') {
+        $options['namespace'] = $args[++$i] ?? null;
+    } elseif ($arg === '-e' || $arg === '--extends') {
+        $options['extends'] = $args[++$i] ?? null;
+    } elseif ($arg === '-i' || $arg === '--implements') {
+        $interfaces = $args[++$i] ?? '';
+        $options['implements'] = array_filter(array_map('trim', explode(',', $interfaces)));
+    } elseif ($arg !== '-' && strpos($arg, '-') === 0) {
+        fwrite(STDERR, "Unknown option: $arg\n");
+        fwrite(STDERR, "Use --help for usage information.\n");
+        exit(1);
+    } else {
+        $positional[] = $arg;
+    }
+}
+
+// Show help
+if ($options['help'] || empty($positional)) {
+    $help = <<<'HELP'
+Charm Grammar Compiler - Generate PHP parser classes from PEG grammars
+
+Usage:
+  charm-compile <grammar-file> [options]
+  charm-compile - [options]              Read grammar from stdin
+
+Options:
+  -o, --output <file>     Output file (default: stdout)
+  -c, --class <name>      Class name (default: derived from filename)
+  -n, --namespace <ns>    PHP namespace for the generated class
+  -e, --extends <class>   Base class to extend
+  -i, --implements <if>   Interface(s) to implement (comma-separated)
+  -q, --quiet             Suppress informational messages
+  -h, --help              Show this help message
+
+Examples:
+  # Compile grammar to stdout
+  charm-compile expr.peg -c ExprParser
+
+  # Compile to file with namespace
+  charm-compile expr.peg -o src/ExprParser.php -c ExprParser -n "App\\Parser"
+
+  # Read from stdin
+  echo 'Number = /[0-9]+/' | charm-compile - -c NumberParser
+
+  # Compile with base class
+  charm-compile grammar.peg -c MyParser -e AbstractParser -i ParserInterface
+
+Grammar Format:
+  The input should be a PEG grammar in Charm syntax:
+
+    Expr = Expr "+" Expr
+         | Expr "*" Expr
+         | Number
+    Number = /[0-9]+/
+
+  See https://github.com/charm-php/parsing for full grammar documentation.
+
+HELP;
+    echo $help;
+    exit($options['help'] ? 0 : 1);
+}
+
+$options['input'] = $positional[0];
+
+// Read grammar
+$grammarText = null;
+$grammarName = 'grammar';
+
+if ($options['input'] === '-') {
+    // Read from stdin
+    $grammarText = file_get_contents('php://stdin');
+    if ($grammarText === false || $grammarText === '') {
+        fwrite(STDERR, "Error: No input received from stdin.\n");
+        exit(1);
+    }
+} else {
+    // Read from file
+    if (!file_exists($options['input'])) {
+        fwrite(STDERR, "Error: File not found: {$options['input']}\n");
+        exit(1);
+    }
+    $grammarText = file_get_contents($options['input']);
+    $grammarName = basename($options['input'], '.peg');
+    $grammarName = basename($grammarName, '.grammar');
+}
+
+// Determine class name
+$className = $options['class'];
+if ($className === null) {
+    // Derive from filename
+    $className = ucfirst(preg_replace('/[^a-zA-Z0-9]/', '', $grammarName)) . 'Parser';
+}
+
+// Validate class name
+if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $className)) {
+    fwrite(STDERR, "Error: Invalid class name: $className\n");
+    exit(1);
+}
+
+// Parse grammar
+if (!$options['quiet']) {
+    fwrite(STDERR, "Parsing grammar...\n");
+}
+
+try {
+    $gp = new GrammarParser();
+    $grammar = $gp->parse($grammarText, $grammarName);
+} catch (\Exception $e) {
+    fwrite(STDERR, "Error parsing grammar: " . $e->getMessage() . "\n");
+    exit(1);
+}
+
+// Compile
+if (!$options['quiet']) {
+    fwrite(STDERR, "Compiling to class '$className'...\n");
+}
+
+try {
+    $compiler = new GrammarCompiler();
+    $code = $compiler->compile($grammar, $className, [
+        'namespace' => $options['namespace'],
+        'baseClass' => $options['extends'],
+        'implements' => $options['implements'],
+    ]);
+} catch (\Exception $e) {
+    fwrite(STDERR, "Error compiling grammar: " . $e->getMessage() . "\n");
+    exit(1);
+}
+
+// Output
+if ($options['output']) {
+    $dir = dirname($options['output']);
+    if ($dir && !is_dir($dir)) {
+        if (!mkdir($dir, 0755, true)) {
+            fwrite(STDERR, "Error: Could not create directory: $dir\n");
+            exit(1);
+        }
+    }
+
+    if (file_put_contents($options['output'], $code) === false) {
+        fwrite(STDERR, "Error: Could not write to file: {$options['output']}\n");
+        exit(1);
+    }
+
+    if (!$options['quiet']) {
+        fwrite(STDERR, "Written to: {$options['output']}\n");
+        fwrite(STDERR, "Generated " . strlen($code) . " bytes.\n");
+    }
+} else {
+    echo $code;
+}
+
+exit(0);

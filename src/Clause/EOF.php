@@ -3,6 +3,7 @@ namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\State;
 use Charm\Parsing\Clause;
+use Charm\Parsing\Signal;
 
 class EOF extends Terminal {
 
@@ -16,8 +17,16 @@ class EOF extends Terminal {
 
     public function interpret(State $state, array $context) {
         if ($state->offset === $state->length) {
-            return true;
+            return Signal::HIT;
         }
-        return false;
+        return Signal::MISS;
+    }
+
+    public function getMinByteLength(): int {
+        return 0;
+    }
+
+    public function getFirstBytes(): ?string {
+        return null;
     }
 }

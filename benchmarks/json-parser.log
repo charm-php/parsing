@@ -1,0 +1,666 @@
+# 2026-01-21 09:08:28 - Baseline after Snippet.php simplification (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5678200/s     303093/s      48857/s    18.7x     6.2x
+number          5610585/s     316788/s      48441/s    17.7x     6.5x
+array           2023386/s      52223/s       8486/s    38.7x     6.2x
+object          2016020/s      63392/s      11683/s    31.8x     5.4x
+nested           761977/s      20568/s       3884/s    37.0x     5.3x
+
+# 2026-01-21 09:11:12 - use function substr/strlen/preg_match (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5938489/s     310911/s      51576/s    19.1x     6.0x
+number          5606161/s     328046/s      50431/s    17.1x     6.5x
+array           2023023/s      57730/s       8833/s    35.0x     6.5x
+object          2030553/s      67892/s      12334/s    29.9x     5.5x
+nested           760923/s      22404/s       4097/s    34.0x     5.5x
+
+# 2026-01-21 09:12:07 - Generated function imports via compiler (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5903092/s     310307/s      51529/s    19.0x     6.0x
+number          5574586/s     333641/s      50509/s    16.7x     6.6x
+array           2022879/s      57692/s       8854/s    35.1x     6.5x
+object          2028746/s      64178/s      12192/s    31.6x     5.3x
+nested           756308/s      20802/s       4069/s    36.4x     5.1x
+
+# 2026-01-21 09:15:29 - Backslash prefix for all function calls (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5749976/s     318458/s      50631/s    18.1x     6.3x
+number          5599698/s     331945/s      49913/s    16.9x     6.7x
+array           2031053/s      58475/s       8761/s    34.7x     6.7x
+object          2022963/s      69011/s      11994/s    29.3x     5.8x
+nested           759502/s      22510/s       4074/s    33.7x     5.5x
+
+# 2026-01-21 09:18:56 - Array access for single-char checks (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5780721/s     310969/s      50662/s    18.6x     6.1x
+number          5599719/s     333945/s      49823/s    16.8x     6.7x
+array           2022461/s      58541/s       8571/s    34.5x     6.8x
+object          2020386/s      69280/s      12010/s    29.2x     5.8x
+nested           758346/s      22178/s       3999/s    34.2x     5.5x
+
+# 2026-01-21 09:19:43 - Array access with length check (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5694990/s     312980/s      50991/s    18.2x     6.1x
+number          5587195/s     330610/s      50496/s    16.9x     6.5x
+array           2003198/s      58435/s       8766/s    34.3x     6.7x
+object          2005106/s      69869/s      12205/s    28.7x     5.7x
+nested           753395/s      22837/s       4067/s    33.0x     5.6x
+
+# 2026-01-21 09:23:09 - Direct goto on MISS (removed redundant check) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5424444/s     323675/s      49485/s    16.8x     6.5x
+number          5419113/s     329946/s      48073/s    16.4x     6.9x
+array           1991755/s      61068/s       8632/s    32.6x     7.1x
+object          2020672/s      70390/s      11918/s    28.7x     5.9x
+nested           746191/s      23226/s       3966/s    32.1x     5.9x
+
+# 2026-01-21 09:28:43 - Direct return instead of goto for top-level sequences (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5793758/s     328094/s      50986/s    17.7x     6.4x
+number          5589055/s     346713/s      51212/s    16.1x     6.8x
+array           2022460/s      60672/s       8716/s    33.3x     7.0x
+object          1966972/s      71732/s      12184/s    27.4x     5.9x
+nested           761753/s      23678/s       4059/s    32.2x     5.8x
+
+# 2026-01-21 09:31:44 - Backslash prefix only in grammar, not auto-added (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5766930/s     315925/s      49727/s    18.3x     6.4x
+number          5589797/s     333810/s      49882/s    16.7x     6.7x
+array           2019347/s      59870/s       8671/s    33.7x     6.9x
+object          2026522/s      71812/s      12127/s    28.2x     5.9x
+nested           760901/s      23023/s       4052/s    33.0x     5.7x
+
+# 2026-01-21 09:35:12 - Snippet methods instead of closures (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5832625/s     383303/s      51474/s    15.2x     7.4x
+number          5607067/s     406681/s      49873/s    13.8x     8.2x
+array           2001515/s      68593/s       8822/s    29.2x     7.8x
+object          2034961/s      89708/s      12236/s    22.7x     7.3x
+nested           762903/s      29215/s       4094/s    26.1x     7.1x
+
+# 2026-01-21 09:58:17 - Fast-fail checks for rules with minLen>0 (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5804367/s     459314/s      51549/s    12.6x     8.9x
+number          5615060/s     503504/s      51128/s    11.2x     9.8x
+array           2054216/s      83436/s       8808/s    24.6x     9.5x
+object          2028480/s      90982/s      12251/s    22.3x     7.4x
+nested           759987/s      29422/s       4066/s    25.8x     7.2x
+
+# 2026-01-21 10:00:13 - Conservative regex analysis (return 0/null) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5833637/s     431558/s      51055/s    13.5x     8.5x
+number          5523449/s     504129/s      50979/s    11.0x     9.9x
+array           2013559/s      82406/s       8836/s    24.4x     9.3x
+object          2033515/s      97411/s      12067/s    20.9x     8.1x
+nested           758293/s      31511/s       3934/s    24.1x     8.0x
+
+# 2026-01-21 10:04:46 - Optimized char checks (direct comparison for single chars) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5857074/s     466220/s      51109/s    12.6x     9.1x
+number          5601947/s     516269/s      50974/s    10.9x    10.1x
+array           2031709/s      85190/s       8892/s    23.8x     9.6x
+object          2030893/s      97865/s      12310/s    20.8x     8.0x
+nested           729167/s      31332/s       4116/s    23.3x     7.6x
+
+# 2026-01-21 10:14:34 - With JIT enabled (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7217195/s     684430/s      80434/s    10.5x     8.5x
+number          6634845/s     668364/s      80626/s     9.9x     8.3x
+array           2152594/s     116034/s      13895/s    18.6x     8.4x
+object          2116399/s     125962/s      18978/s    16.8x     6.6x
+nested           778634/s      38152/s       6328/s    20.4x     6.0x
+
+# 2026-01-21 10:20:30 - Call-site guards (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7249972/s     704117/s      82718/s    10.3x     8.5x
+number          6640101/s     666979/s      78511/s    10.0x     8.5x
+array           2112954/s     122764/s      14283/s    17.2x     8.6x
+object          2152113/s     127982/s      19039/s    16.8x     6.7x
+nested           778511/s      39112/s       6301/s    19.9x     6.2x
+
+# 2026-01-21 10:20:55 - Call-site guards (no JIT) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5875686/s     486708/s      50398/s    12.1x     9.7x
+number          5606741/s     522848/s      48875/s    10.7x    10.7x
+array           2023801/s      84908/s       8525/s    23.8x    10.0x
+object          2022848/s      91424/s      12055/s    22.1x     7.6x
+nested           755969/s      30903/s       4044/s    24.5x     7.6x
+
+# 2026-01-21 10:36:53 - Regex firstBytes detection + guards (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7455870/s     694082/s      71075/s    10.7x     9.8x
+number          6737076/s     686007/s      67107/s     9.8x    10.2x
+array           2147626/s     124912/s      13375/s    17.2x     9.3x
+object          2145641/s     120150/s      17028/s    17.9x     7.1x
+nested           777641/s      36503/s       5745/s    21.3x     6.4x
+
+# 2026-01-21 10:37:18 - Regex firstBytes detection + guards (no JIT) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5941246/s     501690/s      52765/s    11.8x     9.5x
+number          5610871/s     471800/s      52122/s    11.9x     9.1x
+array           2015952/s      83773/s       8984/s    24.1x     9.3x
+object          2029941/s      93464/s      12539/s    21.7x     7.5x
+nested           761254/s      30453/s       4177/s    25.0x     7.3x
+
+# 2026-01-21 10:44:06 - ECMA regex AST analyzer (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7222484/s     666310/s      73122/s    10.8x     9.1x
+number          6530303/s     727528/s      77129/s     9.0x     9.4x
+array           2110350/s     128248/s      13715/s    16.5x     9.4x
+object          2134324/s     116119/s      17468/s    18.4x     6.6x
+nested           770218/s      35532/s       6026/s    21.7x     5.9x
+
+# 2026-01-21 10:54:52 - Pairs/Pair: no array_merge, direct key assignment (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7241091/s     634870/s      77249/s    11.4x     8.2x
+number          6614361/s     751934/s      76388/s     8.8x     9.8x
+array           2065408/s     130250/s      13840/s    15.9x     9.4x
+object          2152960/s     104651/s      17743/s    20.6x     5.9x
+nested           779518/s      31368/s       5897/s    24.9x     5.3x
+
+# 2026-01-21 10:55:45 - Pairs: foreach direct assign instead of array_merge (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7165526/s     405494/s      76624/s    17.7x     5.3x
+number          6644622/s     491815/s      76152/s    13.5x     6.5x
+array           2133975/s      79573/s      13866/s    26.8x     5.7x
+object          2137956/s      86794/s      18368/s    24.6x     4.7x
+nested           773580/s      26816/s       6180/s    28.8x     4.3x
+
+# 2026-01-21 10:56:27 - Reverted to array_merge (baseline comparison) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7344858/s     436810/s      78839/s    16.8x     5.5x
+number          6762937/s     499816/s      78723/s    13.5x     6.3x
+array           2070993/s      79008/s      14147/s    26.2x     5.6x
+object          2151259/s      83094/s      18658/s    25.9x     4.5x
+nested           770948/s      26318/s       6284/s    29.3x     4.2x
+
+# 2026-01-21 10:57:05 - Full recompile from scratch (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7092330/s     682089/s      78973/s    10.4x     8.6x
+number          6629155/s     739259/s      79197/s     9.0x     9.3x
+array           2147788/s     131753/s      14252/s    16.3x     9.2x
+object          2147867/s     126810/s      18662/s    16.9x     6.8x
+nested           778315/s      36602/s       6066/s    21.3x     6.0x
+
+# 2026-01-21 10:59:10 - Clean baseline before snippet optimizations (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7285871/s     688017/s      81652/s    10.6x     8.4x
+number          6612264/s     762911/s      79350/s     8.7x     9.6x
+array           2146019/s     131508/s      14406/s    16.3x     9.1x
+object          2156198/s     128519/s      18868/s    16.8x     6.8x
+nested           770746/s      37334/s       6350/s    20.6x     5.9x
+
+# 2026-01-21 11:00:03 - String: fast path for no escapes (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7159596/s     513856/s      77004/s    13.9x     6.7x
+number          6700467/s     497120/s      71243/s    13.5x     7.0x
+array           2145513/s      83048/s      13126/s    25.8x     6.3x
+object          2154734/s     100285/s      18053/s    21.5x     5.6x
+nested           779297/s      29860/s       6067/s    26.1x     4.9x
+
+# 2026-01-21 11:01:59 - No comment (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5949644/s     570978/s      53881/s    10.4x    10.6x
+number          5601792/s     540665/s      50086/s    10.4x    10.8x
+array           2027362/s      87228/s       8655/s    23.2x    10.1x
+object          1978302/s     105202/s      12759/s    18.8x     8.2x
+nested           761003/s      33938/s       4249/s    22.4x     8.0x
+
+# 2026-01-21 11:02:34 - String fast path (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7309553/s     903289/s      88042/s     8.1x    10.3x
+number          6786948/s     776945/s      81831/s     8.7x     9.5x
+array           2142451/s     135066/s      14739/s    15.9x     9.2x
+object          2149057/s     149563/s      20298/s    14.4x     7.4x
+nested           780086/s      44566/s       6776/s    17.5x     6.6x
+
+# 2026-01-21 11:03:35 - String fast path verification (no JIT) (PHP 8.5.1)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          5811047/s     573831/s      52453/s    10.1x    10.9x
+number          5612280/s     529158/s      48132/s    10.6x    11.0x
+array           2025884/s      87179/s       8497/s    23.2x    10.3x
+object          1967384/s     103691/s      12420/s    19.0x     8.3x
+nested           762541/s      33865/s       4066/s    22.5x     8.3x
+
+# 2026-01-21 11:04:37 - Number: simple +0 coercion (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7043000/s     529475/s      81124/s    13.3x     6.5x
+number          6634465/s     507329/s      73404/s    13.1x     6.9x
+array           2155630/s      84648/s      13595/s    25.5x     6.2x
+object          2127260/s      91859/s      19967/s    23.2x     4.6x
+nested           778000/s      31012/s       6643/s    25.1x     4.7x
+
+# 2026-01-21 11:05:52 - Number: always float cast (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7251230/s     543937/s      86357/s    13.3x     6.3x
+number          6636512/s     526141/s      83189/s    12.6x     6.3x
+array           1842506/s      85208/s      14002/s    21.6x     6.1x
+object          2160457/s     100750/s      18356/s    21.4x     5.5x
+nested           781064/s      31371/s       6089/s    24.9x     5.2x
+
+# 2026-01-21 11:06:37 - Baseline with String fast path + strpos Number (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7357940/s     540861/s      86667/s    13.6x     6.2x
+number          6698535/s     506783/s      78670/s    13.2x     6.4x
+array           2156216/s      82252/s      14340/s    26.2x     5.7x
+object          2154149/s      99397/s      19447/s    21.7x     5.1x
+nested           769051/s      30734/s       6544/s    25.0x     4.7x
+
+# 2026-01-21 11:07:03 - After opcache reset (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7154730/s     895272/s      76831/s     8.0x    11.7x
+number          6791047/s     777120/s      76372/s     8.7x    10.2x
+array           2110630/s     133217/s      13863/s    15.8x     9.6x
+object          2127656/s     150289/s      18486/s    14.2x     8.1x
+nested           762477/s      42733/s       6097/s    17.8x     7.0x
+
+# 2026-01-21 11:07:37 - Number: always float (fresh opcache, JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7025417/s     545979/s      84837/s    12.9x     6.4x
+number          6463070/s     514813/s      82921/s    12.6x     6.2x
+array           2142517/s      86109/s      15080/s    24.9x     5.7x
+object          2153331/s     101685/s      20187/s    21.2x     5.0x
+nested           779569/s      31274/s       6741/s    24.9x     4.6x
+
+# 2026-01-21 11:08:41 - Float Number run 1 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6859487/s     882788/s      83208/s     7.8x    10.6x
+number          6415927/s     768597/s      80033/s     8.3x     9.6x
+array           2123799/s     135266/s      14703/s    15.7x     9.2x
+object          2126000/s     153249/s      19743/s    13.9x     7.8x
+nested           777655/s      44537/s       6642/s    17.5x     6.7x
+
+# 2026-01-21 11:08:56 - Float Number run 2 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7165799/s     873611/s      87743/s     8.2x    10.0x
+number          6609584/s     766940/s      82725/s     8.6x     9.3x
+array           2121765/s     136808/s      14724/s    15.5x     9.3x
+object          2106552/s     152808/s      20316/s    13.8x     7.5x
+nested           774845/s      45339/s       6746/s    17.1x     6.7x
+
+# 2026-01-21 11:09:11 - Float Number run 3 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7208441/s     680449/s      80251/s    10.6x     8.5x
+number          6658718/s     704149/s      75270/s     9.5x     9.4x
+array           2140369/s     134665/s      13462/s    15.9x    10.0x
+object          2152169/s     150364/s      18912/s    14.3x     8.0x
+nested           776312/s      42564/s       6338/s    18.2x     6.7x
+
+# 2026-01-21 11:09:42 - Strpos Number run 1 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7374639/s     542440/s      84225/s    13.6x     6.4x
+number          6657737/s     502809/s      76675/s    13.2x     6.6x
+array           2143567/s      82434/s      14288/s    26.0x     5.8x
+object          2138006/s     101044/s      19855/s    21.2x     5.1x
+nested           779713/s      30464/s       6719/s    25.6x     4.5x
+
+# 2026-01-21 11:09:57 - Strpos Number run 2 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7008754/s     895273/s      85107/s     7.8x    10.5x
+number          6758494/s     776690/s      77398/s     8.7x    10.0x
+array           2130299/s     134201/s      13730/s    15.9x     9.8x
+object          2143731/s     146712/s      18988/s    14.6x     7.7x
+nested           766656/s      43387/s       6543/s    17.7x     6.6x
+
+# 2026-01-21 11:10:12 - Strpos Number run 3 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7385016/s     903751/s      82681/s     8.2x    10.9x
+number          6796690/s     764222/s      75295/s     8.9x    10.1x
+array           2148221/s     134129/s      14031/s    16.0x     9.6x
+object          2150357/s     152498/s      19072/s    14.1x     8.0x
+nested           781556/s      44641/s       6298/s    17.5x     7.1x
+
+# 2026-01-21 11:10:39 - Final: String fast path + strpos Number (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7334918/s     905166/s      78058/s     8.1x    11.6x
+number          6785631/s     760583/s      70609/s     8.9x    10.8x
+array           2145458/s     130877/s      12707/s    16.4x    10.3x
+object          2149820/s     139871/s      17781/s    15.4x     7.9x
+nested           759979/s      39804/s       6057/s    19.1x     6.6x
+
+# 2026-01-21 11:12:01 - Pairs foreach run 1 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7129094/s     550239/s      85690/s    13.0x     6.4x
+number          6721421/s     512710/s      80405/s    13.1x     6.4x
+array           2070104/s      82955/s      14132/s    25.0x     5.9x
+object          2155980/s      98960/s      19630/s    21.8x     5.0x
+nested           781737/s      31412/s       6080/s    24.9x     5.2x
+
+# 2026-01-21 11:12:16 - Pairs foreach run 2 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7306757/s     872882/s      87343/s     8.4x    10.0x
+number          6586638/s     831309/s      82250/s     7.9x    10.1x
+array           2025268/s     136453/s      14219/s    14.8x     9.6x
+object          2126756/s     146095/s      19560/s    14.6x     7.5x
+nested           777501/s      46152/s       6584/s    16.8x     7.0x
+
+# 2026-01-21 11:12:32 - Pairs foreach run 3 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7120789/s     638374/s      80442/s    11.2x     7.9x
+number          6615148/s     651296/s      72350/s    10.2x     9.0x
+array           2139633/s     129317/s      12292/s    16.5x    10.5x
+object          2123949/s     143842/s      18367/s    14.8x     7.8x
+nested           744483/s      42361/s       6135/s    17.6x     6.9x
+
+# 2026-01-21 11:12:59 - array_merge run 1 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7363905/s     549030/s      81619/s    13.4x     6.7x
+number          6681348/s     501860/s      74981/s    13.3x     6.7x
+array           2158392/s      83041/s      13706/s    26.0x     6.1x
+object          2142071/s      97404/s      19036/s    22.0x     5.1x
+nested           779971/s      31404/s       6405/s    24.8x     4.9x
+
+# 2026-01-21 11:13:14 - array_merge run 2 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7098859/s     874815/s      84686/s     8.1x    10.3x
+number          6780421/s     777986/s      80298/s     8.7x     9.7x
+array           2159471/s     123656/s      14418/s    17.5x     8.6x
+object          2150773/s     144413/s      19714/s    14.9x     7.3x
+nested           779163/s      43201/s       6551/s    18.0x     6.6x
+
+# 2026-01-21 11:13:29 - array_merge run 3 (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6892691/s     901398/s      85819/s     7.6x    10.5x
+number          6772115/s     774454/s      76718/s     8.7x    10.1x
+array           2002469/s      91410/s      14446/s    21.9x     6.3x
+object          2144497/s     143488/s      18918/s    14.9x     7.6x
+nested           769071/s      38799/s       6668/s    19.8x     5.8x
+
+# 2026-01-21 11:13:59 - String fast path + Pairs foreach (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7144848/s     530468/s      88010/s    13.5x     6.0x
+number          6718577/s     503229/s      80074/s    13.4x     6.3x
+array           2125628/s      83274/s      14655/s    25.5x     5.7x
+object          2098129/s      93305/s      19526/s    22.5x     4.8x
+nested           773323/s      30096/s       6610/s    25.7x     4.6x
+
+# 2026-01-21 11:14:19 - String fast path + Pairs foreach - warmed (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7353984/s     880737/s      84692/s     8.3x    10.4x
+number          6571902/s     801388/s      80327/s     8.2x    10.0x
+array           2152469/s     133665/s      13957/s    16.1x     9.6x
+object          2155943/s     153905/s      19067/s    14.0x     8.1x
+nested           779013/s      46413/s       6402/s    16.8x     7.3x
+
+# 2026-01-21 11:14:43 - Confirmation run (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7276328/s     874604/s      84700/s     8.3x    10.3x
+number          6724909/s     834148/s      78114/s     8.1x    10.7x
+array           2152878/s     122015/s      13985/s    17.6x     8.7x
+object          2159330/s     127465/s      19046/s    16.9x     6.7x
+nested           753293/s      38704/s       6430/s    19.5x     6.0x
+
+# 2026-01-21 11:15:15 - Pairs direct result (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7284371/s     539324/s      83495/s    13.5x     6.5x
+number          6615088/s     500511/s      80152/s    13.2x     6.2x
+array           2146834/s      83565/s      14346/s    25.7x     5.8x
+object          2154558/s     100274/s      19468/s    21.5x     5.2x
+nested           760918/s      30833/s       6596/s    24.7x     4.7x
+
+# 2026-01-21 11:15:30 - Pairs direct result (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7339357/s     824061/s      81871/s     8.9x    10.1x
+number          6707514/s     772943/s      78095/s     8.7x     9.9x
+array           2109709/s     133017/s      13665/s    15.9x     9.7x
+object          2155408/s     150056/s      19816/s    14.4x     7.6x
+nested           774980/s      46459/s       6489/s    16.7x     7.2x
+
+# 2026-01-21 11:15:52 - Final: String fast path + Pairs direct result (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7304104/s     880519/s      86101/s     8.3x    10.2x
+number          6681721/s     824668/s      76810/s     8.1x    10.7x
+array           2057496/s     122019/s      13509/s    16.9x     9.0x
+object          2152667/s     139095/s      19072/s    15.5x     7.3x
+nested           776597/s      41952/s       6357/s    18.5x     6.6x
+
+# 2026-01-21 11:18:23 - No mbstring (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7181763/s     886574/s      82525/s     8.1x    10.7x
+number          6672464/s     637960/s      72289/s    10.5x     8.8x
+array           2075122/s     120404/s      13152/s    17.2x     9.2x
+object          2136515/s     152945/s      19655/s    14.0x     7.8x
+nested           762177/s      45195/s       6605/s    16.9x     6.8x
+
+# 2026-01-21 11:18:38 - No mbstring (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7319707/s     883538/s      83602/s     8.3x    10.6x
+number          6660067/s     834436/s      79415/s     8.0x    10.5x
+array           2146242/s     135443/s      13827/s    15.8x     9.8x
+object          2144382/s     156966/s      19678/s    13.7x     8.0x
+nested           778996/s      46426/s       6565/s    16.8x     7.1x
+
+# 2026-01-21 11:22:51 - substr_compare (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7103402/s     547322/s      78557/s    13.0x     7.0x
+number          6384463/s     502975/s      76605/s    12.7x     6.6x
+array           2152486/s      82109/s      13431/s    26.2x     6.1x
+object          2148624/s     100075/s      18118/s    21.5x     5.5x
+nested           777740/s      30495/s       6031/s    25.5x     5.1x
+
+# 2026-01-21 11:23:06 - substr_compare (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7278908/s     882765/s      84424/s     8.2x    10.5x
+number          6631132/s     838357/s      79549/s     7.9x    10.5x
+array           2127215/s     136311/s      14202/s    15.6x     9.6x
+object          2153936/s     155293/s      20151/s    13.9x     7.7x
+nested           781092/s      46897/s       6719/s    16.7x     7.0x
+
+# 2026-01-21 11:23:30 - substr_compare for Text clauses (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7151362/s     826478/s      87086/s     8.7x     9.5x
+number          6623245/s     824364/s      81576/s     8.0x    10.1x
+array           2107896/s     134570/s      14245/s    15.7x     9.4x
+object          2134287/s     155317/s      20046/s    13.7x     7.7x
+nested           769508/s      45846/s       6722/s    16.8x     6.8x
+
+# 2026-01-21 11:25:12 - Optimized Text: ASCII vs Unicode detection (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6822994/s     543728/s      82771/s    12.5x     6.6x
+number          6694637/s     501166/s      77806/s    13.4x     6.4x
+array           2115699/s      81973/s      13737/s    25.8x     6.0x
+object          2142720/s      98929/s      19323/s    21.7x     5.1x
+nested           769866/s      30577/s       5881/s    25.2x     5.2x
+
+# 2026-01-21 11:25:28 - Optimized Text: ASCII vs Unicode detection (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7076925/s     887003/s      86727/s     8.0x    10.2x
+number          6596922/s     834332/s      80249/s     7.9x    10.4x
+array           2120887/s     135955/s      14063/s    15.6x     9.7x
+object          2147055/s     157751/s      19599/s    13.6x     8.0x
+nested           778604/s      47161/s       6564/s    16.5x     7.2x
+
+# 2026-01-21 11:25:49 - Final: Optimized Text with ASCII/Unicode detection (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7035905/s     872719/s      86972/s     8.1x    10.0x
+number          6562617/s     840318/s      81803/s     7.8x    10.3x
+array           2081633/s     136263/s      14247/s    15.3x     9.6x
+object          2082523/s     154467/s      20099/s    13.5x     7.7x
+nested           758969/s      46863/s       6682/s    16.2x     7.0x
+
+# 2026-01-21 11:29:14 - Switch dispatch (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7278437/s     892025/s      82960/s     8.2x    10.8x
+number          6521818/s     783553/s      77934/s     8.3x    10.1x
+array           2141714/s     126584/s      14238/s    16.9x     8.9x
+object          2151935/s     154702/s      18888/s    13.9x     8.2x
+nested           777754/s      46213/s       6704/s    16.8x     6.9x
+
+# 2026-01-21 11:29:29 - Switch dispatch (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7208760/s     903178/s      80231/s     8.0x    11.3x
+number          6612482/s     784377/s      74477/s     8.4x    10.5x
+array           2065830/s     121208/s      13715/s    17.0x     8.8x
+object          2140903/s     150060/s      18783/s    14.3x     8.0x
+nested           778138/s      45490/s       6374/s    17.1x     7.1x
+
+# 2026-01-21 11:29:56 - Switch-based dispatch for OrderedChoice (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6789259/s     877740/s      84551/s     7.7x    10.4x
+number          6350376/s     783172/s      75509/s     8.1x    10.4x
+array           2101983/s     126405/s      13669/s    16.6x     9.2x
+object          2093632/s     154306/s      19352/s    13.6x     8.0x
+nested           767685/s      46559/s       6467/s    16.5x     7.2x
+
+# 2026-01-21 11:34:43 - EOF check only (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6872892/s     561864/s      85552/s    12.2x     6.6x
+number          6684317/s     517330/s      79716/s    12.9x     6.5x
+array           2142449/s      84203/s      13887/s    25.4x     6.1x
+object          2149245/s      98402/s      19882/s    21.8x     4.9x
+nested           780205/s      30872/s       6635/s    25.3x     4.7x
+
+# 2026-01-21 11:34:58 - EOF check only (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7315397/s     819306/s      86078/s     8.9x     9.5x
+number          6609866/s     734985/s      81331/s     9.0x     9.0x
+array           2149152/s     125165/s      13557/s    17.2x     9.2x
+object          1973855/s     144189/s      19499/s    13.7x     7.4x
+nested           776354/s      44872/s       6525/s    17.3x     6.9x
+
+# 2026-01-21 11:35:31 - Restored minByteLen check (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7026555/s     592567/s      85805/s    11.9x     6.9x
+number          6694179/s     537762/s      78976/s    12.4x     6.8x
+array           2145732/s      84471/s      14237/s    25.4x     5.9x
+object          2146968/s     100804/s      20165/s    21.3x     5.0x
+nested           776565/s      30617/s       6662/s    25.4x     4.6x
+
+# 2026-01-21 11:35:53 - Stable run after revert (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7325721/s     904054/s      82719/s     8.1x    10.9x
+number          6518067/s     726099/s      76688/s     9.0x     9.5x
+array           2144286/s     119668/s      13964/s    17.9x     8.6x
+object          2126725/s     147590/s      19813/s    14.4x     7.4x
+nested           779420/s      44391/s       6581/s    17.6x     6.7x
+
+# 2026-01-21 11:53:08 - With error tracking (run 1) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7249194/s     679461/s      82191/s    10.7x     8.3x
+number          6710024/s     611109/s      75506/s    11.0x     8.1x
+array           2147698/s     102089/s      13533/s    21.0x     7.5x
+object          2139913/s     126621/s      18510/s    16.9x     6.8x
+nested           778698/s      39093/s       6080/s    19.9x     6.4x
+
+# 2026-01-21 11:53:23 - With error tracking (run 2) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7216881/s     872944/s      78083/s     8.3x    11.2x
+number          6692710/s     689507/s      70222/s     9.7x     9.8x
+array           2141120/s     106450/s      12511/s    20.1x     8.5x
+object          2143168/s     138587/s      17618/s    15.5x     7.9x
+nested           774120/s      41693/s       5811/s    18.6x     7.2x
+
+# 2026-01-21 11:53:48 - Final: Error messages with line/column (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7196576/s     877155/s      83557/s     8.2x    10.5x
+number          6712559/s     703657/s      75155/s     9.5x     9.4x
+array           2093626/s     115915/s      14173/s    18.1x     8.2x
+object          2149603/s     138991/s      18844/s    15.5x     7.4x
+nested           778369/s      42108/s       6399/s    18.5x     6.6x
+
+# 2026-01-21 12:00:05 - Grammar-based EOF, improved errors (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          7204979/s     883806/s      82231/s     8.2x    10.7x
+number          6696217/s     695180/s      78236/s     9.6x     8.9x
+array           2147160/s     115380/s      14266/s    18.6x     8.1x
+object          2142778/s     139373/s      19486/s    15.4x     7.2x
+nested           777422/s      40638/s       6087/s    19.1x     6.7x
+
+# 2026-01-21 12:07:12 - With @ commit symbols (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6828126/s     877240/s      79086/s     7.8x    11.1x
+number          6613326/s     692996/s      75760/s     9.5x     9.1x
+array           2090656/s     115231/s      13747/s    18.1x     8.4x
+object          2141569/s     140515/s      18373/s    15.2x     7.6x
+nested           772519/s      41648/s       6140/s    18.5x     6.8x
+
+# 2026-01-21 12:12:11 - Commit semantics implemented (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6822855/s     882411/s      83901/s     7.7x    10.5x
+number          6652150/s     707364/s      80102/s     9.4x     8.8x
+array           2150950/s     115462/s      14689/s    18.6x     7.9x
+object          2143649/s     142091/s      20056/s    15.1x     7.1x
+nested           780694/s      40800/s       6706/s    19.1x     6.1x
+
+# 2026-01-21 12:20:32 - Full commit + frozen expectations (JIT) (PHP 8.5.1, JIT enabled)
+Test          json_decode     Compiled  Interpreted      C/J      I/C
+----------------------------------------------------------------------
+string          6920420/s     869631/s      87016/s     8.0x    10.0x
+number          6647360/s     674133/s      80673/s     9.9x     8.4x
+array           2144027/s     109537/s      14443/s    19.6x     7.6x
+object          2143850/s     137772/s      20397/s    15.6x     6.8x
+nested           776058/s      40506/s       6807/s    19.2x     6.0x
+

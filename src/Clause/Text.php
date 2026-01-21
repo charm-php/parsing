@@ -3,6 +3,7 @@ namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\State;
 use Charm\Parsing\Clause;
+use Charm\Parsing\Signal;
 
 class Text extends Terminal {
 
@@ -37,12 +38,27 @@ class Text extends Terminal {
         $source = substr($state->source, $state->offset, $this->length);
         if ($this->isCaseInsensitive()) {
             if (mb_strtolower($source) !== $this->text) {
-                return false;
+                return Signal::MISS;
             }
         } elseif ($source !== $this->text) {
-            return false;
+            return Signal::MISS;
         }
         $state->offset += $this->length;
         return $source;
+    }
+
+    public function getMinByteLength(): int {
+        return $this->length;
+    }
+
+    public function getFirstBytes(): ?string {
+        if ($this->length === 0) {
+            return null;
+        }
+        $char = $this->text[0];
+        if ($this->isCaseInsensitive()) {
+            return strtolower($char) . strtoupper($char);
+        }
+        return $char;
     }
 }

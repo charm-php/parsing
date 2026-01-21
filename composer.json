@@ -20,6 +20,7 @@
             "email": "frode@ennerd.com"
         }
     ],
+    "bin": ["bin/charm-compile"],
     "minimum-stability": "stable",
     "require": {
         "charm/vector": "^1.0",

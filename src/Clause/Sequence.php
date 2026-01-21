@@ -11,7 +11,7 @@ use Charm\Parsing\{
     SequenceIgnore,
     ClauseInterface,
     GrammarInterface,
-    BoxedResult,
+    Signal,
     ExpectedError,
 };
 /**
@@ -32,10 +32,6 @@ class Sequence extends NonTerminal {
     }
 
     public function interpret(State $state, array $context) {
-        if (isset($state->cache[$state->offset][$key = get_class($this)." ".$this])) {
-            var_dump("Sequence was here:", $state->cache[$state->offset][$key]);
-            die();
-        }
         $offset = $state->offset;
         $committed = null;
 
@@ -49,55 +45,69 @@ class Sequence extends NonTerminal {
                 }
 
                 $match = $subClause->parse($state, $result);
-    //            $match = $this->processSubClause($state, $subClause, $result);
 
                 if ($subClause instanceof Snippet) {
                     // Snippets may provide instructions that determine how this sequence continues
                     if ($match instanceof SequenceIgnore) {
                         // The sequence should terminate with a successful result
-                        return true;
+                        return Signal::HIT;
                     } elseif ($match instanceof SequenceResume) {
                         // The sequence should resume parsing as if nothing happened
-                        $match = true;
-                    } else {
-                        if ($match === false) {
-                            if ($committed !== null) {
-                                throw new CommittedError($state, $this, $subClause);
-//                                throw new CommittedError($this, $subClause, new ErrorInfo(['offset' => $state->offset, 'source' => $state->source, 'functionName' => 'OrderedChoice']));
-                            }
+                        $match = Signal::HIT;
+                    } elseif ($match === Signal::MISS) {
+                        if ($committed !== null) {
+                            throw new CommittedError($state, $this, $subClause);
                         }
-
-                        // Snippets always terminate the sequence unless they instruct it to resume.
+                        // Snippets that return Signal::MISS cause the sequence to fail
+                        $state->offset = $offset;
+                        return Signal::MISS;
+                    } else {
+                        // Snippets return the final value for the sequence
                         return $match;
                     }
                 }
 
-                if ($match === false) {
+                if ($match === Signal::MISS) {
                     // The sub clause failed, so the sequence fails
                     if ($committed !== null) {
                         throw new CommittedError($state, $this, $subClause);
                     }
                     $state->offset = $offset;
-                    return false;
-                } elseif ($match === true) {
-                    // The sub clause returned a successful empty parse, so we continue to the next clause
+                    return Signal::MISS;
+                } elseif ($match === Signal::HIT) {
+                    // Terminal clause matched but has no value (e.g., \nothing, $, ^)
                     continue;
                 }
 
-                if ($match instanceof BoxedResult) {
-                    $match = $match->value;
-                }
-
+                // Handle named capture (before spread, so we capture the original value)
                 if (null !== ($name = $subClause->getName())) {
                     $result[$name] = $match;
-                } else {
+                }
+
+                if ($subClause->hasSpread()) {
+                    // Spread arrays into the result, skip null
+                    if ($match === null) {
+                        continue;
+                    } elseif (is_array($match)) {
+                        foreach ($match as $item) {
+                            if (is_array($item)) {
+                                foreach ($item as $subItem) {
+                                    $result[] = $subItem;
+                                }
+                            } else {
+                                $result[] = $item;
+                            }
+                        }
+                    } else {
+                        $result[] = $match;
+                    }
+                } elseif ($subClause->getName() === null) {
+                    // No spread, no name - add as positional
                     $result[] = $match;
                 }
             }
             if ($result === []) {
                 $result = null;
-            } else {
-                $result = array_values($result);
             }
         } catch (ExceptionInterface $e) {
             $state->offset = $offset;
@@ -115,17 +125,13 @@ class Sequence extends NonTerminal {
         if (count($this) === 1) {
             $c = $this[0];
             $cl = $c->optimize($grammar);
-            if ($cl->getParent() !== null) {
-                die("HAS REF AFTER CLONE");
-            }
+            assert($cl->getParent() === null, "Optimized clause should not have parent reference");
             return $cl;
         } else {
             $c = clone $this;
             foreach ($c as $k => $clause) {
                 $subClause = $clause->optimize($grammar);
-                if ($subClause->getParent() !== null) {
-                    die("SUB HAS REF AFTER CLONE");
-                }
+                assert($subClause->getParent() === null, "Optimized sub-clause should not have parent reference");
                 $c[$k] = $subClause;
             }
             return $c;
@@ -138,4 +144,44 @@ class Sequence extends NonTerminal {
         return $di;
     }
 
+    public function getMinByteLength(): int {
+        $total = 0;
+        foreach ($this as $subClause) {
+            if ($subClause instanceof Snippet || $subClause instanceof Commit) {
+                continue;
+            }
+            // Optional elements don't contribute to minimum
+            if ($subClause->isOptional()) {
+                continue;
+            }
+            $total += $subClause->getMinByteLength();
+        }
+        return $total;
+    }
+
+    public function getFirstBytes(): ?string {
+        $chars = '';
+        foreach ($this as $subClause) {
+            if ($subClause instanceof Snippet || $subClause instanceof Commit) {
+                continue;
+            }
+            // Skip optional elements - they might not be present
+            if ($subClause->isOptional()) {
+                continue;
+            }
+
+            $subChars = $subClause->getFirstBytes();
+            if ($subChars === null) {
+                return null; // Unknown chars, can't optimize
+            }
+            $chars .= $subChars;
+
+            // If this clause requires at least 1 char, don't look further
+            if ($subClause->getMinByteLength() > 0) {
+                break;
+            }
+            // Otherwise this clause can match empty, continue to next
+        }
+        return $chars !== '' ? count_chars($chars, 3) : null;
+    }
 }

@@ -4,12 +4,12 @@ namespace Charm\Parsing\Clause;
 use Charm\Parsing\Util\ExceptionTools;
 use Charm\Parsing\Error\{
     CustomError,
-    ParseError
+    ParseError,
+    SnippetError
 };
 use Charm\Parsing\{
     State,
-    Clause,
-    BoxedResult
+    Clause
 };
 
 /**
@@ -86,201 +86,115 @@ class Snippet extends Terminal {
     }
 
     private function compile(): array {
-        $code = $this->originalSource;
         $variables = [];
-        $tokens = token_get_all('<?php '.$code);
-        $removed = array_shift($tokens); // remove the '<?php' token
+        $tokens = token_get_all('<?php '.$this->originalSource);
+        array_shift($tokens); // remove the '<?php' token
         $code = '';
-        $stack = []; // for matching braces
-        $stackLength = 0;
-        $lineNumber = 1;
-        $offset = 0;
-        $l = count($tokens);
-        $inQuotedString = false;
-        $token = null;
-        for ($i = 0; $i < $l; $i++) {
-            if ($token !== null) {
-                $offset += is_array($token) ? strlen($token[1]) : strlen($token);
-            }
+        $localVars = []; // variables that should stay local (fn params, foreach vars, for vars)
+        $parenDepth = 0;
+        $inFnParams = false;
+        $inForeach = false; // after 'as' in foreach
+
+        for ($i = 0, $n = count($tokens); $i < $n; $i++) {
             $token = $tokens[$i];
-            if (isset($token[1])) {
-                // this is not a built-in token
-                if (method_exists($this, $fn = 'fn_'.trim($token[1]))) {
-                    $code .= '$this->'.$fn;
-                    continue;
-                }
+            $type = is_array($token) ? $token[0] : $token;
+
+            // Track function/fn - their parameters become local variables
+            if ($type === T_FUNCTION || $type === T_FN) {
+                $code .= is_array($token) ? $token[1] : $token;
+                $inFnParams = 'pending'; // will become true at next '('
+                continue;
             }
 
-            /**
-             * Check if the code is allowed to pass through
-             */
-            if ($token[0] === '"') {
-                // custom string parsing
-                $code .= $token[0];
-                $isIn = true;
-                for($i++; $i < $l; $i++) {
-                    $token = $tokens[$i];
-                    switch($token[0]) {
-                        case T_ENCAPSED_AND_WHITESPACE:
-                            if (!$isIn) {
-                                $code .= '."';
-                                $isIn = true;
-                            }
-                            $code .= $token[1];
-                            break;
-                        case T_VARIABLE:
-                            if ($isIn) {
-                                $code .= '".';
-                                $isIn = false;
-                            }
-                            $name = substr($token[1], 1);
-                            if ($name[0] === '_' && is_numeric(substr($name, 1))) {
-                                $name = (int) substr($name, 1);
-                            }
-                            $code .= '$_context['.var_export($name, true).']';
-                            break;
-                        case T_CURLY_OPEN:
-                            assert($isIn, "Curly open while not \$isIn");
-                            $code .= '".';
-                            $isIn = false;
-                            continue 2;
-                        case '}':
-                            assert(!$isIn, "Curly close while not \$isIn");
-                            $code .= '."';
-                            $isIn = true;
-                            continue 2;
-                        case '[': case ']':
-                            $code .= $token[0];
-                            break;
-                        case T_NUM_STRING:
-                            $code .= $token[1];
-                            break;
-                        case T_STRING:
-                        case T_CONSTANT_ENCAPSED_STRING:
-                            $code .= $token[1];
-                            break;
-                        case T_LNUMBER:
-                            $code .= $token[1];
-                            break;
-                        case '"':
-                            assert($isIn, "What happens here while validating PHP code?");
-                            if ($isIn) {
-                                $isIn = false;
-                                $code .= $token[0];
-                            } else {
-//die("QUOTE WHILE NOT IN\n");
-//                                echo "OUT\n";
-                            }
-                            continue 3;
-                        default:
-                            throw new ParseError($this->originalSource, 3 + $offset, "Illegal string token ".self::tokenString($token)." on :location");
+            // Track foreach - variables after 'as' are local
+            if ($type === T_FOREACH) {
+                $code .= 'foreach';
+                continue;
+            }
+            if ($type === T_AS) {
+                $code .= ' as ';
+                $inForeach = true;
+                continue;
+            }
+
+            // Track for loop - variables in init/condition/increment are local
+            if ($type === T_FOR) {
+                $code .= 'for';
+                // Scan ahead to find the for(;;) and collect any assigned variables
+                $forDepth = 0;
+                while (++$i < $n) {
+                    $t = $tokens[$i];
+                    $tt = is_array($t) ? $t[0] : $t;
+                    $code .= is_array($t) ? $t[1] : $t;
+                    if ($tt === '(') $forDepth++;
+                    elseif ($tt === ')') {
+                        $forDepth--;
+                        if ($forDepth === 0) break;
+                    }
+                    // Collect variables being assigned in for() header
+                    elseif ($tt === T_VARIABLE) {
+                        $localVars[substr($t[1], 1)] = true;
                     }
                 }
-                assert(false, "Failed parsing quoted string");
-            } elseif (isset(self::SPECIAL[$token[0]]) && in_array($token[1], self::SPECIAL[$token[0]])) {
-/*
-                if (!in_array($token[1], self::SPECIAL[$token[0]])) {
-                    throw new ParseError($this->originalSource, 3 + $offset, "Illegal token ".self::tokenString($token)." on :location");
-                }
-*/
-            } elseif ($token[0] === \T_NEW) {
-                $i++;
-                $code .= "new";
-                $offset += 3;
-
-                // expect whitespace
-                for (; $tokens[$i][0] === T_WHITESPACE; $i++) {
-                    $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
-                    $code .= $tokens[$i][1];
-                }
-                // expect valid class identifier
-                switch ($tokens[$i][0]) {
-                    case \T_STRING :
-                    case \T_NAME_QUALIFIED :
-                        if (class_exists($this->namespace . $tokens[$i][1])) {
-                            $code .= $this->namespace . $tokens[$i][1];
-                            $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
-                            continue 2;
-                        } else {
-                            throw new ParseError($this->originalSource, 3 + $offset, "Unknown class ".self::tokenString($tokens[$i])." on :location");
-                        }
-                    case \T_NAME_FULLY_QUALIFIED :
-                        if ($this->namespace === "\\") {
-                            if (!class_exists($tokens[$i][1])) {
-                                throw new ParseError($this->originalSource, 3 + $offset, "Unknown class ".self::tokenString($tokens[$i])." on :location");
-                            } else {
-                                $code .= $tokens[$i][1];
-                                $offset += is_array($tokens[$i]) ? strlen($tokens[$i][1]) : strlen($tokens[$i]);
-                                continue 2;
-                            }
-                        } else {
-                            throw new ParseError($this->originalSource, 3 + $offset, "Qualified class names are not allowed. Classes must exist in the '".$this->namespace."' namespace or below.");
-                        }
-                        break;
-                    default :
-                        throw new ParseError($this->originalSource, 3 + $offset, "Illegal class identifier ".self::tokenString($tokens[$i])." on :location");
-                }
-            } elseif ($token[0] === \T_STRING) {
-                // A function or a class in the current namespace
-                if ($this->namespace !== "") {
-                    $finalName = $this->namespace . $token[1];
-                } else {
-                    $finalName = $token[1];
-                }
-                if (class_exists($finalName)) {
-                    $token[1] = $finalName;
-                } elseif (function_exists($finalName)) {
-                    $token[1] = $finalName;
-                } else {
-                    throw new ParseError($this->originalSource, 3 + $offset, "Unknown identifier ".self::tokenString($token)." on :location");
-                }
-            } elseif ($token[0] === ($stack[$stackLength-1] ?? null)) {
-                if ($token[0] === '"') {
-                    $inQuotedString = false;
-                }
-                $stackLength--;
-            } elseif (isset(self::BRACES[$token[0]])) {
-                if ($token[0] === '"') {
-                    $inQuotedString = true;
-                }
-                $stack[$stackLength++] = self::BRACES[$token[0]];
-            } elseif (in_array($token[0], self::BRACES)) {
-                if ($stackLength > 0) {
-                    throw new ParseError($this->originalSource, 3 + $offset, "Unexpected ".self::tokenString($token)." on :location, expected ".self::tokenString($stack[$stackLength-1]));
-                } else {
-                    throw new ParseError($this->originalSource, 3 + $offset, "Unexpected ".self::tokenString($token)." on :location");
-                }
-/*
-            } elseif ($token[0] === '$' && isset($tokens[$i+1]) && $tokens[$i+1][0] === T_LNUMBER) {
-                $tokens[$i+1][0] = T_VARIABLE;
-                $tokens[$i+1][1] = '$'.$tokens[$i+1][1];
-                $tokens[$i+1][2] = $offset;
                 continue;
-*/
-            } elseif (!in_array($token[0], self::LEGAL_TOKENS)) {
-                throw new ParseError($this->originalSource, 3 + $offset, "Illegal token ".self::tokenString($token)." on :location");
             }
 
-            switch ($token[0]) {
-                case T_VARIABLE:
-                    $name = substr($token[1], 1);
+            // Track parentheses for fn parameter detection
+            if ($type === '(') {
+                if ($inFnParams === 'pending') {
+                    $inFnParams = true;
+                    $parenDepth = 1;
+                } elseif ($inFnParams === true) {
+                    $parenDepth++;
+                }
+                $code .= '(';
+                continue;
+            }
+            if ($type === ')') {
+                if ($inFnParams === true) {
+                    $parenDepth--;
+                    if ($parenDepth === 0) {
+                        $inFnParams = false;
+                    }
+                }
+                $inForeach = false; // end of foreach header
+                $code .= ')';
+                continue;
+            }
+
+            // Collect function parameter variables
+            if ($inFnParams === true && $type === T_VARIABLE) {
+                $localVars[substr($token[1], 1)] = true;
+                $code .= $token[1];
+                continue;
+            }
+
+            // Collect foreach loop variables (after 'as')
+            if ($inForeach && $type === T_VARIABLE) {
+                $localVars[substr($token[1], 1)] = true;
+                $code .= $token[1];
+                continue;
+            }
+
+            // Transform variables: local vars stay local, everything else goes to $_context
+            if ($type === T_VARIABLE) {
+                $name = substr($token[1], 1);
+                if (isset($localVars[$name])) {
+                    $code .= $token[1]; // keep local variable as-is
+                } else {
                     if ($name[0] === '_' && is_numeric(substr($name, 1))) {
                         $name = (int) substr($name, 1);
                     }
                     $variables[] = $name;
                     $code .= '$_context['.var_export($name, true).']';
-                    break;
-                default :
-                    if (is_string($token)) {
-                        $code .= $token;
-                    } else {
-                        $code .= $token[1];
-                    }
+                }
+            } elseif (is_array($token)) {
+                $code .= $token[1];
+            } else {
+                $code .= $token;
             }
         }
-        if ($stackLength > 0) {
-            throw new ParseError($this->originalSource, 3 + $offset, "Expected ".self::tokenString($stack[$stackLength-1])." on :location");
-        }
+
         return ['code' => $code, 'variables' => $variables];
     }
 
@@ -304,20 +218,6 @@ class Snippet extends Terminal {
         throw new CustomError($reason ?? "Unknown parse error");
     }
 
-    /**
-     * Snippet function for returning a clause result. When returning a value using
-     * this function, the result is processed as if it was returned by any other
-     * clause.
-     *
-     * Without this function, the return value of a snippet becomes the return value
-     * of the sequence.
-     *
-     * `return as_clause(true);`
-     */
-    private function fn_as_clause($value) {
-        return new BoxedResult($value);
-    }
-
     public function interpret(State $state, array $context, array $args=null) {
         // in case of recursion, we'll keep a reference to any previous state
         $previousState = $this->state;
@@ -331,9 +231,12 @@ class Snippet extends Terminal {
             $ctx = new Snippet\Context($context + [ 'context' => $context, 'state' => &$state->globals ]);
             return ($this->invoker)($ctx);
         } catch (\Throwable $e) {
-            echo $e->getMessage()."\n";
-            var_dump($ctx, $this->invokerSource);
-            die();
+            // Wrap the exception with snippet context for better error messages
+            throw new SnippetError(
+                "Error in snippet: " . $e->getMessage(),
+                $this->invokerSource,
+                $e
+            );
         } finally {
             $this->state = $previousState;
             restore_error_handler();
@@ -353,6 +256,14 @@ class Snippet extends Terminal {
         }, $message);
 
         throw new CustomError($message, $severity);
+    }
+
+    public function getMinByteLength(): int {
+        return 0; // Snippets don't consume input
+    }
+
+    public function getFirstBytes(): ?string {
+        return null; // Snippets don't consume input
     }
 
     const BRACES = [

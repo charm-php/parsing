@@ -1,274 +1,353 @@
-Charm/Parsing
-=============
+# Charm/Parsing
 
-A parsing library which will let you easily parse almost anything from sentences
-to programming languages to a custom configuration language.
+A PEG parser for PHP. Parse expressions, JSON, SQL, or any context-free grammar.
 
-With this library you can easily make a function like these:
-
- - `calc("1+2^3*4");`
- - `interpret("if visitorCount > 10 return true; else return false;");`
-
-In fact, to make a parser for the expression above, you simply have to create
-the following class:
-
+```php
+$result = Charm\cpeg_parse('
+    Expr = Expr "**" Expr   %assoc=right
+         | Expr "*" Expr
+         | Expr "/" Expr
+         | Expr "+" Expr
+         | Expr "-" Expr
+         | "(" Expr ")"
+         | /[0-9]+/
+', '2+3*4**2');
+// Returns: ["2", "+", ["3", "*", ["4", "**", "2"]]]
+// Precedence: ** > * / > + - (like JavaScript)
 ```
-<?php
-class MyExpressionParser extends Charm\Parser {
-    const GRAMMAR = <<<'GRAMMAR
 
-    Expr
-        = Expr "^" Expr                 %assoc=right
-                                        <?
-                                            return $_0 ^ $_2;
-                                        ?>
-        | Expr ("*" | "/") Expr         <?
-                                            if ($_1 == "*")
-                                                return $_0 * $_2;
-                                            else
-                                                return $_0 / $_2;
-                                        ?>
-        | Expr ("+" | "-") Expr         <?
-                                            if ($_1 == "+")
-                                                return $_0 + $_2;
-                                            else
-                                                return $_0 - $_2;
-                                        ?>
-        | Number
+## Installation
 
-    Number
-        = /[1-9][0-9]*|0/               <? return intval($_0); ?>
+```bash
+composer require charm/parsing
+```
 
-    GRAMMAR;  
+## Quick Start
+
+### One-liner parsing
+
+```php
+use function Charm\cpeg_parse;
+
+// Parse and get AST
+$ast = cpeg_parse('Number = /[0-9]+/', '42');
+
+// Parse and evaluate
+$result = cpeg_parse('
+    Expr = Expr "*" Expr  <? return $_0 * $_2; ?>
+         | Expr "+" Expr  <? return $_0 + $_2; ?>
+         | /[0-9]+/       <? return intval($_0); ?>
+', '2+3*4');
+// Returns: 14
+```
+
+### Parser class
+
+```php
+class Calculator extends Charm\Parser {
+    const GRAMMAR = <<<'GRAMMAR'
+        Expr = Expr "*" Expr  <? return $_0 * $_2; ?>
+             | Expr "+" Expr  <? return $_0 + $_2; ?>
+             | /[0-9]+/       <? return intval($_0); ?>
+    GRAMMAR;
 }
+
+$calc = new Calculator();
+echo $calc->parse('2+3*4'); // 14
 ```
 
-To use this expression parser:
+### Compiled parser (10x faster)
 
-```
-<?php
-$parser = new MyExpressionParser();
-echo $parser->parse("1+2"); // output: 3
-```
-
-
-Quick Start
------------
-
-The easiest way to begin parsing is using the `Charm\cpeg_parse()` method.
-
-Syntax:
-
-```
-cpeg_parse(string $expression, string $subject, array $initialState=[]): ?array;
+```bash
+# Generate standalone PHP class
+vendor/bin/charm-compile grammar.peg -o Parser.php -c MyParser
 ```
 
-Example for parsing a JSON:
+```php
+use Charm\Parsing\Compiler\GrammarCompiler;
 
-```
-use function Charm\cpeg_parse;
-
-$expression = '
-    Value   =   Number | String | "true" | "false" | "null" | Object | Array
-    Array   =   "[" (Value ("," Value)*)? "]"
-    Object  =   "{" (String ":" Value ("," String ":" Value)*)? "}"
-    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
-    String  =   /"(\\[\\"]|[^"])*"/
-';
-
-$result = cpeg_parse($expression, '[1,2,"A string",{"key":[3,4]}');
-
+$compiler = new GrammarCompiler();
+$code = $compiler->compile($grammar, 'MyParser', [
+    'namespace' => 'App\\Parser',
+]);
+file_put_contents('MyParser.php', $code);
 ```
 
-Example for parsing an expression:
+---
+
+## Grammar Reference
+
+### Rules
 
 ```
-use function Charm\cpeg_parse;
-
-$expression = '
-    Expr    =   Expr "^" Expr                   %assoc=right
-            |   Expr ("*" | "/") Expr
-            |   Expr ("+" | "-") Expr
-            |   Number
-    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
-';
-
-$result = cpeg_parse($expression, '1*2+3*4');
+RuleName = clause
 ```
 
-Building a parse tree
----------------------
-
-Generally, the parser will generate a structured array which you can traverse
-however you like directly from the terminal symbols you use in the grammar.
-
-If you would like to generate a parse tree or in other ways process the data
-while parsing is underway, you can embed snippets in the grammar by enclosing 
-PHP code inside `<?` and `?>` tokens.
+Rules define named patterns. The first rule is the entry point.
 
 ```
-use function Charm\cpeg_parse;
-
-$expression = '
-    Expr    =   Expr "^" Expr                   %assoc=right
-                <?
-                    return $_0 ^ $_2;
-                ?>
-            |   Expr ("*" | "/") Expr
-                <?
-                    if ($_1 === "*") return $_0 * $_2; ?>
-                    else return $_0 / $_2;
-                ?>
-            |   Expr ("+" | "-") Expr
-                <?
-                    if ($_1 === "+") return $_0 + $_2; ?>
-                    else return $_0 - $_2;
-                ?>
-            |   Number
-                <?
-                    return floatval($_0);
-                ?>
-
-    Number  =   /(0|[1-9][0-9]*)(\.[0-9]+)?/
-';
-
-$result = cpeg_parse($expression, '1*2+3*4');
+Greeting = "hello" Name
+Name = /[a-z]+/i
 ```
 
-
-Introduction to parsing
------------------------
-
-There are tons of examples online for writing grammars. It is very similar to parsing
-regular expressions, but with a simpler and more verbose syntax.
-
-The syntax is called the language grammar for whatever you're parsing.
-
-### Terminology
-
-A lot of terminology exists within the parsing academia. It is difficult to get a full
-and complete understanding of all of this. Here is an example "grammar" which we will
-use to explain the most important terms when talking about grammars and parsing:
+Rules can have descriptions (for error messages):
 
 ```
-Statement
-    =   Expression
-
-Expression
-    =   Expression "+" Expression
-    |   Expression "-" Expression
-    |   Number
-
-Number
-    =   /[0-9]+/
+Number "integer" = /[0-9]+/
 ```
 
-The above *grammar* is written in *BNF* form.
+Alternative assignment operators: `=`, `::=`, `:=`, `->`
 
-Grammar
-: A grammar contains a set ot *rules* for parsing a string. For a programmer, this is
-    an analog to a full program. `Statement`, `Expression` and `Number` are the names
-    of the rules in the above grammar.
-
-BNF
-: Short for "Backus-Naur form" and is a generic term for grammars in this style.
-
-Rule
-: Rules are the main constituents of a grammar. For a programmer, this is like
-    functions. Rules consists of a `Clause` which is similar to an expression in
-    a programming language. A clause can be very simple, like in `Statement` where
-    the clause is simply `Expression`. Clauses can be more advanced, like in
-    `Expression` where you see the or-*operator* `|` as well as `"+"` and `"-"`.
-
-Goal
-: The first rule in the grammar is the *goal* that we're parsing for. In the above
-    grammar you can see that `Statement` is the goal.
-
-Clause
-: If a rule is a function, then a clause is a *function call*. There are two types
-    of clauses; built-in clauses which actually match the source code, and clauses
-    which invoke a rule. The built-in clauses are called *terminal clauses*, and
-    clauses which invoke other rules are called *non-terminal clauses*.
-
-Non-Terminal clause
-: A clause which simply refers to another rule.
-
-Terminal clause
-: A clause which will actually match the source string and bring the parsing
-    process forward or cause it to fail. See below for a summary of all the
-    terminal clauses supported in this parser.
-
-Operator
-: If you want to accept either "+" or "-", you can use the `|` operator like
-    this: `"+" | "-"`. The `|` operator is the only binary operator we need
-    for parsing. Also there are unary suffix operators: `?`, `+` and `*` which 
-    you may recognize from regular expressions, as well as `&` and `!` unary
-    prefix operators.
-
-
-### Built in terminal clauses
-
-`"str"`
-: Expect the characters `str` in the source. You can use both single and double
-    quotes to write this clause. Use `\"` or `\'` to escape the quote symbol.
-
-`/regex/`
-: Expect the regular expression to match with the source at the current offset.
-
-`[a-z]`
-: Match characters in the range `a` to `z`.
-
-`[abc]`
-: Match one of the characters `a`, `b` or `c`.
-
-`^`
-: Matches only at the start of the source file.
-
-`$`
-: Matches only at the end of the source file.
-
-`.`
-: Matches any single UTF-8 character. This clause will only fail at the end
-    of the file.
-
-`(` and `)`
-: Parentheses can be used to group several clauses together.
-
-
-"Snippets" - inline PHP Code
-----------------------------
-
-To build a better parse tree, or to implement functionality you can
-use embedded PHP code.
-
-Code is embedded via short open and close tags:
+### Comments
 
 ```
-SumExpression
-    = MulExpression "+" SumExpression
-      <?
-        /* inline PHP code */
-        ?>
+# Line comment (shell style)
+// Line comment (C++ style)
+/* Block comment */
 ```
 
-The PHP code has access to the value of the clauses that was previously
-matched via the variables `$_0`, `$_1` and so on.
+### Terminals
 
-Clauses which don't capture data, such as `^` and `$` are not included.
+**Literals and patterns:**
 
-You can use a special variable named `$globals` to record global state
-which will remain availbale between different snippets.
+| Syntax | Description |
+|--------|-------------|
+| `"text"` | Literal string match |
+| `'text'` | Literal string match (single quotes) |
+| `/regex/` | Regular expression |
+| `[a-z]` | Character class (shorthand for `/[a-z]/`) |
 
-The return value from a snippet will become the return value for the
-entire rule.
+**Special symbols:**
 
-Return values `true` and `false` have special meaning:
+| Symbol | Description |
+|--------|-------------|
+| `.` | Any single UTF-8 character |
+| `^` | Start of input (zero-width assertion) |
+| `$` | End of input (zero-width assertion) |
+| `\nothing` | Always succeeds without consuming input (epsilon) |
 
- * Returning `true` will cause parsing to resume, but nothing will be
-   added to the result.
- * Returning `false` will cause parsing of thae clause to fail and the
-   parser will attempt the next choice.
- * Any other return value will be added to the parse tree.
+### Operators
 
-A snippet can trigger a parse error by calling the `error()` function.
+| Syntax | Name | Description |
+|--------|------|-------------|
+| `A B` | Sequence | Match A then B |
+| `A \| B` | Choice | Match A or B (try in order) |
+| `A / B` | Choice | Same as `\|` (alternative syntax) |
+| `A?` | Optional | Match A zero or one time |
+| `A*` | Zero or more | Match A zero or more times |
+| `A+` | One or more | Match A one or more times |
+| `(A B)` | Group | Group clauses together |
+| `&A` | And-predicate | Succeed if A matches, don't consume |
+| `!A` | Not-predicate | Succeed if A fails, don't consume |
+| `...A` | Spread | Flatten array results into parent |
+| `@` | Commit | Prevent backtracking past this point |
 
+The spread operator `...` flattens array results into the parent sequence:
+
+```
+# Without spread: [["a","b"], ["a","b"], "end"]
+Items = ("a" "b")* "end"
+
+# With spread: ["a", "b", "a", "b", "end"]
+Items = ...("a" "b")* "end"
+
+# Spread with named capture: ...name:Clause
+Program = ...body:Statement*  # $body = array, $_0/$_1/... = elements
+```
+
+The commit operator `@` improves error messages by preventing the parser from
+trying other alternatives after a definitive match:
+
+```
+Statement = "if" @ "(" Expr ")" Block   # Once "if" matches, commit
+          | "while" @ "(" Expr ")" Block
+          | Expr ";"
+```
+
+Use `\nothing` for explicit empty alternatives:
+
+```
+OptionalName = Name | \nothing   # Match name or nothing
+```
+
+### Named captures
+
+```
+Pair = key:String ":" value:Number
+```
+
+Access in snippets as `$key` and `$value`.
+
+### Snippets (inline PHP)
+
+```
+Number = /[0-9]+/  <? return intval($_0); ?>
+```
+
+Variables available:
+- `$_0`, `$_1`, ... — matched values by position
+- `$name` — named captures
+- `$state` — persistent state across snippets
+
+Return values:
+- Any value — becomes the rule's result
+- `true` — succeed but add nothing to result
+- `false` — fail this alternative, try next
+
+### Pragmas
+
+```
+Expr = Expr "**" Expr  %assoc=right   # Right associative
+     | Expr "+" Expr                   # Left associative (default)
+     | Expr "<" Expr   %assoc=none    # Non-associative (a < b < c fails)
+```
+
+Values: `%assoc=left` (default), `%assoc=right`, `%assoc=none`
+
+---
+
+## Example Grammars
+
+### Calculator with precedence
+
+```php
+$calc = Charm\cpeg_parse('
+    Expr = Expr _ "**" _ Expr  %assoc=right  <? return pow($_0, $_4); ?>
+         | Expr _ "*" _ Expr                 <? return $_0 * $_4; ?>
+         | Expr _ "/" _ Expr                 <? return $_0 / $_4; ?>
+         | Expr _ "+" _ Expr                 <? return $_0 + $_4; ?>
+         | Expr _ "-" _ Expr                 <? return $_0 - $_4; ?>
+         | Primary
+
+    Primary = "(" _ Expr _ ")"               <? return $_2; ?>
+            | Number
+
+    Number = /[0-9]+(\.[0-9]+)?/             <? return floatval($_0); ?>
+    _      = /\s*/
+', '2**3**2 + 1');
+// Returns: 513.0 (2^(3^2) + 1 = 2^9 + 1)
+```
+
+### JSON parser
+
+```php
+$json = Charm\cpeg_parse('
+    JSON   = _ val:Value _                         <? return $val; ?>
+
+    Value  = Object
+           | Array
+           | String
+           | Number
+           | "true"   <? return true; ?>
+           | "false"  <? return false; ?>
+           | "null"   <? return null; ?>
+
+    Object = "{" _ "}"                             <? return (object)[]; ?>
+           | "{" _ p:Pairs _ "}"                   <? return (object)$p; ?>
+
+    Pairs  = p:Pair ps:("," _ Pair)*               <?
+               $result = [$p[0] => $p[1]];
+               foreach ($ps as $x) $result[$x[1][0]] = $x[1][1];
+               return $result;
+           ?>
+
+    Pair   = k:String _ ":" _ v:Value              <? return [$k, $v]; ?>
+
+    Array  = "[" _ "]"                             <? return []; ?>
+           | "[" _ i:Items _ "]"                   <? return $i; ?>
+
+    Items  = v:Value vs:("," _ Value)*             <?
+               $result = [$v];
+               foreach ($vs as $x) $result[] = $x[1];
+               return $result;
+           ?>
+
+    String = /"([^"\\\\]|\\\\.)*"/                 <? return json_decode($_0); ?>
+
+    Number = /-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/
+                                                   <? return strpos($_0, ".") !== false
+                                                        ? floatval($_0) : intval($_0); ?>
+
+    _      = /\\s*/                                <? return true; ?>
+', '{"name": "Alice", "scores": [95, 87, 92]}');
+// Returns: stdClass with name="Alice", scores=[95, 87, 92]
+```
+
+### SQL SELECT parser
+
+```php
+$sql = Charm\cpeg_parse('
+    Select   = "SELECT" _ cols:Columns _ "FROM" _ table:Ident where:Where? _
+               <? return ["select" => $cols, "from" => $table, "where" => $where]; ?>
+
+    Columns  = "*"                                 <? return "*"; ?>
+             | Column ("," _ Column)*              <?
+                   $cols = [$_0];
+                   foreach ($_1 as $c) $cols[] = $c[1];
+                   return $cols;
+               ?>
+
+    Column   = Ident
+
+    Where    = _ "WHERE" _ Condition               <? return $_1; ?>
+
+    Condition = left:Ident _ op:Op _ right:Value
+                <? return ["left" => $left, "op" => $op, "right" => $right]; ?>
+
+    Op       = "=" | "!=" | "<>" | "<=" | ">=" | "<" | ">"
+
+    Value    = String | Number | Ident
+
+    String   = /"[^"]*"/                           <? return trim($_0, "\""); ?>
+    Number   = /[0-9]+/                            <? return intval($_0); ?>
+    Ident    = /[a-zA-Z_][a-zA-Z0-9_]*/
+
+    _        = /\s*/                               <? return true; ?>
+', 'SELECT id, name FROM users WHERE status = "active"');
+// Returns: ["select" => ["id", "name"], "from" => "users",
+//           "where" => ["left" => "status", "op" => "=", "right" => "active"]]
+```
+
+---
+
+## CLI Tool
+
+```bash
+# Compile grammar to PHP class
+vendor/bin/charm-compile grammar.peg -c MyParser -o src/MyParser.php
+
+# With namespace
+vendor/bin/charm-compile grammar.peg -c Parser -n "App\\Parser" -o src/Parser.php
+
+# From stdin
+echo 'Num = /[0-9]+/' | vendor/bin/charm-compile - -c NumParser
+
+# Options
+#   -o, --output <file>     Output file (default: stdout)
+#   -c, --class <name>      Class name
+#   -n, --namespace <ns>    PHP namespace
+#   -e, --extends <class>   Base class
+#   -i, --implements <if>   Interfaces (comma-separated)
+#   -q, --quiet             No progress messages
+```
+
+---
+
+## Performance
+
+Compiled parsers are ~10x faster than interpreted:
+
+```
+Expression          Interpreted    Compiled     Speedup
+1+2                    0.014 ms    0.001 ms       10x
+1+2*3                  0.020 ms    0.002 ms       10x
+1+2+3+4+5              0.037 ms    0.004 ms       10x
+```
+
+Run benchmarks: `php benchmarks/run.php`
+
+---
+
+## License
+
+GPL-3.0

@@ -6,7 +6,7 @@ use Charm\Parsing\{
     State,
     Clause,
     Rule,
-    BoxedResult,
+    Signal,
     Grammar
 };
 use Charm\Parsing\Error\CustomError;
@@ -42,7 +42,7 @@ class OrderedChoice extends NonTerminal {
             }
             */
             if ($result === null) {
-                return false;
+                return Signal::MISS;
             }
             return $result->value;
         } else {
@@ -50,14 +50,14 @@ class OrderedChoice extends NonTerminal {
                 $state->offset = $offset;
 
                 $result = $clause->parse($state, []);
-                if ($result === false) {
+                if ($result === Signal::MISS) {
                     // try the next choice
                     continue;
                 }
                 return $result;
             }
             $state->offset = $offset;
-            return false;
+            return Signal::MISS;
         }
     }
 
@@ -68,40 +68,58 @@ class OrderedChoice extends NonTerminal {
      * @param $floor The lowest precedence we're allowed to return
      */
     private function lrParse(State $state, int $floor=0, bool $rightAssociative=false): ?Result {
-        static $startingDepth = 0;
-        $prefix = function() use ($state) {
-            return substr($state->source, 0, $state->offset)."¤".substr($state->source, $state->offset).str_repeat("  ", count(debug_backtrace())-8)." ";
-        };
-        //echo $prefix()."starting lrParse(floor=$floor)\n";
-
         $offset = $state->offset;
 
-        //echo $prefix()." - searching for a \$start clause\n";
+        // First, find a non-left-recursive "start" value (e.g., a number or parenthesized expr)
         $start = null;
 
-        $startingDepth++;
+        // Track which rule is currently in its "finding start" phase via State->extra.
+        // This allows:
+        // - Prefix operators: when Expr re-enters itself while finding start, return early
+        // - Parentheses: when Expr is entered from Primary (different rule), do full parse
+        $findingStartKey = 'lrFindingStart';
+        $prevFinding = $state->extra[$findingStartKey] ?? null;
+        $wasAlreadyFindingThis = ($prevFinding === $this->ruleName);
+        $state->extra[$findingStartKey] = $this->ruleName;
+
         foreach ($this->prepared as $i => $prep) {
             if ($prep->isLeftRecursive) {
                 continue;
             }
 
-            //echo $prefix()." - trying $i at ".$state->offset." `".$prep->clause."`\n";
+            // Check if this non-LR clause is a simple reference to a different rule.
+            // If so, clear finding-start to allow fresh expression contexts (like
+            // parentheses). If the clause directly contains Expr references (like
+            // prefix operators), keep finding-start set to prevent them from
+            // capturing operators meant for the outer expression.
+            $isSimpleRuleRef = ($prep->clause instanceof Identifier &&
+                                $prep->clause->getIdentifier() !== $this->ruleName);
+
+            if ($isSimpleRuleRef) {
+                $state->extra[$findingStartKey] = $prevFinding;
+            }
+
             $start = $this->parsePreparedClause($state, $prep, null);
+
+            if ($isSimpleRuleRef) {
+                $state->extra[$findingStartKey] = $this->ruleName;
+            }
+
             if ($start !== null) {
-                //echo $prefix()." - found a \$start result to use\n";
                 break;
-            } else {
-                //echo $prefix()." - did not match\n";
             }
         }
 
-        if ($startingDepth-- > 1) {
-            //echo "Returning starting depth $startingDepth with"; var_dump($start);
+        // Restore previous state
+        $state->extra[$findingStartKey] = $prevFinding;
+
+        if ($wasAlreadyFindingThis) {
+            // We re-entered this rule's lrParse while it was already finding start
+            // (e.g., prefix operator's right-hand side) - return just the start
             return $start;
         }
 
         if ($start === null) {
-            //echo $prefix()."ending lrParse: no parses matched\n";
             assert($state->offset === $offset, "Offset not rewound after failed parse");
             return null;
         }
@@ -163,7 +181,7 @@ class OrderedChoice extends NonTerminal {
         if (!$prep->isLeftRecursive) {
             // for non-left-recursive clauses, we can use the standard parsing algorithm
             $result = $prep->clause->parse($state, []);
-            if ($result === false) {
+            if ($result === Signal::MISS) {
                 //echo $prefix()."ending parsePreparedClause: parse failed\n";
                 return null;
             }
@@ -179,13 +197,6 @@ class OrderedChoice extends NonTerminal {
                 $subClause = $prep->clause[$i];
 
                 if ($subClause->getModifier() === Clause::NONE && $subClause instanceof Identifier && $subClause->getIdentifier() === $this->ruleName) {
-                    //echo $prefix()." - parsing right recursive clause $i `$subClause`\n";
-
-/*
- && $prep->clause->pragma('assoc')[0] === 'right') {
-    die("RIGHT ASS");
-}
-*/
                     $match = $this->lrParse($state, $prep->precedence, $prep->clause->pragma('assoc') !== null && $prep->clause->pragma('assoc')[0] === 'right');
 
                     if ($match !== null) {
@@ -199,24 +210,21 @@ class OrderedChoice extends NonTerminal {
                 } elseif ($subClause instanceof Snippet) {
                     //echo $prefix()." - parsing snippet $i\n";
                     $match = $subClause->parse($state, $result);
-                    if ($match instanceof BoxedResult) {
-                        $match = $match->value;
-                    } else {
-                        //echo $prefix()." - snippet finished the sequence\n";
-                        $result = $match;
-                        goto done;
-                    }
+                    // Snippets always terminate the sequence (return the result)
+                    //echo $prefix()." - snippet finished the sequence\n";
+                    $result = $match;
+                    goto done;
                 } else {
                     //echo $prefix()." - parsing normal sub-clause $i `$subClause`\n";
                     $match = $subClause->parse($state, $result);
                 }
 
-                if ($match === false) {
+                if ($match === Signal::MISS) {
                     //echo $prefix()." - not a match\n";
                     $result = null;
                     goto done;
-                } elseif ($match === true) {
-                    //echo $prefix()." - an ignored match\n";
+                } elseif ($match === Signal::HIT) {
+                    //echo $prefix()." - terminal matched with no value
                     continue;
                 } else {
                     //echo $prefix()." - matched\n";
@@ -237,7 +245,7 @@ class OrderedChoice extends NonTerminal {
             //echo $prefix()."ending parsePreparedClause: result = ".json_encode($result)."\n";
             return new Result($result, $prep->clause, $offset, $prep->precedence);
         } else {
-            die("Can't parse a left-recursive choice without a \$start provided\n");
+            throw new \LogicException("Can't parse a left-recursive choice without a \$start provided");
         }
     }
 
@@ -287,7 +295,7 @@ class OrderedChoice extends NonTerminal {
                         }
                     }
                 } elseif ($clause instanceof NonTerminal) {
-                    die("Might a ".$clause::class." $clause be left recursive?");
+                    throw new \LogicException("Unexpected NonTerminal clause in lrParse: " . $clause::class . " $clause - may be left recursive?");
                 }
                 return null;
             };
@@ -325,6 +333,29 @@ class OrderedChoice extends NonTerminal {
         return implode(" | ", $children);
     }
 
+    public function getMinByteLength(): int {
+        $min = PHP_INT_MAX;
+        foreach ($this as $choice) {
+            $choiceMin = $choice->getMinByteLength();
+            if ($choiceMin < $min) {
+                $min = $choiceMin;
+            }
+        }
+        return $min === PHP_INT_MAX ? 0 : $min;
+    }
+
+    public function getFirstBytes(): ?string {
+        $chars = '';
+        foreach ($this as $choice) {
+            $choiceChars = $choice->getFirstBytes();
+            if ($choiceChars === null) {
+                return null; // One unknown means we can't be certain
+            }
+            $chars .= $choiceChars;
+        }
+        // Deduplicate characters
+        return $chars !== '' ? count_chars($chars, 3) : null;
+    }
 }
 
 namespace Charm\Parsing\Clause\OrderedChoice;

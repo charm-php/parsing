@@ -96,4 +96,38 @@ class Identifier extends NonTerminal {
         return $di;
     }
 
+    private static array $visitedMinLength = [];
+    private static array $visitedFirstChars = [];
+
+    public function getMinByteLength(): int {
+        // Cycle detection for left-recursive rules
+        if (isset(self::$visitedMinLength[$this->identifier])) {
+            return 0; // Conservative for recursive references
+        }
+        if ($this->targetClause !== null) {
+            self::$visitedMinLength[$this->identifier] = true;
+            try {
+                return $this->targetClause->getMinByteLength();
+            } finally {
+                unset(self::$visitedMinLength[$this->identifier]);
+            }
+        }
+        return 0;
+    }
+
+    public function getFirstBytes(): ?string {
+        // Cycle detection for left-recursive rules
+        if (isset(self::$visitedFirstChars[$this->identifier])) {
+            return null; // Unknown for recursive references
+        }
+        if ($this->targetClause !== null) {
+            self::$visitedFirstChars[$this->identifier] = true;
+            try {
+                return $this->targetClause->getFirstBytes();
+            } finally {
+                unset(self::$visitedFirstChars[$this->identifier]);
+            }
+        }
+        return null;
+    }
 }
