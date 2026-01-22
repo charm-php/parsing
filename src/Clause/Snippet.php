@@ -46,6 +46,7 @@ class Snippet extends Terminal {
     protected $invokerSource;       // the full function definition
     protected $invoker;             // the compiled callback function
     protected $variables;           // the variables that the code tries to access
+    protected ?string $snippetName = null;  // registry name assigned by Grammar
 
     public function __construct(string $code, int $modifier, ?string $name, string $namespace='') {
         parent::__construct($modifier, $name);
@@ -270,6 +271,27 @@ class Snippet extends Terminal {
 
     public function getFirstBytes(): ?string {
         return null; // Snippets don't consume input
+    }
+
+    /**
+     * Get the registry name assigned to this snippet by Grammar.
+     */
+    public function getSnippetName(): ?string {
+        return $this->snippetName;
+    }
+
+    /**
+     * Set the registry name for this snippet (called by Grammar during prepare).
+     */
+    public function setSnippetName(string $name): void {
+        $this->snippetName = $name;
+    }
+
+    /**
+     * Get the compiled source code (for use by compiler).
+     */
+    public function getCompiledSource(): string {
+        return $this->compiledSource;
     }
 
     const BRACES = [

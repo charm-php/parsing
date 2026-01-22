@@ -13,6 +13,7 @@ use Charm\Parsing\Clause\{
     Regex,
     Text,
     Sequence,
+    Snippet,
     Start,
     OrderedChoice,
     EOF,
@@ -72,6 +73,13 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
      */
     private $optimized = false;
 
+    /**
+     * Registry of all snippets in the grammar, indexed by name.
+     * Names follow the pattern: RuleName_1, RuleName_2, etc.
+     * @var array<string, Snippet>
+     */
+    private array $snippets = [];
+
     public function __construct(iterable $rules, string $filename=null) {
         $this->filename = $filename;
         foreach ($rules as $rule) {
@@ -86,7 +94,46 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
     protected function prepare() {
         foreach ($this->ruleMap as $ruleName => $rule) {
             $rule->prepare($this);
+            $this->collectSnippets($ruleName, $rule->getClause());
         }
+    }
+
+    /**
+     * Recursively collect all snippets from a clause tree and register them.
+     */
+    private function collectSnippets(string $ruleName, Clause $clause): void {
+        static $counters = [];
+
+        if ($clause instanceof Snippet) {
+            if (!isset($counters[$ruleName])) {
+                $counters[$ruleName] = 0;
+            }
+            $snippetName = $ruleName . '_' . (++$counters[$ruleName]);
+            $clause->setSnippetName($snippetName);
+            $this->snippets[$snippetName] = $clause;
+        }
+
+        // Recurse into child clauses
+        if ($clause instanceof \Traversable) {
+            foreach ($clause as $child) {
+                $this->collectSnippets($ruleName, $child);
+            }
+        }
+    }
+
+    /**
+     * Get a snippet by name.
+     */
+    public function getSnippet(string $name): ?Snippet {
+        return $this->snippets[$name] ?? null;
+    }
+
+    /**
+     * Get all registered snippets.
+     * @return array<string, Snippet>
+     */
+    public function getSnippets(): array {
+        return $this->snippets;
     }
 
     public function count() {

@@ -1096,10 +1096,8 @@ class GrammarCompiler
 
     private function generateSnippetCode(Snippet $snippet, array $context, array $contextNames, string $resultVar = null): void
     {
-        // Get the original source code from the snippet
-        $rc = new \ReflectionClass($snippet);
-        $prop = $rc->getProperty('compiledSource');
-        $compiledSource = $prop->getValue($snippet);
+        // Get the compiled source code from the snippet
+        $compiledSource = $snippet->getCompiledSource();
 
         // Build parameter list - combine positional and named args
         $allArgs = [];
@@ -1140,15 +1138,21 @@ class GrammarCompiler
 
         // Handle the return value
         if (strpos($code, 'return') !== false) {
-            // Generate a snippet method with meaningful name based on current rule
-            $ruleBaseName = $this->currentRuleName
-                ? $this->toMethodName($this->currentRuleName)
-                : 'anon';
-            if (!isset($this->snippetCounters[$ruleBaseName])) {
-                $this->snippetCounters[$ruleBaseName] = 0;
+            // Use the snippet's registered name from Grammar, or generate a fallback
+            $registeredName = $snippet->getSnippetName();
+            if ($registeredName !== null) {
+                $methodName = 'snippet_' . $registeredName;
+            } else {
+                // Fallback for snippets not registered (shouldn't happen normally)
+                $ruleBaseName = $this->currentRuleName
+                    ? $this->toMethodName($this->currentRuleName)
+                    : 'anon';
+                if (!isset($this->snippetCounters[$ruleBaseName])) {
+                    $this->snippetCounters[$ruleBaseName] = 0;
+                }
+                $snippetNum = ++$this->snippetCounters[$ruleBaseName];
+                $methodName = lcfirst($ruleBaseName) . '_snippet' . $snippetNum;
             }
-            $snippetNum = ++$this->snippetCounters[$ruleBaseName];
-            $methodName = lcfirst($ruleBaseName) . '_snippet' . $snippetNum;
             $params = implode(', ', array_values($paramNames));
             $args = implode(', ', array_keys($paramNames));
 
