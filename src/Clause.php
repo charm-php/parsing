@@ -344,6 +344,14 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
         return $this->pragmas[$name] ?? null;
     }
 
+    /**
+     * Get all pragmas attached to this clause.
+     * @return array<string, Pragma>
+     */
+    public final function getPragmas(): array {
+        return $this->pragmas;
+    }
+
     public function getDescription(): string {
         $str = $this->getModifierDescription();
         $str .= $this->asString();

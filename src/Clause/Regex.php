@@ -107,4 +107,18 @@ class Regex extends Terminal {
         $this->ensureAnalyzed();
         return $this->cachedFirstBytes;
     }
+
+    /**
+     * Get the full pattern including delimiters (e.g., /abc/).
+     */
+    public function getPattern(): string {
+        return $this->pattern;
+    }
+
+    /**
+     * Get the inner pattern without delimiters (e.g., abc from /abc/).
+     */
+    public function getInnerPattern(): string {
+        return substr($this->pattern, 1, -1);
+    }
 }

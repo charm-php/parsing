@@ -61,4 +61,11 @@ class Text extends Terminal {
         }
         return $char;
     }
+
+    /**
+     * Get the literal text this clause matches.
+     */
+    public function getText(): string {
+        return $this->text;
+    }
 }
