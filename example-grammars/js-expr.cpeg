@@ -1,0 +1,238 @@
+# JavaScript Expression Grammar
+# Full operator precedence and associativity support
+#
+# Precedence (highest to lowest) is determined by alternative order.
+# Left-recursive alternatives trigger Pratt parsing generation.
+
+Expression "expression"
+    # Comma operator (lowest precedence)
+    = left:Expression "," @ right:AssignExpr        <? return ['comma', $left, $right]; ?>
+    | AssignExpr
+
+AssignExpr "expression"
+    # Assignment (right-associative)
+    = lhs:CallExpr _ "=" !"=" @ _ rhs:AssignExpr     %assoc=right   <? return ['assign', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "+=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_add', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "-=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_sub', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "*=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_mul', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "/=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_div', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "%=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_mod', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "**=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_exp', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "<<=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_shl', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ ">>=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_shr', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ ">>>=" @ _ rhs:AssignExpr  %assoc=right   <? return ['assign_ushr', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "&=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_and', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "^=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_xor', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "|=" @ _ rhs:AssignExpr    %assoc=right   <? return ['assign_or', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "&&=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_land', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "||=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_lor', $lhs, $rhs]; ?>
+    | lhs:CallExpr _ "??=" @ _ rhs:AssignExpr   %assoc=right   <? return ['assign_nullish', $lhs, $rhs]; ?>
+    | ConditionalExpr
+
+ConditionalExpr
+    # Ternary (right-associative)
+    = cond:ConditionalExpr _ "?" @ _ then:AssignExpr _ ":" _ else:AssignExpr  %assoc=right  <? return ['ternary', $cond, $then, $else]; ?>
+    | NullishExpr
+
+NullishExpr
+    = left:NullishExpr _ "??" @ _ right:LogicalOrExpr   <? return ['nullish', $left, $right]; ?>
+    | LogicalOrExpr
+
+LogicalOrExpr
+    = left:LogicalOrExpr _ "||" @ _ right:LogicalAndExpr   <? return ['or', $left, $right]; ?>
+    | LogicalAndExpr
+
+LogicalAndExpr
+    = left:LogicalAndExpr _ "&&" @ _ right:BitwiseOrExpr   <? return ['and', $left, $right]; ?>
+    | BitwiseOrExpr
+
+BitwiseOrExpr
+    = left:BitwiseOrExpr _ "|" !"|" @ _ right:BitwiseXorExpr   <? return ['bitor', $left, $right]; ?>
+    | BitwiseXorExpr
+
+BitwiseXorExpr
+    = left:BitwiseXorExpr _ "^" @ _ right:BitwiseAndExpr   <? return ['bitxor', $left, $right]; ?>
+    | BitwiseAndExpr
+
+BitwiseAndExpr
+    = left:BitwiseAndExpr _ "&" !"&" @ _ right:EqualityExpr   <? return ['bitand', $left, $right]; ?>
+    | EqualityExpr
+
+EqualityExpr
+    = left:EqualityExpr _ "===" @ _ right:RelationalExpr   <? return ['seq', $left, $right]; ?>
+    | left:EqualityExpr _ "!==" @ _ right:RelationalExpr   <? return ['sneq', $left, $right]; ?>
+    | left:EqualityExpr _ "==" !"=" @ _ right:RelationalExpr   <? return ['eq', $left, $right]; ?>
+    | left:EqualityExpr _ "!=" !"=" @ _ right:RelationalExpr   <? return ['neq', $left, $right]; ?>
+    | RelationalExpr
+
+RelationalExpr
+    = left:RelationalExpr _ "<=" @ _ right:ShiftExpr   <? return ['lte', $left, $right]; ?>
+    | left:RelationalExpr _ ">=" @ _ right:ShiftExpr   <? return ['gte', $left, $right]; ?>
+    | left:RelationalExpr _ "<" !"<" @ _ right:ShiftExpr   <? return ['lt', $left, $right]; ?>
+    | left:RelationalExpr _ ">" !">" @ _ right:ShiftExpr   <? return ['gt', $left, $right]; ?>
+    | left:RelationalExpr _ "instanceof" __ right:ShiftExpr   <? return ['instanceof', $left, $right]; ?>
+    | left:RelationalExpr _ "in" __ right:ShiftExpr   <? return ['in', $left, $right]; ?>
+    | ShiftExpr
+
+ShiftExpr
+    = left:ShiftExpr _ ">>>" @ _ right:AdditiveExpr   <? return ['ushr', $left, $right]; ?>
+    | left:ShiftExpr _ ">>" !">" @ _ right:AdditiveExpr   <? return ['shr', $left, $right]; ?>
+    | left:ShiftExpr _ "<<" @ _ right:AdditiveExpr   <? return ['shl', $left, $right]; ?>
+    | AdditiveExpr
+
+AdditiveExpr
+    = left:AdditiveExpr _ "+" !"+" @ _ right:MultiplicativeExpr   <? return ['add', $left, $right]; ?>
+    | left:AdditiveExpr _ "-" !"-" @ _ right:MultiplicativeExpr   <? return ['sub', $left, $right]; ?>
+    | MultiplicativeExpr
+
+MultiplicativeExpr
+    = left:MultiplicativeExpr _ "*" !"*" @ _ right:ExponentiationExpr   <? return ['mul', $left, $right]; ?>
+    | left:MultiplicativeExpr _ "/" @ _ right:ExponentiationExpr   <? return ['div', $left, $right]; ?>
+    | left:MultiplicativeExpr _ "%" @ _ right:ExponentiationExpr   <? return ['mod', $left, $right]; ?>
+    | ExponentiationExpr
+
+ExponentiationExpr
+    # Exponentiation is right-associative: 2**3**4 = 2**(3**4)
+    = base:UnaryExpr _ "**" @ _ exp:ExponentiationExpr  %assoc=right  <? return ['exp', $base, $exp]; ?>
+    | UnaryExpr
+
+UnaryExpr "unary expression"
+    = "!" _ arg:UnaryExpr                           <? return ['not', $arg]; ?>
+    | "~" _ arg:UnaryExpr                           <? return ['bitnot', $arg]; ?>
+    | "+" !"+" _ arg:UnaryExpr                      <? return ['pos', $arg]; ?>
+    | "-" !"-" _ arg:UnaryExpr                      <? return ['neg', $arg]; ?>
+    | "++" _ arg:UnaryExpr                          <? return ['preinc', $arg]; ?>
+    | "--" _ arg:UnaryExpr                          <? return ['predec', $arg]; ?>
+    | "typeof" __ arg:UnaryExpr                     <? return ['typeof', $arg]; ?>
+    | "void" __ arg:UnaryExpr                       <? return ['void', $arg]; ?>
+    | "delete" __ arg:UnaryExpr                     <? return ['delete', $arg]; ?>
+    | "await" __ arg:UnaryExpr                      <? return ['await', $arg]; ?>
+    | PostfixExpr
+
+PostfixExpr
+    = arg:PostfixExpr _ "++"                        <? return ['postinc', $arg]; ?>
+    | arg:PostfixExpr _ "--"                        <? return ['postdec', $arg]; ?>
+    | CallExpr
+
+CallExpr
+    # Member access and calls
+    = obj:CallExpr "." @ name:Identifier            <? return ['member', $obj, $name]; ?>
+    | obj:CallExpr "?." @ name:Identifier           <? return ['optmember', $obj, $name]; ?>
+    | obj:CallExpr "[" @ _ idx:Expression _ "]"     <? return ['index', $obj, $idx]; ?>
+    | obj:CallExpr "?.[" @ _ idx:Expression _ "]"   <? return ['optindex', $obj, $idx]; ?>
+    | fn:CallExpr "(" @ _ args:Arguments? _ ")"     <? return ['call', $fn, $args ?? []]; ?>
+    | fn:CallExpr "?.(" @ _ args:Arguments? _ ")"   <? return ['optcall', $fn, $args ?? []]; ?>
+    | NewExpr
+
+NewExpr
+    = "new" __ arg:MemberExpr "(" _ args:Arguments? _ ")"   <? return ['new', $arg, $args ?? []]; ?>
+    | "new" __ arg:NewExpr                          <? return ['new', $arg, []]; ?>
+    | MemberExpr
+
+MemberExpr
+    = obj:MemberExpr "." @ name:Identifier          <? return ['member', $obj, $name]; ?>
+    | obj:MemberExpr "[" @ _ idx:Expression _ "]"   <? return ['index', $obj, $idx]; ?>
+    | PrimaryExpr
+
+PrimaryExpr "value"
+    = "(" _ expr:Expression _ ")"                   <? return $expr; ?>
+    | ArrayLiteral
+    | ObjectLiteral
+    | "this"                                        <? return ['this']; ?>
+    | "null"                                        <? return ['literal', null]; ?>
+    | "true"                                        <? return ['literal', true]; ?>
+    | "false"                                       <? return ['literal', false]; ?>
+    | "undefined"                                   <? return ['undefined']; ?>
+    | Number
+    | String
+    | name:Identifier                               <? return ['ident', $name]; ?>
+
+# --- Literals ---
+
+Number "number"
+    = /0[xX][0-9a-fA-F]+/                           <? return ['number', \hexdec($_0)]; ?>
+    | /0[oO][0-7]+/                                 <? return ['number', \octdec(\substr($_0, 2))]; ?>
+    | /0[bB][01]+/                                  <? return ['number', \bindec(\substr($_0, 2))]; ?>
+    | /[0-9]+\.?[0-9]*([eE][+-]?[0-9]+)?/           <? return ['number', (float)$_0]; ?>
+    | /\.[0-9]+([eE][+-]?[0-9]+)?/                  <? return ['number', (float)$_0]; ?>
+
+String "string"
+    = /"([^"\\]|\\.)*"/                             <? return ['string', \substr($_0, 1, -1)]; ?>
+    | /'([^'\\]|\\.)*'/                             <? return ['string', \substr($_0, 1, -1)]; ?>
+
+Identifier "identifier"
+    = !ReservedWord name:/[a-zA-Z_$][a-zA-Z0-9_$]*/  <? return $name; ?>
+
+ReservedWord
+    = ("break" | "case" | "catch" | "continue" | "debugger" | "default" | "delete"
+      | "do" | "else" | "finally" | "for" | "function" | "if" | "in" | "instanceof"
+      | "new" | "return" | "switch" | "this" | "throw" | "try" | "typeof" | "var"
+      | "void" | "while" | "with" | "class" | "const" | "enum" | "export" | "extends"
+      | "import" | "super" | "implements" | "interface" | "let" | "package" | "private"
+      | "protected" | "public" | "static" | "yield" | "null" | "true" | "false"
+      | "undefined" | "await" | "async") ![a-zA-Z0-9_$]
+
+# --- Compound Literals ---
+
+ArrayLiteral "array"
+    = "[" _ "]"                                     <? return ['array', []]; ?>
+    | "[" _ elems:ArrayElements _ "]"               <? return ['array', $elems]; ?>
+
+ArrayElements
+    = first:ArrayElement rest:(_ "," _ el:ArrayElement)*  <?
+        $result = [$first];
+        foreach ($rest as $r) {
+            $result[] = $r['el'];
+        }
+        return $result;
+    ?>
+
+ArrayElement
+    = "..." _ expr:AssignExpr                       <? return ['spread', $expr]; ?>
+    | AssignExpr
+    | \nothing                                      <? return null; ?>
+
+ObjectLiteral "object"
+    = "{" _ "}"                                     <? return ['object', []]; ?>
+    | "{" _ props:PropertyList _ "}"                <? return ['object', $props]; ?>
+
+PropertyList
+    = first:Property rest:(_ "," _ p:Property)*  <?
+        $result = [$first];
+        foreach ($rest as $r) {
+            $result[] = $r['p'];
+        }
+        return $result;
+    ?>
+
+Property
+    = "..." _ expr:AssignExpr                       <? return ['spread', $expr]; ?>
+    | key:PropertyName _ ":" _ val:AssignExpr       <? return ['prop', $key, $val]; ?>
+    | name:Identifier                               <? return ['shorthand', $name]; ?>
+
+PropertyName
+    = Identifier
+    | String
+    | Number
+    | "[" _ expr:AssignExpr _ "]"                   <? return ['computed', $expr]; ?>
+
+Arguments
+    = first:Argument rest:(_ "," _ arg:Argument)*  <?
+        $result = [$first];
+        foreach ($rest as $r) {
+            $result[] = $r['arg'];
+        }
+        return $result;
+    ?>
+
+Argument
+    = "..." _ expr:AssignExpr                       <? return ['spread', $expr]; ?>
+    | AssignExpr
+
+# --- Whitespace ---
+
+_ "whitespace"
+    = /[ \t\n\r]*/
+
+__ "whitespace"
+    = /[ \t\n\r]+/

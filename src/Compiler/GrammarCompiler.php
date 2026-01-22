@@ -902,6 +902,13 @@ class GrammarCompiler
 
     private function generateOrderedChoiceCode(OrderedChoice $clause, string $resultVar): void
     {
+        // Try single-variance-point optimization (combined regex + dispatch)
+        $analysis = $this->analyzeSingleVariancePattern($clause);
+        if ($analysis !== null) {
+            $this->generateSingleVarianceCode($clause, $analysis, $resultVar);
+            return;
+        }
+
         // Try switch-based dispatch if alternatives have disjoint first bytes
         if ($this->canUseSwitchDispatch($clause)) {
             $this->generateSwitchDispatchCode($clause, $resultVar);
@@ -1197,5 +1204,348 @@ class GrammarCompiler
             // Larger set: use str_contains
             return "!\\str_contains(" . var_export($bytes, true) . ", $byteExpr)";
         }
+    }
+
+    /**
+     * Analyze an OrderedChoice to detect the "single variance point" pattern.
+     *
+     * Pattern: alternatives differ only at one position (a terminal), with identical
+     * prefix and suffix clauses. Each alternative may have a snippet at the end.
+     *
+     * Examples:
+     *   Number = /hex/ <? s1 ?> | /oct/ <? s2 ?> | /dec/ <? s3 ?>
+     *   AssignExpr = lhs:X _ "=" _ rhs:Y <? s1 ?> | lhs:X _ "+=" _ rhs:Y <? s2 ?> | ...
+     *
+     * @return array|null Analysis result with keys: prefix, suffix, terminals, snippets, fallback
+     */
+    private function analyzeSingleVariancePattern(OrderedChoice $clause): ?array
+    {
+        $alternatives = iterator_to_array($clause);
+        if (count($alternatives) < 2) {
+            return null;
+        }
+
+        // Decompose each alternative into: clauses[] + snippet?
+        $decomposed = [];
+        $fallbackIndex = null;
+
+        foreach ($alternatives as $i => $alt) {
+            $clauses = [];
+            $snippet = null;
+
+            if ($alt instanceof Sequence) {
+                foreach ($alt as $sub) {
+                    if ($sub instanceof Snippet) {
+                        $snippet = $sub;
+                    } else {
+                        $clauses[] = $sub;
+                    }
+                }
+            } elseif ($alt instanceof Snippet) {
+                // Bare snippet (unlikely but handle it)
+                $snippet = $alt;
+            } else {
+                // Single clause (terminal or identifier)
+                $clauses[] = $alt;
+            }
+
+            // If this alternative has no terminal and no snippet, it might be a fallback
+            // (e.g., the last "| ConditionalExpr" in AssignExpr)
+            if (count($clauses) === 1 && $snippet === null && $clauses[0] instanceof Identifier) {
+                $fallbackIndex = $i;
+                continue;
+            }
+
+            $decomposed[] = [
+                'index' => $i,
+                'clauses' => $clauses,
+                'snippet' => $snippet,
+                'original' => $alt,
+            ];
+        }
+
+        // Need at least 2 alternatives to optimize (excluding fallback)
+        if (count($decomposed) < 2) {
+            return null;
+        }
+
+        // Find the variance point - the position where clauses differ
+        $firstClauses = $decomposed[0]['clauses'];
+        $numClauses = count($firstClauses);
+
+        // All alternatives must have the same number of non-snippet clauses
+        foreach ($decomposed as $d) {
+            if (count($d['clauses']) !== $numClauses) {
+                return null;
+            }
+        }
+
+        // Find which position varies
+        $variancePos = null;
+        for ($pos = 0; $pos < $numClauses; $pos++) {
+            $allSame = true;
+            $firstClauseStr = $this->clauseSignature($firstClauses[$pos]);
+
+            foreach ($decomposed as $d) {
+                if ($this->clauseSignature($d['clauses'][$pos]) !== $firstClauseStr) {
+                    $allSame = false;
+                    break;
+                }
+            }
+
+            if (!$allSame) {
+                if ($variancePos !== null) {
+                    // Multiple variance points - pattern doesn't match
+                    return null;
+                }
+                $variancePos = $pos;
+            }
+        }
+
+        if ($variancePos === null) {
+            // All positions are identical - nothing to optimize
+            return null;
+        }
+
+        // Verify the varying clause is a terminal (Text or Regex) in all alternatives
+        $terminals = [];
+        foreach ($decomposed as $d) {
+            $varying = $d['clauses'][$variancePos];
+            if (!($varying instanceof Text) && !($varying instanceof Regex)) {
+                return null;
+            }
+            // Must not have modifiers or predicates
+            if ($varying->getModifier() !== Clause::NONE) {
+                return null;
+            }
+            if ($varying->hasAndPredicate() || $varying->hasNotPredicate()) {
+                return null;
+            }
+            $terminals[] = $varying;
+        }
+
+        // Extract prefix and suffix clauses (from first alternative, they're all identical)
+        $prefix = array_slice($firstClauses, 0, $variancePos);
+        $suffix = array_slice($firstClauses, $variancePos + 1);
+
+        // Collect snippets
+        $snippets = [];
+        foreach ($decomposed as $d) {
+            $snippets[] = $d['snippet'];
+        }
+
+        return [
+            'prefix' => $prefix,
+            'suffix' => $suffix,
+            'terminals' => $terminals,
+            'snippets' => $snippets,
+            'decomposed' => $decomposed,
+            'fallbackIndex' => $fallbackIndex,
+            'fallback' => $fallbackIndex !== null ? $alternatives[$fallbackIndex] : null,
+        ];
+    }
+
+    /**
+     * Generate optimized code for single-variance-point pattern.
+     */
+    private function generateSingleVarianceCode(OrderedChoice $clause, array $analysis, string $resultVar): void
+    {
+        $counter = ++$this->tempVarCounter;
+        $tempOffset = '$_svOffset' . $counter;
+        $savedCommit = '$_svCommit' . $counter;
+
+        $this->emitter->line("// Optimized: single-variance-point pattern");
+        $this->emitter->line("$savedCommit = \$this->commitOffset;");
+        $this->emitter->line("$tempOffset = \$this->offset;");
+
+        // Build context for snippets (prefix clauses contribute to context)
+        $context = [];
+        $contextNames = [];
+
+        // Parse prefix clauses
+        if (!empty($analysis['prefix'])) {
+            $this->emitter->line("do { // prefix");
+            $this->emitter->indent();
+
+            foreach ($analysis['prefix'] as $i => $prefixClause) {
+                $itemVar = '$_svPre' . $counter . '_' . $i;
+                $this->generateClauseCode($prefixClause, $itemVar);
+
+                $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
+                $this->emitter->indent();
+                $this->emitter->line("\$this->offset = $tempOffset;");
+                $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
+                $this->emitter->line("break;");
+                $this->emitter->closeBlock();
+
+                // Track context
+                if ($itemVar !== $this->signalHit()) {
+                    $isSilent = $this->isSilentReference($prefixClause);
+                    if ($name = $prefixClause->getName()) {
+                        $contextNames[$name] = $itemVar;
+                        $context[] = $itemVar;
+                    } elseif (!$isSilent && !$this->alwaysReturnsHit($prefixClause)) {
+                        $context[] = $itemVar;
+                    }
+                }
+            }
+        }
+
+        // Build combined regex from terminals
+        $patterns = [];
+        foreach ($analysis['terminals'] as $i => $terminal) {
+            if ($terminal instanceof Text) {
+                $patterns[] = '(?P<g' . $i . '>' . preg_quote($terminal->getText(), '/') . ')';
+            } elseif ($terminal instanceof Regex) {
+                $inner = $terminal->getInnerPattern();
+                // Wrap in non-capturing group if contains alternation
+                if (strpos($inner, '|') !== false) {
+                    $patterns[] = '(?P<g' . $i . '>(?:' . $inner . '))';
+                } else {
+                    $patterns[] = '(?P<g' . $i . '>' . $inner . ')';
+                }
+            }
+        }
+        $combinedPattern = '/(?:' . implode('|', $patterns) . ')/uA';
+
+        // Match the varying terminal
+        $matchVar = '$_svMatch' . $counter;
+        $this->emitter->line("if (\\preg_match(" . var_export($combinedPattern, true) . ", \$this->source, $matchVar, 0, \$this->offset)) {");
+        $this->emitter->indent();
+        $this->emitter->line("\$this->offset += \\strlen({$matchVar}[0]);");
+
+        // Track the matched terminal in context (as $_0 for snippets)
+        $terminalVar = '$_svTerm' . $counter;
+        $this->emitter->line("$terminalVar = {$matchVar}[0];");
+
+        // Check if terminals have names - if so, add to context
+        $terminalName = $analysis['terminals'][0]->getName();
+        if ($terminalName !== null) {
+            $contextNames[$terminalName] = $terminalVar;
+        }
+        $context[] = $terminalVar;
+
+        // Parse suffix clauses
+        if (!empty($analysis['suffix'])) {
+            $suffixFailed = '$_svSuffixFailed' . $counter;
+            $this->emitter->line("$suffixFailed = false;");
+            $this->emitter->line("do { // suffix");
+            $this->emitter->indent();
+
+            foreach ($analysis['suffix'] as $i => $suffixClause) {
+                $itemVar = '$_svSuf' . $counter . '_' . $i;
+                $this->generateClauseCode($suffixClause, $itemVar);
+
+                $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
+                $this->emitter->indent();
+                $this->emitter->line("\$this->offset = $tempOffset;");
+                $this->emitter->line("$suffixFailed = true;");
+                $this->emitter->line("break;");
+                $this->emitter->closeBlock();
+
+                // Track context
+                $isSilent = $this->isSilentReference($suffixClause);
+                if ($name = $suffixClause->getName()) {
+                    $contextNames[$name] = $itemVar;
+                    $context[] = $itemVar;
+                } elseif (!$isSilent && !$this->alwaysReturnsHit($suffixClause)) {
+                    $context[] = $itemVar;
+                }
+            }
+
+            $this->emitter->closeBlock(' while (false);');
+
+            $this->emitter->line("if ($suffixFailed) {");
+            $this->emitter->indent();
+            $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
+            $this->emitter->dedent()->line("} else {");
+            $this->emitter->indent();
+        }
+
+        // Dispatch based on which group matched
+        $this->emitter->line("// Dispatch based on matched terminal");
+        foreach ($analysis['terminals'] as $i => $terminal) {
+            $groupCheck = "isset({$matchVar}['g{$i}']) && {$matchVar}['g{$i}'] !== ''";
+            $this->emitter->line(($i === 0 ? "if" : "} elseif") . " ($groupCheck) {");
+            $this->emitter->indent();
+
+            $snippet = $analysis['snippets'][$i] ?? null;
+            if ($snippet !== null) {
+                $this->generateSnippetCode($snippet, $context, $contextNames, $resultVar);
+            } elseif (count($context) === 1) {
+                // Single value - return directly (matches normal terminal behavior)
+                $this->emitter->line("$resultVar = " . $context[0] . ";");
+            } else {
+                // Multiple values - return as array
+                $this->emitter->line("$resultVar = [" . implode(', ', $context) . "];");
+            }
+            $this->emitter->dedent();
+        }
+        $this->emitter->line("}");
+
+        // Close suffix else block if we had suffix
+        if (!empty($analysis['suffix'])) {
+            $this->emitter->closeBlock();
+        }
+
+        // Close regex match block
+        $this->emitter->dedent()->line("} else {");
+        $this->emitter->indent();
+        $this->emitter->line("\$this->offset = $tempOffset;");
+        $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
+        $this->emitter->closeBlock();
+
+        // Close prefix do-while if we had prefix
+        if (!empty($analysis['prefix'])) {
+            $this->emitter->closeBlock(' while (false);');
+        }
+
+        // Handle fallback if present
+        if ($analysis['fallback'] !== null) {
+            $this->emitter->line("if ($resultVar === " . $this->signalMiss() . ") {");
+            $this->emitter->indent();
+            $this->emitter->line("\$this->offset = $tempOffset;");
+            $fallbackVar = '$_svFallback' . $counter;
+            $this->generateClauseCode($analysis['fallback'], $fallbackVar);
+            $this->emitter->line("$resultVar = $fallbackVar;");
+            $this->emitter->closeBlock();
+        }
+    }
+
+    /**
+     * Generate a signature string for a clause, used to compare structural equality.
+     */
+    private function clauseSignature(Clause $clause): string
+    {
+        // Include class, modifier, name, and string representation
+        $sig = get_class($clause) . '|' . $clause->getModifier() . '|' . ($clause->getName() ?? '') . '|';
+
+        if ($clause instanceof Identifier) {
+            $sig .= $clause->getIdentifier();
+        } elseif ($clause instanceof Text) {
+            $sig .= $clause->getText();
+        } elseif ($clause instanceof Regex) {
+            $sig .= $clause->getPattern();
+        } elseif ($clause instanceof Sequence) {
+            $parts = [];
+            foreach ($clause as $sub) {
+                $parts[] = $this->clauseSignature($sub);
+            }
+            $sig .= '[' . implode(',', $parts) . ']';
+        } elseif ($clause instanceof OrderedChoice) {
+            $parts = [];
+            foreach ($clause as $sub) {
+                $parts[] = $this->clauseSignature($sub);
+            }
+            $sig .= '(' . implode('|', $parts) . ')';
+        } else {
+            $sig .= $clause->asString();
+        }
+
+        // Include predicates
+        if ($clause->hasAndPredicate()) $sig .= '&';
+        if ($clause->hasNotPredicate()) $sig .= '!';
+
+        return $sig;
     }
 }

@@ -27,7 +27,9 @@ Value = Object
 Object = "{" _ pairs:Pairs? _ "}"   <? return ["_obj_", $pairs ?? []]; ?>
 Pairs = first:Pair rest:("," _ Pair)*   <?
     $result = [$first[0] => $first[1]];
-    foreach ($rest as $p) $result[$p[1][0]] = $p[1][1];
+    if (\is_array($rest)) {
+        foreach ($rest as $p) $result[$p[2][0]] = $p[2][1];
+    }
     return $result;
 ?>
 Pair = key:String _ ":" _ val:Value <? return [$key, $val]; ?>
@@ -35,7 +37,9 @@ Pair = key:String _ ":" _ val:Value <? return [$key, $val]; ?>
 Array = "[" _ items:Values? _ "]"   <? return $items ?? []; ?>
 Values = first:Value rest:("," _ Value)*    <?
     $result = [$first];
-    foreach ($rest as $v) $result[] = $v[1];
+    if (\is_array($rest)) {
+        foreach ($rest as $v) $result[] = $v[2];
+    }
     return $result;
 ?>
 

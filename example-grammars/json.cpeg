@@ -19,9 +19,11 @@ Object "object"
 
 Pairs "string"
     = result:Pair @ rest:(_ "," _ p:Pair)*  <?
-        foreach ($rest as $r) {
-            foreach ($r['p'] as $k => $v) {
-                $result[$k] = $v;
+        if (\is_array($rest)) {
+            foreach ($rest as $r) {
+                foreach ($r['p'] as $k => $v) {
+                    $result[$k] = $v;
+                }
             }
         }
         return $result;
@@ -37,8 +39,10 @@ Array "array"
 Items "value"
     = first:Value @ rest:(_ "," _ v:Value)*  <?
         $result = [$first];
-        foreach ($rest as $r) {
-            $result[] = $r['v'];
+        if (\is_array($rest)) {
+            foreach ($rest as $r) {
+                $result[] = $r['v'];
+            }
         }
         return $result;
     ?>
