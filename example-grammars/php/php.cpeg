@@ -1,0 +1,1271 @@
+# PHP Grammar (Generated from php.y)
+# Auto-generated - do not edit
+
+@lexer Charm\Parsing\Lexers\PhpLexer
+
+@prec {
+    right T_VOID_CAST
+    right T_THROW
+    left T_INCLUDE T_INCLUDE_ONCE T_EVAL T_REQUIRE T_REQUIRE_ONCE
+    left ","
+    left T_LOGICAL_OR
+    left T_LOGICAL_XOR
+    left T_LOGICAL_AND
+    right T_PRINT
+    right T_YIELD
+    right T_DOUBLE_ARROW
+    right T_YIELD_FROM
+    left "=" T_PLUS_EQUAL T_MINUS_EQUAL T_MUL_EQUAL T_DIV_EQUAL T_CONCAT_EQUAL T_MOD_EQUAL T_AND_EQUAL T_OR_EQUAL T_XOR_EQUAL T_SL_EQUAL T_SR_EQUAL T_POW_EQUAL T_COALESCE_EQUAL
+    left "?" ":"
+    right T_COALESCE
+    left T_BOOLEAN_OR
+    left T_BOOLEAN_AND
+    left "|"
+    left "^"
+    left T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG
+    none T_IS_EQUAL T_IS_NOT_EQUAL T_IS_IDENTICAL T_IS_NOT_IDENTICAL T_SPACESHIP
+    none "<" T_IS_SMALLER_OR_EQUAL ">" T_IS_GREATER_OR_EQUAL
+    left T_PIPE
+    left "."
+    left T_SL T_SR
+    left "+" "-"
+    left "*" "/" "%"
+    right "!"
+    none T_INSTANCEOF
+    right "~" T_INC T_DEC T_INT_CAST T_DOUBLE_CAST T_STRING_CAST T_ARRAY_CAST T_OBJECT_CAST T_BOOL_CAST T_UNSET_CAST "@"
+    right T_POW
+    right "["
+    none T_NEW T_CLONE
+    left T_ELSEIF
+    left T_ELSE
+    left T_ENDIF
+}
+
+# start
+Start
+    = TopStatementList  <?  return $_0;  ?>
+
+# Dummy error rule - error recovery not supported in PEG
+Error
+    = "__ERROR_RECOVERY_NOT_SUPPORTED__"
+
+# top_statement_list_ex
+TopStatementListEx
+    = TopStatementListEx TopStatement  <?  return $this->pushNormalizing($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# top_statement_list
+TopStatementList
+    = TopStatementListEx  <?  return $_0;  ?>
+
+# ampersand
+Ampersand
+    = T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG
+    | T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG
+
+# reserved_non_modifiers
+ReservedNonModifiers
+    = T_INCLUDE
+    | T_INCLUDE_ONCE
+    | T_EVAL
+    | T_REQUIRE
+    | T_REQUIRE_ONCE
+    | T_LOGICAL_OR
+    | T_LOGICAL_XOR
+    | T_LOGICAL_AND
+    | T_INSTANCEOF
+    | T_NEW
+    | T_CLONE
+    | T_EXIT
+    | T_IF
+    | T_ELSEIF
+    | T_ELSE
+    | T_ENDIF
+    | T_DO
+    | T_WHILE
+    | T_ENDWHILE
+    | T_FOR
+    | T_ENDFOR
+    | T_FOREACH
+    | T_ENDFOREACH
+    | T_DECLARE
+    | T_ENDDECLARE
+    | T_AS
+    | T_TRY
+    | T_CATCH
+    | T_FINALLY
+    | T_THROW
+    | T_USE
+    | T_INSTEADOF
+    | T_GLOBAL
+    | T_VAR
+    | T_UNSET
+    | T_ISSET
+    | T_EMPTY
+    | T_CONTINUE
+    | T_GOTO
+    | T_FUNCTION
+    | T_CONST
+    | T_RETURN
+    | T_PRINT
+    | T_YIELD
+    | T_LIST
+    | T_SWITCH
+    | T_ENDSWITCH
+    | T_CASE
+    | T_DEFAULT
+    | T_BREAK
+    | T_ARRAY
+    | T_CALLABLE
+    | T_EXTENDS
+    | T_IMPLEMENTS
+    | T_NAMESPACE
+    | T_TRAIT
+    | T_INTERFACE
+    | T_CLASS
+    | T_CLASS_C
+    | T_TRAIT_C
+    | T_FUNC_C
+    | T_METHOD_C
+    | T_LINE
+    | T_FILE
+    | T_DIR
+    | T_NS_C
+    | T_FN
+    | T_MATCH
+    | T_ENUM
+    | T_ECHO  <?  return $_0;  ?>
+
+# semi_reserved
+SemiReserved
+    = T_STATIC
+    | T_ABSTRACT
+    | T_FINAL
+    | T_PRIVATE
+    | T_PROTECTED
+    | T_PUBLIC
+    | T_READONLY
+    | ReservedNonModifiers
+
+# identifier_maybe_reserved
+IdentifierMaybeReserved
+    = T_STRING  <?  return new Node\Identifier($_0);  ?>
+    | SemiReserved  <?  return new Node\Identifier($_0);  ?>
+
+# identifier_not_reserved
+IdentifierNotReserved
+    = T_STRING  <?  return new Node\Identifier($_0);  ?>
+
+# reserved_non_modifiers_identifier
+ReservedNonModifiersIdentifier
+    = ReservedNonModifiers  <?  return new Node\Identifier($_0);  ?>
+
+# namespace_declaration_name
+NamespaceDeclarationName
+    = T_STRING  <?  return new Name($_0);  ?>
+    | T_NAME_QUALIFIED  <?  return new Name($_0);  ?>
+    | SemiReserved  <?  return new Name($_0);  ?>
+
+# namespace_name
+NamespaceName
+    = T_STRING  <?  return new Name($_0);  ?>
+    | T_NAME_QUALIFIED  <?  return new Name($_0);  ?>
+
+# legacy_namespace_name
+LegacyNamespaceName
+    = T_NAME_FULLY_QUALIFIED  <?  return new Name(substr($_0, 1));  ?>
+    | NamespaceName
+
+# plain_variable
+PlainVariable
+    = T_VARIABLE  <?  return new Expr\Variable($this->parseVar($_0));  ?>
+
+# semi
+Semi
+    = ";"  <?  /* nothing */;  ?>
+
+# no_comma
+NoComma
+    = ","
+    | ""  <?  /* nothing */;  ?>
+
+# optional_comma
+OptionalComma
+    = ","
+    | ""
+
+# attribute_decl
+AttributeDecl
+    = ClassName ArgumentList  <?  return new Node\Attribute($_0, $_1);  ?>
+    | ClassName  <?  return new Node\Attribute($_0, []);  ?>
+
+# attribute_group
+AttributeGroup
+    = AttributeDecl  <?  return $this->init($_0);  ?>
+    | AttributeGroup "," AttributeDecl  <?  return $this->push($_0, $_2);  ?>
+
+# attribute
+Attribute
+    = T_ATTRIBUTE AttributeGroup OptionalComma "]"  <?  return new Node\AttributeGroup($_1);  ?>
+
+# attributes
+Attributes
+    = Attribute  <?  return $this->init($_0);  ?>
+    | Attributes Attribute  <?  return $this->push($_0, $_1);  ?>
+
+# optional_attributes
+OptionalAttributes
+    = Attributes
+    | ""  <?  return [];  ?>
+
+# top_statement
+TopStatement
+    = T_HALT_COMPILER "(" ")" ";"  <?  return new Stmt\HaltCompiler();  ?>
+    | T_NAMESPACE NamespaceDeclarationName Semi  <?  return new Stmt\Namespace_($_1, null);  ?>
+    | T_NAMESPACE NamespaceDeclarationName "{" TopStatementList "}"  <?  return new Stmt\Namespace_($_1, $_3);  ?>
+    | T_NAMESPACE "{" TopStatementList "}"  <?  return new Stmt\Namespace_(null, $_2);  ?>
+    | T_USE UseDeclarations Semi  <?  return new Stmt\Use_($_1, Stmt\Use_::TYPE_NORMAL);  ?>
+    | T_USE UseType UseDeclarations Semi  <?  return new Stmt\Use_($_2, $_1);  ?>
+    | T_CONST ConstantDeclarationList Semi  <?  return new Stmt\Const_($_1, $this->attributes(), []);  ?>
+    | Statement
+    | FunctionDeclarationStatement
+    | ClassDeclarationStatement
+    | GroupUseDeclaration
+    | Attributes T_CONST ConstantDeclarationList Semi  <?  return new Stmt\Const_($_2, $this->attributes(), $_0);  ?>
+
+# use_type
+UseType
+    = T_FUNCTION  <?  return Stmt\Use_::TYPE_FUNCTION;  ?>
+    | T_CONST  <?  return Stmt\Use_::TYPE_CONSTANT;  ?>
+
+# group_use_declaration
+GroupUseDeclaration
+    = T_USE UseType LegacyNamespaceName T_NS_SEPARATOR "{" UnprefixedUseDeclarations "}" Semi  <?  return new Stmt\GroupUse($_2, $_5, $_1);  ?>
+    | T_USE LegacyNamespaceName T_NS_SEPARATOR "{" InlineUseDeclarations "}" Semi  <?  return new Stmt\GroupUse($_1, $_4, Stmt\Use_::TYPE_UNKNOWN);  ?>
+
+# unprefixed_use_declarations
+UnprefixedUseDeclarations
+    = NonEmptyUnprefixedUseDeclarations OptionalComma
+
+# non_empty_unprefixed_use_declarations
+NonEmptyUnprefixedUseDeclarations
+    = NonEmptyUnprefixedUseDeclarations "," UnprefixedUseDeclaration  <?  return $this->push($_0, $_2);  ?>
+    | UnprefixedUseDeclaration  <?  return $this->init($_0);  ?>
+
+# use_declarations
+UseDeclarations
+    = NonEmptyUseDeclarations NoComma
+
+# non_empty_use_declarations
+NonEmptyUseDeclarations
+    = NonEmptyUseDeclarations "," UseDeclaration  <?  return $this->push($_0, $_2);  ?>
+    | UseDeclaration  <?  return $this->init($_0);  ?>
+
+# inline_use_declarations
+InlineUseDeclarations
+    = NonEmptyInlineUseDeclarations OptionalComma
+
+# non_empty_inline_use_declarations
+NonEmptyInlineUseDeclarations
+    = NonEmptyInlineUseDeclarations "," InlineUseDeclaration  <?  return $this->push($_0, $_2);  ?>
+    | InlineUseDeclaration  <?  return $this->init($_0);  ?>
+
+# unprefixed_use_declaration
+UnprefixedUseDeclaration
+    = NamespaceName T_AS IdentifierNotReserved  <?  return new Node\UseItem($_0, $_2, Stmt\Use_::TYPE_UNKNOWN);  ?>
+    | NamespaceName  <?  return new Node\UseItem($_0, null, Stmt\Use_::TYPE_UNKNOWN);  ?>
+
+# use_declaration
+UseDeclaration
+    = LegacyNamespaceName T_AS IdentifierNotReserved  <?  return new Node\UseItem($_0, $_2, Stmt\Use_::TYPE_UNKNOWN);  ?>
+    | LegacyNamespaceName  <?  return new Node\UseItem($_0, null, Stmt\Use_::TYPE_UNKNOWN);  ?>
+
+# inline_use_declaration
+InlineUseDeclaration
+    = UnprefixedUseDeclaration  <?  return $_0;  ?>
+    | UseType UnprefixedUseDeclaration  <?  return $_1;  ?>
+
+# constant_declaration_list
+ConstantDeclarationList
+    = NonEmptyConstantDeclarationList NoComma
+
+# non_empty_constant_declaration_list
+NonEmptyConstantDeclarationList
+    = NonEmptyConstantDeclarationList "," ConstantDeclaration  <?  return $this->push($_0, $_2);  ?>
+    | ConstantDeclaration  <?  return $this->init($_0);  ?>
+
+# constant_declaration
+ConstantDeclaration
+    = IdentifierNotReserved "=" Expr  <?  return new Node\Const_($_0, $_2);  ?>
+
+# class_const_list
+ClassConstList
+    = NonEmptyClassConstList NoComma
+
+# non_empty_class_const_list
+NonEmptyClassConstList
+    = NonEmptyClassConstList "," ClassConst  <?  return $this->push($_0, $_2);  ?>
+    | ClassConst  <?  return $this->init($_0);  ?>
+
+# class_const
+ClassConst
+    = T_STRING "=" Expr  <?  return new Node\Const_(new Node\Identifier($_0, $this->attributes()), $_2);  ?>
+    | SemiReserved "=" Expr  <?  return new Node\Const_(new Node\Identifier($_0, $this->attributes()), $_2);  ?>
+
+# inner_statement_list_ex
+InnerStatementListEx
+    = InnerStatementListEx InnerStatement  <?  return $this->pushNormalizing($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# inner_statement_list
+InnerStatementList
+    = InnerStatementListEx  <?  return $_0;  ?>
+
+# inner_statement
+InnerStatement
+    = T_HALT_COMPILER  <?  throw new Error('__HALT_COMPILER() can only be used from the outermost scope', $this->attributes());  ?>
+    | Statement
+    | FunctionDeclarationStatement
+    | ClassDeclarationStatement
+
+# non_empty_statement
+NonEmptyStatement
+    = "{" InnerStatementList "}"  <?  return new Stmt\Block($_1);  ?>
+    | T_IF "(" Expr ")" BlocklikeStatement ElseifList ElseSingle  <?  return new Stmt\If_($_2, ['stmts' => $_4, 'elseifs' => $_5, 'else' => $_6]);  ?>
+    | T_IF "(" Expr ")" ":" InnerStatementList NewElseifList NewElseSingle T_ENDIF ";"  <?  return new Stmt\If_($_2, ['stmts' => $_5, 'elseifs' => $_6, 'else' => $_7]);  ?>
+    | T_WHILE "(" Expr ")" WhileStatement  <?  return new Stmt\While_($_2, $_4);  ?>
+    | T_DO BlocklikeStatement T_WHILE "(" Expr ")" ";"  <?  return new Stmt\Do_($_4, $_1);  ?>
+    | T_FOR "(" ForExpr ";" ForExpr ";" ForExpr ")" ForStatement  <?  return new Stmt\For_(['init' => $_2, 'cond' => $_4, 'loop' => $_6, 'stmts' => $_8]);  ?>
+    | T_SWITCH "(" Expr ")" SwitchCaseList  <?  return new Stmt\Switch_($_2, $_4);  ?>
+    | T_BREAK OptionalExpr Semi  <?  return new Stmt\Break_($_1);  ?>
+    | T_CONTINUE OptionalExpr Semi  <?  return new Stmt\Continue_($_1);  ?>
+    | T_RETURN OptionalExpr Semi  <?  return new Stmt\Return_($_1);  ?>
+    | T_GLOBAL GlobalVarList Semi  <?  return new Stmt\Global_($_1);  ?>
+    | T_STATIC StaticVarList Semi  <?  return new Stmt\Static_($_1);  ?>
+    | T_ECHO ExprListForbidComma Semi  <?  return new Stmt\Echo_($_1);  ?>
+    | T_INLINE_HTML  <?  return new Stmt\InlineHTML($_0);  ?>
+    | T_UNSET "(" VariablesList ")" Semi  <?  return new Stmt\Unset_($_2);  ?>
+    | T_FOREACH "(" Expr T_AS ForeachVariable ")" ForeachStatement  <?  return new Stmt\Foreach_($_2, $_4[0], ['keyVar' => null, 'byRef' => $_4[1], 'stmts' => $_6]);  ?>
+    | T_FOREACH "(" Expr T_AS Variable T_DOUBLE_ARROW ForeachVariable ")" ForeachStatement  <?  return new Stmt\Foreach_($_2, $_6[0], ['keyVar' => $_4, 'byRef' => $_6[1], 'stmts' => $_8]);  ?>
+    | T_FOREACH "(" Expr Error ")" ForeachStatement  <?  return new Stmt\Foreach_($_2, new Expr\Error($this->attributes()), ['stmts' => $_5]);  ?>
+    | T_DECLARE "(" DeclareList ")" DeclareStatement  <?  return new Stmt\Declare_($_2, $_4);  ?>
+    | T_TRY "{" InnerStatementList "}" Catches OptionalFinally  <?  return new Stmt\TryCatch($_2, $_4, $_5);  ?>
+    | T_GOTO IdentifierNotReserved Semi  <?  return new Stmt\Goto_($_1);  ?>
+    | Expr Semi  <?  return new Stmt\Expression($_0);  ?>
+    | IdentifierNotReserved ":"  <?  return new Stmt\Label($_0);  ?>
+
+# statement
+Statement
+    = ";"  <?  return $this->makeNop();  ?>
+    | NonEmptyStatement
+
+# blocklike_statement
+BlocklikeStatement
+    = Statement  <?  return $this->toBlock($_0);  ?>
+
+# catches
+Catches
+    = Catches Catch  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# name_union
+NameUnion
+    = Name  <?  return $this->init($_0);  ?>
+    | NameUnion "|" Name  <?  return $this->push($_0, $_2);  ?>
+
+# catch
+Catch
+    = T_CATCH "(" NameUnion OptionalPlainVariable ")" "{" InnerStatementList "}"  <?  return new Stmt\Catch_($_2, $_3, $_6);  ?>
+
+# optional_finally
+OptionalFinally
+    = T_FINALLY "{" InnerStatementList "}"  <?  return new Stmt\Finally_($_2);  ?>
+    | ""  <?  return null;  ?>
+
+# variables_list
+VariablesList
+    = NonEmptyVariablesList OptionalComma
+
+# non_empty_variables_list
+NonEmptyVariablesList
+    = NonEmptyVariablesList "," Variable  <?  return $this->push($_0, $_2);  ?>
+    | Variable  <?  return $this->init($_0);  ?>
+
+# optional_ref
+OptionalRef
+    = Ampersand  <?  return true;  ?>
+    | ""  <?  return false;  ?>
+
+# optional_arg_ref
+OptionalArgRef
+    = T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG  <?  return true;  ?>
+    | ""  <?  return false;  ?>
+
+# optional_ellipsis
+OptionalEllipsis
+    = T_ELLIPSIS  <?  return true;  ?>
+    | ""  <?  return false;  ?>
+
+# block_or_error
+BlockOrError
+    = "{" InnerStatementList "}"  <?  return $_1;  ?>
+
+# fn_identifier
+FnIdentifier
+    = T_READONLY  <?  return new Node\Identifier($_0);  ?>
+    | T_EXIT  <?  return new Node\Identifier($_0);  ?>
+    | T_CLONE  <?  return new Node\Identifier($_0);  ?>
+    | IdentifierNotReserved
+
+# function_declaration_statement
+FunctionDeclarationStatement
+    = T_FUNCTION OptionalRef FnIdentifier "(" ParameterList ")" OptionalReturnType BlockOrError  <?  return new Stmt\Function_($_2, ['byRef' => $_1, 'params' => $_4, 'returnType' => $_6, 'stmts' => $_7, 'attrGroups' => []]);  ?>
+    | Attributes T_FUNCTION OptionalRef FnIdentifier "(" ParameterList ")" OptionalReturnType BlockOrError  <?  return new Stmt\Function_($_3, ['byRef' => $_2, 'params' => $_5, 'returnType' => $_7, 'stmts' => $_8, 'attrGroups' => $_0]);  ?>
+
+# class_declaration_statement
+ClassDeclarationStatement
+    = ClassEntryType IdentifierNotReserved ExtendsFrom ImplementsList "{" ClassStatementList "}"  <?  return new Stmt\Class_($_1, ['type' => $_0, 'extends' => $_2, 'implements' => $_3, 'stmts' => $_5, 'attrGroups' => []]);  ?>
+    | Attributes ClassEntryType IdentifierNotReserved ExtendsFrom ImplementsList "{" ClassStatementList "}"  <?  return new Stmt\Class_($_2, ['type' => $_1, 'extends' => $_3, 'implements' => $_4, 'stmts' => $_6, 'attrGroups' => $_0]);  ?>
+    | OptionalAttributes T_INTERFACE IdentifierNotReserved InterfaceExtendsList "{" ClassStatementList "}"  <?  return new Stmt\Interface_($_2, ['extends' => $_3, 'stmts' => $_5, 'attrGroups' => $_0]);  ?>
+    | OptionalAttributes T_TRAIT IdentifierNotReserved "{" ClassStatementList "}"  <?  return new Stmt\Trait_($_2, ['stmts' => $_4, 'attrGroups' => $_0]);  ?>
+    | OptionalAttributes T_ENUM IdentifierNotReserved EnumScalarType ImplementsList "{" ClassStatementList "}"  <?  return new Stmt\Enum_($_2, ['scalarType' => $_3, 'implements' => $_4, 'stmts' => $_6, 'attrGroups' => $_0]);  ?>
+
+# enum_scalar_type
+EnumScalarType
+    = ":" Type  <?  return $_1;  ?>
+    | ""  <?  return null;  ?>
+
+# enum_case_expr
+EnumCaseExpr
+    = "=" Expr  <?  return $_1;  ?>
+    | ""  <?  return null;  ?>
+
+# class_entry_type
+ClassEntryType
+    = T_CLASS  <?  return 0;  ?>
+    | ClassModifiers T_CLASS
+
+# class_modifiers
+ClassModifiers
+    = ClassModifier
+    | ClassModifiers ClassModifier  <?  return $_0 | $_1;  ?>
+
+# class_modifier
+ClassModifier
+    = T_ABSTRACT  <?  return Modifiers::ABSTRACT;  ?>
+    | T_FINAL  <?  return Modifiers::FINAL;  ?>
+    | T_READONLY  <?  return Modifiers::READONLY;  ?>
+
+# extends_from
+ExtendsFrom
+    = T_EXTENDS ClassName  <?  return $_1;  ?>
+    | ""  <?  return null;  ?>
+
+# interface_extends_list
+InterfaceExtendsList
+    = T_EXTENDS ClassNameList  <?  return $_1;  ?>
+    | ""  <?  return array();  ?>
+
+# implements_list
+ImplementsList
+    = T_IMPLEMENTS ClassNameList  <?  return $_1;  ?>
+    | ""  <?  return array();  ?>
+
+# class_name_list
+ClassNameList
+    = NonEmptyClassNameList NoComma
+
+# non_empty_class_name_list
+NonEmptyClassNameList
+    = ClassName  <?  return $this->init($_0);  ?>
+    | NonEmptyClassNameList "," ClassName  <?  return $this->push($_0, $_2);  ?>
+
+# for_statement
+ForStatement
+    = ":" InnerStatementList T_ENDFOR ";"  <?  return $_1;  ?>
+    | BlocklikeStatement
+
+# foreach_statement
+ForeachStatement
+    = ":" InnerStatementList T_ENDFOREACH ";"  <?  return $_1;  ?>
+    | BlocklikeStatement
+
+# declare_statement
+DeclareStatement
+    = ";"  <?  return null;  ?>
+    | ":" InnerStatementList T_ENDDECLARE ";"  <?  return $_1;  ?>
+    | NonEmptyStatement  <?  return $this->toBlock($_0);  ?>
+
+# declare_list
+DeclareList
+    = NonEmptyDeclareList NoComma
+
+# non_empty_declare_list
+NonEmptyDeclareList
+    = DeclareListElement  <?  return $this->init($_0);  ?>
+    | NonEmptyDeclareList "," DeclareListElement  <?  return $this->push($_0, $_2);  ?>
+
+# declare_list_element
+DeclareListElement
+    = IdentifierNotReserved "=" Expr  <?  return new Node\DeclareItem($_0, $_2);  ?>
+
+# switch_case_list
+SwitchCaseList
+    = "{" CaseList "}"  <?  return $_1;  ?>
+    | "{" ";" CaseList "}"  <?  return $_2;  ?>
+    | ":" CaseList T_ENDSWITCH ";"  <?  return $_1;  ?>
+    | ":" ";" CaseList T_ENDSWITCH ";"  <?  return $_2;  ?>
+
+# case_list
+CaseList
+    = CaseList Case  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# case
+Case
+    = T_CASE Expr CaseSeparator InnerStatementListEx  <?  return new Stmt\Case_($_1, $_3);  ?>
+    | T_DEFAULT CaseSeparator InnerStatementListEx  <?  return new Stmt\Case_(null, $_2);  ?>
+
+# case_separator
+CaseSeparator
+    = ":"
+    | ";"
+
+# match
+Match
+    = T_MATCH "(" Expr ")" "{" MatchArmList "}"  <?  return new Expr\Match_($_2, $_5);  ?>
+
+# match_arm_list
+MatchArmList
+    = NonEmptyMatchArmList OptionalComma
+    | ""  <?  return [];  ?>
+
+# non_empty_match_arm_list
+NonEmptyMatchArmList
+    = MatchArm  <?  return $this->init($_0);  ?>
+    | NonEmptyMatchArmList "," MatchArm  <?  return $this->push($_0, $_2);  ?>
+
+# match_arm
+MatchArm
+    = T_DEFAULT OptionalComma T_DOUBLE_ARROW Expr  <?  return new Node\MatchArm(null, $_3);  ?>
+    | ExprListAllowComma T_DOUBLE_ARROW Expr  <?  return new Node\MatchArm($_0, $_2);  ?>
+
+# while_statement
+WhileStatement
+    = ":" InnerStatementList T_ENDWHILE ";"  <?  return $_1;  ?>
+    | BlocklikeStatement
+
+# elseif_list
+ElseifList
+    = ElseifList Elseif  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# elseif
+Elseif
+    = T_ELSEIF "(" Expr ")" BlocklikeStatement  <?  return new Stmt\ElseIf_($_2, $_4);  ?>
+
+# new_elseif_list
+NewElseifList
+    = NewElseifList NewElseif  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# new_elseif
+NewElseif
+    = T_ELSEIF "(" Expr ")" ":" InnerStatementList  <?  return new Stmt\ElseIf_($_2, $_5);  ?>
+
+# else_single
+ElseSingle
+    = T_ELSE BlocklikeStatement  <?  return new Stmt\Else_($_1);  ?>
+    | ""  <?  return null;  ?>
+
+# new_else_single
+NewElseSingle
+    = T_ELSE ":" InnerStatementList  <?  return new Stmt\Else_($_2);  ?>
+    | ""  <?  return null;  ?>
+
+# foreach_variable
+ForeachVariable
+    = Ampersand Variable  <?  return array($_1, true);  ?>
+    | ListExpr  <?  return array($_0, false);  ?>
+    | ArrayShortSyntax  <?  return array($_0, false);  ?>
+    | Variable  <?  return array($_0, false);  ?>
+
+# parameter_list
+ParameterList
+    = NonEmptyParameterList OptionalComma
+    | ""  <?  return array();  ?>
+
+# non_empty_parameter_list
+NonEmptyParameterList
+    = Parameter  <?  return $this->init($_0);  ?>
+    | NonEmptyParameterList "," Parameter  <?  return $this->push($_0, $_2);  ?>
+
+# optional_property_modifiers
+OptionalPropertyModifiers
+    = OptionalPropertyModifiers PropertyModifier  <?  return $_0 | $_1;  ?>
+    | ""  <?  return 0;  ?>
+
+# property_modifier
+PropertyModifier
+    = T_PUBLIC  <?  return Modifiers::PUBLIC;  ?>
+    | T_PROTECTED  <?  return Modifiers::PROTECTED;  ?>
+    | T_PRIVATE  <?  return Modifiers::PRIVATE;  ?>
+    | T_PUBLIC_SET  <?  return Modifiers::PUBLIC_SET;  ?>
+    | T_PROTECTED_SET  <?  return Modifiers::PROTECTED_SET;  ?>
+    | T_PRIVATE_SET  <?  return Modifiers::PRIVATE_SET;  ?>
+    | T_READONLY  <?  return Modifiers::READONLY;  ?>
+    | T_FINAL  <?  return Modifiers::FINAL;  ?>
+
+# parameter
+Parameter
+    = OptionalAttributes OptionalPropertyModifiers OptionalTypeWithoutStatic OptionalArgRef OptionalEllipsis PlainVariable OptionalPropertyHookList  <?  return new Node\Param($_5, null, $_2, $_3, $_4, $this->attributes(), $_1, $_0, $_6);  ?>
+    | OptionalAttributes OptionalPropertyModifiers OptionalTypeWithoutStatic OptionalArgRef OptionalEllipsis PlainVariable "=" Expr OptionalPropertyHookList  <?  return new Node\Param($_5, $_7, $_2, $_3, $_4, $this->attributes(), $_1, $_0, $_8);  ?>
+    | OptionalAttributes OptionalPropertyModifiers OptionalTypeWithoutStatic OptionalArgRef OptionalEllipsis Error  <?  return new Node\Param(new Expr\Error(), null, $_2, $_3, $_4, $this->attributes(), $_1, $_0);  ?>
+
+# type_expr
+TypeExpr
+    = "?" Type  <?  return new Node\NullableType($_1);  ?>
+    | Type
+    | UnionType  <?  return new Node\UnionType($_0);  ?>
+    | IntersectionType
+
+# type
+Type
+    = T_STATIC  <?  return new Node\Name('static');  ?>
+    | TypeWithoutStatic
+
+# type_without_static
+TypeWithoutStatic
+    = T_ARRAY  <?  return new Node\Identifier('array');  ?>
+    | T_CALLABLE  <?  return new Node\Identifier('callable');  ?>
+    | Name  <?  return $_0;  ?>
+
+# union_type_element
+UnionTypeElement
+    = "(" IntersectionType ")"  <?  return $_1;  ?>
+    | Type
+
+# union_type
+UnionType
+    = UnionTypeElement "|" UnionTypeElement  <?  return $this->init($_0, $_2);  ?>
+    | UnionType "|" UnionTypeElement  <?  return $this->push($_0, $_2);  ?>
+
+# union_type_without_static_element
+UnionTypeWithoutStaticElement
+    = "(" IntersectionTypeWithoutStatic ")"  <?  return $_1;  ?>
+    | TypeWithoutStatic
+
+# union_type_without_static
+UnionTypeWithoutStatic
+    = UnionTypeWithoutStaticElement "|" UnionTypeWithoutStaticElement  <?  return $this->init($_0, $_2);  ?>
+    | UnionTypeWithoutStatic "|" UnionTypeWithoutStaticElement  <?  return $this->push($_0, $_2);  ?>
+
+# intersection_type_list
+IntersectionTypeList
+    = Type T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG Type  <?  return $this->init($_0, $_2);  ?>
+    | IntersectionTypeList T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG Type  <?  return $this->push($_0, $_2);  ?>
+
+# intersection_type
+IntersectionType
+    = IntersectionTypeList  <?  return new Node\IntersectionType($_0);  ?>
+
+# intersection_type_without_static_list
+IntersectionTypeWithoutStaticList
+    = TypeWithoutStatic T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG TypeWithoutStatic  <?  return $this->init($_0, $_2);  ?>
+    | IntersectionTypeWithoutStaticList T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG TypeWithoutStatic  <?  return $this->push($_0, $_2);  ?>
+
+# intersection_type_without_static
+IntersectionTypeWithoutStatic
+    = IntersectionTypeWithoutStaticList  <?  return new Node\IntersectionType($_0);  ?>
+
+# type_expr_without_static
+TypeExprWithoutStatic
+    = "?" TypeWithoutStatic  <?  return new Node\NullableType($_1);  ?>
+    | TypeWithoutStatic
+    | UnionTypeWithoutStatic  <?  return new Node\UnionType($_0);  ?>
+    | IntersectionTypeWithoutStatic
+
+# optional_type_without_static
+OptionalTypeWithoutStatic
+    = TypeExprWithoutStatic
+    | ""  <?  return null;  ?>
+
+# optional_return_type
+OptionalReturnType
+    = ":" TypeExpr  <?  return $_1;  ?>
+    | ":" Error  <?  return null;  ?>
+    | ""  <?  return null;  ?>
+
+# argument_list
+ArgumentList
+    = "(" ")"  <?  return array();  ?>
+    | "(" NonEmptyArgumentList OptionalComma ")"  <?  return $_1;  ?>
+    | "(" VariadicPlaceholder ")"  <?  return $this->init($_1);  ?>
+
+# clone_argument_list
+CloneArgumentList
+    = "(" ")"  <?  return array();  ?>
+    | "(" NonEmptyCloneArgumentList OptionalComma ")"  <?  return $_1;  ?>
+    | "(" Expr "," ")"  <?  return $this->init(new Node\Arg($_1, false, false));  ?>
+    | "(" VariadicPlaceholder ")"  <?  return $this->init($_1);  ?>
+
+# non_empty_clone_argument_list
+NonEmptyCloneArgumentList
+    = Expr "," Argument  <?  return $this->init(new Node\Arg($_0, false, false, $this->attributes()), $_2);  ?>
+    | ArgumentNoExpr  <?  return $this->init($_0);  ?>
+    | NonEmptyCloneArgumentList "," Argument  <?  return $this->push($_0, $_2);  ?>
+
+# variadic_placeholder
+VariadicPlaceholder
+    = T_ELLIPSIS  <?  return new Node\VariadicPlaceholder();  ?>
+
+# non_empty_argument_list
+NonEmptyArgumentList
+    = Argument  <?  return $this->init($_0);  ?>
+    | NonEmptyArgumentList "," Argument  <?  return $this->push($_0, $_2);  ?>
+
+# argument_no_expr
+ArgumentNoExpr
+    = T_ELLIPSIS Expr  <?  return new Node\Arg($_1, false, true);  ?>
+    | Ampersand Variable  <?  return new Node\Arg($_1, true, false);  ?>
+    | IdentifierMaybeReserved ":" Expr  <?  return new Node\Arg($_2, false, false, $this->attributes(), $_0);  ?>
+
+# argument
+Argument
+    = Expr  <?  return new Node\Arg($_0, false, false);  ?>
+    | ArgumentNoExpr
+
+# global_var_list
+GlobalVarList
+    = NonEmptyGlobalVarList NoComma
+
+# non_empty_global_var_list
+NonEmptyGlobalVarList
+    = NonEmptyGlobalVarList "," GlobalVar  <?  return $this->push($_0, $_2);  ?>
+    | GlobalVar  <?  return $this->init($_0);  ?>
+
+# global_var
+GlobalVar
+    = SimpleVariable
+
+# static_var_list
+StaticVarList
+    = NonEmptyStaticVarList NoComma
+
+# non_empty_static_var_list
+NonEmptyStaticVarList
+    = NonEmptyStaticVarList "," StaticVar  <?  return $this->push($_0, $_2);  ?>
+    | StaticVar  <?  return $this->init($_0);  ?>
+
+# static_var
+StaticVar
+    = PlainVariable "=" Expr  <?  return new Node\StaticVar($_0, $_2);  ?>
+    | PlainVariable  <?  return new Node\StaticVar($_0, null);  ?>
+
+# class_statement_list_ex
+ClassStatementListEx
+    = ClassStatementListEx ClassStatement  <?  return $_0;  ?>
+    | ""  <?  return $this->init();  ?>
+
+# class_statement_list
+ClassStatementList
+    = ClassStatementListEx  <?  return $_0;  ?>
+
+# class_statement
+ClassStatement
+    = T_USE ClassNameList TraitAdaptations  <?  return new Stmt\TraitUse($_1, $_2);  ?>
+    | OptionalAttributes VariableModifiers OptionalTypeWithoutStatic PropertyDeclarationList Semi  <?  return new Stmt\Property($_1, $_3, $this->attributes(), $_2, $_0);  ?>
+    | OptionalAttributes VariableModifiers OptionalTypeWithoutStatic PropertyDeclarationList "{" PropertyHookList "}"  <?  return new Stmt\Property($_1, $_3, $this->attributes(), $_2, $_0, $_5);  ?>
+    | OptionalAttributes MethodModifiers T_CONST ClassConstList Semi  <?  return new Stmt\ClassConst($_3, $_1, $this->attributes(), $_0);  ?>
+    | OptionalAttributes MethodModifiers T_CONST TypeExpr ClassConstList Semi  <?  return new Stmt\ClassConst($_4, $_1, $this->attributes(), $_0, $_3);  ?>
+    | OptionalAttributes MethodModifiers T_FUNCTION OptionalRef IdentifierMaybeReserved "(" ParameterList ")" OptionalReturnType MethodBody  <?  return new Stmt\ClassMethod($_4, ['type' => $_1, 'byRef' => $_3, 'params' => $_6, 'returnType' => $_8, 'stmts' => $_9, 'attrGroups' => $_0]);  ?>
+    | OptionalAttributes T_CASE IdentifierMaybeReserved EnumCaseExpr Semi  <?  return new Stmt\EnumCase($_2, $_3, $_0);  ?>
+
+# trait_adaptations
+TraitAdaptations
+    = ";"  <?  return array();  ?>
+    | "{" TraitAdaptationList "}"  <?  return $_1;  ?>
+
+# trait_adaptation_list
+TraitAdaptationList
+    = TraitAdaptationList TraitAdaptation  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return $this->init();  ?>
+
+# trait_adaptation
+TraitAdaptation
+    = TraitMethodReferenceFullyQualified T_INSTEADOF ClassNameList ";"  <?  return new Stmt\TraitUseAdaptation\Precedence($_0[0], $_0[1], $_2);  ?>
+    | TraitMethodReference T_AS MemberModifier IdentifierMaybeReserved ";"  <?  return new Stmt\TraitUseAdaptation\Alias($_0[0], $_0[1], $_2, $_3);  ?>
+    | TraitMethodReference T_AS MemberModifier ";"  <?  return new Stmt\TraitUseAdaptation\Alias($_0[0], $_0[1], $_2, null);  ?>
+    | TraitMethodReference T_AS IdentifierNotReserved ";"  <?  return new Stmt\TraitUseAdaptation\Alias($_0[0], $_0[1], null, $_2);  ?>
+    | TraitMethodReference T_AS ReservedNonModifiersIdentifier ";"  <?  return new Stmt\TraitUseAdaptation\Alias($_0[0], $_0[1], null, $_2);  ?>
+
+# trait_method_reference_fully_qualified
+TraitMethodReferenceFullyQualified
+    = Name T_PAAMAYIM_NEKUDOTAYIM IdentifierMaybeReserved  <?  return array($_0, $_2);  ?>
+
+# trait_method_reference
+TraitMethodReference
+    = TraitMethodReferenceFullyQualified
+    | IdentifierMaybeReserved  <?  return array(null, $_0);  ?>
+
+# method_body
+MethodBody
+    = ";"  <?  return null;  ?>
+    | BlockOrError
+
+# variable_modifiers
+VariableModifiers
+    = T_VAR  <?  return 0;  ?>
+    | NonEmptyMemberModifiers
+
+# method_modifiers
+MethodModifiers
+    = NonEmptyMemberModifiers
+    | ""  <?  return 0;  ?>
+
+# non_empty_member_modifiers
+NonEmptyMemberModifiers
+    = MemberModifier
+    | NonEmptyMemberModifiers MemberModifier  <?  return $_0 | $_1;  ?>
+
+# member_modifier
+MemberModifier
+    = T_PUBLIC  <?  return Modifiers::PUBLIC;  ?>
+    | T_PROTECTED  <?  return Modifiers::PROTECTED;  ?>
+    | T_PRIVATE  <?  return Modifiers::PRIVATE;  ?>
+    | T_PUBLIC_SET  <?  return Modifiers::PUBLIC_SET;  ?>
+    | T_PROTECTED_SET  <?  return Modifiers::PROTECTED_SET;  ?>
+    | T_PRIVATE_SET  <?  return Modifiers::PRIVATE_SET;  ?>
+    | T_STATIC  <?  return Modifiers::STATIC;  ?>
+    | T_ABSTRACT  <?  return Modifiers::ABSTRACT;  ?>
+    | T_FINAL  <?  return Modifiers::FINAL;  ?>
+    | T_READONLY  <?  return Modifiers::READONLY;  ?>
+
+# property_declaration_list
+PropertyDeclarationList
+    = NonEmptyPropertyDeclarationList NoComma
+
+# non_empty_property_declaration_list
+NonEmptyPropertyDeclarationList
+    = PropertyDeclaration  <?  return $this->init($_0);  ?>
+    | NonEmptyPropertyDeclarationList "," PropertyDeclaration  <?  return $this->push($_0, $_2);  ?>
+
+# property_decl_name
+PropertyDeclName
+    = T_VARIABLE  <?  return new Node\VarLikeIdentifier($this->parseVar($_0));  ?>
+
+# property_declaration
+PropertyDeclaration
+    = PropertyDeclName "=" Expr  <?  return new Node\PropertyItem($_0, $_2);  ?>
+    | PropertyDeclName  <?  return new Node\PropertyItem($_0, null);  ?>
+
+# property_hook_list
+PropertyHookList
+    = PropertyHookList PropertyHook  <?  return $this->push($_0, $_1);  ?>
+    | ""  <?  return [];  ?>
+
+# optional_property_hook_list
+OptionalPropertyHookList
+    = "{" PropertyHookList "}"  <?  return $_1;  ?>
+    | ""  <?  return [];  ?>
+
+# property_hook
+PropertyHook
+    = OptionalAttributes PropertyHookModifiers OptionalRef IdentifierNotReserved PropertyHookBody  <?  return new Node\PropertyHook($_3, $_4, ['flags' => $_1, 'byRef' => $_2, 'params' => [], 'attrGroups' => $_0]);  ?>
+    | OptionalAttributes PropertyHookModifiers OptionalRef IdentifierNotReserved "(" ParameterList ")" PropertyHookBody  <?  return new Node\PropertyHook($_3, $_7, ['flags' => $_1, 'byRef' => $_2, 'params' => $_5, 'attrGroups' => $_0]);  ?>
+
+# property_hook_body
+PropertyHookBody
+    = ";"  <?  return null;  ?>
+    | "{" InnerStatementList "}"  <?  return $_1;  ?>
+    | T_DOUBLE_ARROW Expr ";"  <?  return $_1;  ?>
+
+# property_hook_modifiers
+PropertyHookModifiers
+    = PropertyHookModifiers MemberModifier  <?  return $_0 | $_1;  ?>
+    | ""  <?  return 0;  ?>
+
+# expr_list_forbid_comma
+ExprListForbidComma
+    = NonEmptyExprList NoComma
+
+# expr_list_allow_comma
+ExprListAllowComma
+    = NonEmptyExprList OptionalComma
+
+# non_empty_expr_list
+NonEmptyExprList
+    = NonEmptyExprList "," Expr  <?  return $this->push($_0, $_2);  ?>
+    | Expr  <?  return $this->init($_0);  ?>
+
+# for_expr
+ForExpr
+    = ExprListForbidComma
+    | ""  <?  return array();  ?>
+
+# expr
+Expr
+    = T_CLONE CloneArgumentList  <?  return new Expr\FuncCall(new Node\Name($_0, $this->attributes()), $_1);  ?>
+    | T_CLONE Expr  <?  return new Expr\Clone_($_1);  ?>
+    | T_INC Variable  <?  return new Expr\PreInc($_1);  ?>
+    | T_DEC Variable  <?  return new Expr\PreDec($_1);  ?>
+    | "+" Expr %prec=T_INC  <?  return new Expr\UnaryPlus($_1);  ?>
+    | "-" Expr %prec=T_INC  <?  return new Expr\UnaryMinus($_1);  ?>
+    | "!" Expr  <?  return new Expr\BooleanNot($_1);  ?>
+    | "~" Expr  <?  return new Expr\BitwiseNot($_1);  ?>
+    | "(" Expr ")"  <?  return $_1;  ?>
+    | T_ISSET "(" ExprListAllowComma ")"  <?  return new Expr\Isset_($_2);  ?>
+    | T_EMPTY "(" Expr ")"  <?  return new Expr\Empty_($_2);  ?>
+    | T_INCLUDE Expr  <?  return new Expr\Include_($_1, Expr\Include_::TYPE_INCLUDE);  ?>
+    | T_INCLUDE_ONCE Expr  <?  return new Expr\Include_($_1, Expr\Include_::TYPE_INCLUDE_ONCE);  ?>
+    | T_EVAL "(" Expr ")"  <?  return new Expr\Eval_($_2);  ?>
+    | T_REQUIRE Expr  <?  return new Expr\Include_($_1, Expr\Include_::TYPE_REQUIRE);  ?>
+    | T_REQUIRE_ONCE Expr  <?  return new Expr\Include_($_1, Expr\Include_::TYPE_REQUIRE_ONCE);  ?>
+    | T_INT_CAST Expr  <?  return new Expr\Cast\Int_($_1, $attrs);  ?>
+    | T_DOUBLE_CAST Expr  <?  return new Expr\Cast\Double($_1, $attrs);  ?>
+    | T_STRING_CAST Expr  <?  return new Expr\Cast\String_($_1, $attrs);  ?>
+    | T_ARRAY_CAST Expr  <?  return new Expr\Cast\Array_($_1);  ?>
+    | T_OBJECT_CAST Expr  <?  return new Expr\Cast\Object_($_1);  ?>
+    | T_BOOL_CAST Expr  <?  return new Expr\Cast\Bool_($_1, $attrs);  ?>
+    | T_UNSET_CAST Expr  <?  return new Expr\Cast\Unset_($_1);  ?>
+    | T_VOID_CAST Expr  <?  return new Expr\Cast\Void_($_1);  ?>
+    | T_EXIT CtorArguments  <?  return $_0;  ?>
+    | "@" Expr  <?  return new Expr\ErrorSuppress($_1);  ?>
+    | "`" BackticksExpr "`"  <?  return new Expr\ShellExec($_1);  ?>
+    | T_PRINT Expr  <?  return new Expr\Print_($_1);  ?>
+    | T_YIELD Expr T_DOUBLE_ARROW Expr  <?  return new Expr\Yield_($_3, $_1);  ?>
+    | T_YIELD Expr  <?  return new Expr\Yield_($_1, null);  ?>
+    | T_YIELD  <?  return new Expr\Yield_(null, null);  ?>
+    | T_YIELD_FROM Expr  <?  return new Expr\YieldFrom($_1);  ?>
+    | T_THROW Expr  <?  return new Expr\Throw_($_1);  ?>
+    | T_FN OptionalRef "(" ParameterList ")" OptionalReturnType T_DOUBLE_ARROW Expr %prec=T_THROW  <?  return new Expr\ArrowFunction(['static' => false, 'byRef' => $_1, 'params' => $_3, 'returnType' => $_5, 'expr' => $_7, 'attrGroups' => []]);  ?>
+    | T_STATIC T_FN OptionalRef "(" ParameterList ")" OptionalReturnType T_DOUBLE_ARROW Expr %prec=T_THROW  <?  return new Expr\ArrowFunction(['static' => true, 'byRef' => $_2, 'params' => $_4, 'returnType' => $_6, 'expr' => $_8, 'attrGroups' => []]);  ?>
+    | T_FUNCTION OptionalRef "(" ParameterList ")" LexicalVars OptionalReturnType BlockOrError  <?  return new Expr\Closure(['static' => false, 'byRef' => $_1, 'params' => $_3, 'uses' => $_5, 'returnType' => $_6, 'stmts' => $_7, 'attrGroups' => []]);  ?>
+    | T_STATIC T_FUNCTION OptionalRef "(" ParameterList ")" LexicalVars OptionalReturnType BlockOrError  <?  return new Expr\Closure(['static' => true, 'byRef' => $_2, 'params' => $_4, 'uses' => $_6, 'returnType' => $_7, 'stmts' => $_8, 'attrGroups' => []]);  ?>
+    | ListExpr "=" Expr  <?  return new Expr\Assign($_0, $_2);  ?>
+    | ArrayShortSyntax "=" Expr  <?  return new Expr\Assign($_0, $_2);  ?>
+    | NewExpr
+    | Match
+    | Expr T_BOOLEAN_OR Expr  <?  return new Expr\BinaryOp\BooleanOr($_0, $_2);  ?>
+    | Expr T_BOOLEAN_AND Expr  <?  return new Expr\BinaryOp\BooleanAnd($_0, $_2);  ?>
+    | Expr T_LOGICAL_OR Expr  <?  return new Expr\BinaryOp\LogicalOr($_0, $_2);  ?>
+    | Expr T_LOGICAL_AND Expr  <?  return new Expr\BinaryOp\LogicalAnd($_0, $_2);  ?>
+    | Expr T_LOGICAL_XOR Expr  <?  return new Expr\BinaryOp\LogicalXor($_0, $_2);  ?>
+    | Expr "|" Expr  <?  return new Expr\BinaryOp\BitwiseOr($_0, $_2);  ?>
+    | Expr T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG Expr  <?  return new Expr\BinaryOp\BitwiseAnd($_0, $_2);  ?>
+    | Expr T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG Expr  <?  return new Expr\BinaryOp\BitwiseAnd($_0, $_2);  ?>
+    | Expr "^" Expr  <?  return new Expr\BinaryOp\BitwiseXor($_0, $_2);  ?>
+    | Expr "." Expr  <?  return new Expr\BinaryOp\Concat($_0, $_2);  ?>
+    | Expr "+" Expr  <?  return new Expr\BinaryOp\Plus($_0, $_2);  ?>
+    | Expr "-" Expr  <?  return new Expr\BinaryOp\Minus($_0, $_2);  ?>
+    | Expr "*" Expr  <?  return new Expr\BinaryOp\Mul($_0, $_2);  ?>
+    | Expr "/" Expr  <?  return new Expr\BinaryOp\Div($_0, $_2);  ?>
+    | Expr "%" Expr  <?  return new Expr\BinaryOp\Mod($_0, $_2);  ?>
+    | Expr T_SL Expr  <?  return new Expr\BinaryOp\ShiftLeft($_0, $_2);  ?>
+    | Expr T_SR Expr  <?  return new Expr\BinaryOp\ShiftRight($_0, $_2);  ?>
+    | Expr T_POW Expr  <?  return new Expr\BinaryOp\Pow($_0, $_2);  ?>
+    | Expr T_IS_IDENTICAL Expr  <?  return new Expr\BinaryOp\Identical($_0, $_2);  ?>
+    | Expr T_IS_NOT_IDENTICAL Expr  <?  return new Expr\BinaryOp\NotIdentical($_0, $_2);  ?>
+    | Expr T_IS_EQUAL Expr  <?  return new Expr\BinaryOp\Equal($_0, $_2);  ?>
+    | Expr T_IS_NOT_EQUAL Expr  <?  return new Expr\BinaryOp\NotEqual($_0, $_2);  ?>
+    | Expr T_SPACESHIP Expr  <?  return new Expr\BinaryOp\Spaceship($_0, $_2);  ?>
+    | Expr "<" Expr  <?  return new Expr\BinaryOp\Smaller($_0, $_2);  ?>
+    | Expr T_IS_SMALLER_OR_EQUAL Expr  <?  return new Expr\BinaryOp\SmallerOrEqual($_0, $_2);  ?>
+    | Expr ">" Expr  <?  return new Expr\BinaryOp\Greater($_0, $_2);  ?>
+    | Expr T_IS_GREATER_OR_EQUAL Expr  <?  return new Expr\BinaryOp\GreaterOrEqual($_0, $_2);  ?>
+    | Expr T_PIPE Expr  <?  return new Expr\BinaryOp\Pipe($_0, $_2);  ?>
+    | Expr T_INSTANCEOF ClassNameReference  <?  return new Expr\Instanceof_($_0, $_2);  ?>
+    | Expr "?" Expr ":" Expr  <?  return new Expr\Ternary($_0, $_2,   $_4);  ?>
+    | Expr "?" ":" Expr  <?  return new Expr\Ternary($_0, null, $_3);  ?>
+    | Expr T_COALESCE Expr  <?  return new Expr\BinaryOp\Coalesce($_0, $_2);  ?>
+    | Attributes T_FN OptionalRef "(" ParameterList ")" OptionalReturnType T_DOUBLE_ARROW Expr %prec=T_THROW  <?  return new Expr\ArrowFunction(['static' => false, 'byRef' => $_2, 'params' => $_4, 'returnType' => $_6, 'expr' => $_8, 'attrGroups' => $_0]);  ?>
+    | Attributes T_STATIC T_FN OptionalRef "(" ParameterList ")" OptionalReturnType T_DOUBLE_ARROW Expr %prec=T_THROW  <?  return new Expr\ArrowFunction(['static' => true, 'byRef' => $_3, 'params' => $_5, 'returnType' => $_7, 'expr' => $_9, 'attrGroups' => $_0]);  ?>
+    | Attributes T_FUNCTION OptionalRef "(" ParameterList ")" LexicalVars OptionalReturnType BlockOrError  <?  return new Expr\Closure(['static' => false, 'byRef' => $_2, 'params' => $_4, 'uses' => $_6, 'returnType' => $_7, 'stmts' => $_8, 'attrGroups' => $_0]);  ?>
+    | Attributes T_STATIC T_FUNCTION OptionalRef "(" ParameterList ")" LexicalVars OptionalReturnType BlockOrError  <?  return new Expr\Closure(['static' => true, 'byRef' => $_3, 'params' => $_5, 'uses' => $_7, 'returnType' => $_8, 'stmts' => $_9, 'attrGroups' => $_0]);  ?>
+    | Variable "=" Expr  <?  return new Expr\Assign($_0, $_2);  ?>
+    | Variable "=" Ampersand Variable  <?  return new Expr\AssignRef($_0, $_3);  ?>
+    | Variable "=" Ampersand NewExpr  <?  return new Expr\AssignRef($_0, $_3);  ?>
+    | Variable T_PLUS_EQUAL Expr  <?  return new Expr\AssignOp\Plus($_0, $_2);  ?>
+    | Variable T_MINUS_EQUAL Expr  <?  return new Expr\AssignOp\Minus($_0, $_2);  ?>
+    | Variable T_MUL_EQUAL Expr  <?  return new Expr\AssignOp\Mul($_0, $_2);  ?>
+    | Variable T_DIV_EQUAL Expr  <?  return new Expr\AssignOp\Div($_0, $_2);  ?>
+    | Variable T_CONCAT_EQUAL Expr  <?  return new Expr\AssignOp\Concat($_0, $_2);  ?>
+    | Variable T_MOD_EQUAL Expr  <?  return new Expr\AssignOp\Mod($_0, $_2);  ?>
+    | Variable T_AND_EQUAL Expr  <?  return new Expr\AssignOp\BitwiseAnd($_0, $_2);  ?>
+    | Variable T_OR_EQUAL Expr  <?  return new Expr\AssignOp\BitwiseOr($_0, $_2);  ?>
+    | Variable T_XOR_EQUAL Expr  <?  return new Expr\AssignOp\BitwiseXor($_0, $_2);  ?>
+    | Variable T_SL_EQUAL Expr  <?  return new Expr\AssignOp\ShiftLeft($_0, $_2);  ?>
+    | Variable T_SR_EQUAL Expr  <?  return new Expr\AssignOp\ShiftRight($_0, $_2);  ?>
+    | Variable T_POW_EQUAL Expr  <?  return new Expr\AssignOp\Pow($_0, $_2);  ?>
+    | Variable T_COALESCE_EQUAL Expr  <?  return new Expr\AssignOp\Coalesce($_0, $_2);  ?>
+    | Variable T_INC  <?  return new Expr\PostInc($_0);  ?>
+    | Variable T_DEC  <?  return new Expr\PostDec($_0);  ?>
+    | Variable
+    | Scalar
+
+# anonymous_class
+AnonymousClass
+    = OptionalAttributes ClassEntryType CtorArguments ExtendsFrom ImplementsList "{" ClassStatementList "}"  <?  return array(new Stmt\Class_(null, ['type' => $_1, 'extends' => $_3, 'implements' => $_4, 'stmts' => $_6, 'attrGroups' => $_0]), $_2);  ?>
+
+# new_dereferenceable
+NewDereferenceable
+    = T_NEW ClassNameReference ArgumentList  <?  return new Expr\New_($_1, $_2);  ?>
+    | T_NEW AnonymousClass  <?  return new Expr\New_($class, $ctorArgs);  ?>
+
+# new_non_dereferenceable
+NewNonDereferenceable
+    = T_NEW ClassNameReference  <?  return new Expr\New_($_1, []);  ?>
+
+# new_expr
+NewExpr
+    = NewDereferenceable
+    | NewNonDereferenceable
+
+# lexical_vars
+LexicalVars
+    = T_USE "(" LexicalVarList ")"  <?  return $_2;  ?>
+    | ""  <?  return array();  ?>
+
+# lexical_var_list
+LexicalVarList
+    = NonEmptyLexicalVarList OptionalComma
+
+# non_empty_lexical_var_list
+NonEmptyLexicalVarList
+    = LexicalVar  <?  return $this->init($_0);  ?>
+    | NonEmptyLexicalVarList "," LexicalVar  <?  return $this->push($_0, $_2);  ?>
+
+# lexical_var
+LexicalVar
+    = OptionalRef PlainVariable  <?  return new Node\ClosureUse($_1, $_0);  ?>
+
+# name_readonly
+NameReadonly
+    = T_READONLY  <?  return new Name($_0);  ?>
+
+# function_call
+FunctionCall
+    = Name ArgumentList  <?  return new Expr\FuncCall($_0, $_1);  ?>
+    | NameReadonly ArgumentList  <?  return new Expr\FuncCall($_0, $_1);  ?>
+    | CallableExpr ArgumentList  <?  return new Expr\FuncCall($_0, $_1);  ?>
+    | ClassNameOrVar T_PAAMAYIM_NEKUDOTAYIM MemberName ArgumentList  <?  return new Expr\StaticCall($_0, $_2, $_3);  ?>
+
+# class_name
+ClassName
+    = T_STATIC  <?  return new Name($_0);  ?>
+    | Name
+
+# name
+Name
+    = T_STRING  <?  return new Name($_0);  ?>
+    | T_NAME_QUALIFIED  <?  return new Name($_0);  ?>
+    | T_NAME_FULLY_QUALIFIED  <?  return new Name\FullyQualified(substr($_0, 1));  ?>
+    | T_NAME_RELATIVE  <?  return new Name\Relative(substr($_0, 10));  ?>
+
+# class_name_reference
+ClassNameReference
+    = "(" Expr ")"  <?  return $_1;  ?>
+    | ClassName
+    | NewVariable
+
+# class_name_or_var
+ClassNameOrVar
+    = ClassName
+    | FullyDereferenceable
+
+# backticks_expr
+BackticksExpr
+    = EncapsStringPart  <?  return array($_0);  ?>
+    | EncapsList  <?  return $_0;  ?>
+    | ""  <?  return array();  ?>
+
+# ctor_arguments
+CtorArguments
+    = ArgumentList
+    | ""  <?  return array();  ?>
+
+# constant
+Constant
+    = T_LINE  <?  return new Scalar\MagicConst\Line();  ?>
+    | T_FILE  <?  return new Scalar\MagicConst\File();  ?>
+    | T_DIR  <?  return new Scalar\MagicConst\Dir();  ?>
+    | T_CLASS_C  <?  return new Scalar\MagicConst\Class_();  ?>
+    | T_TRAIT_C  <?  return new Scalar\MagicConst\Trait_();  ?>
+    | T_METHOD_C  <?  return new Scalar\MagicConst\Method();  ?>
+    | T_FUNC_C  <?  return new Scalar\MagicConst\Function_();  ?>
+    | T_NS_C  <?  return new Scalar\MagicConst\Namespace_();  ?>
+    | T_PROPERTY_C  <?  return new Scalar\MagicConst\Property();  ?>
+    | Name  <?  return new Expr\ConstFetch($_0);  ?>
+
+# class_constant
+ClassConstant
+    = ClassNameOrVar T_PAAMAYIM_NEKUDOTAYIM IdentifierMaybeReserved  <?  return new Expr\ClassConstFetch($_0, $_2);  ?>
+    | ClassNameOrVar T_PAAMAYIM_NEKUDOTAYIM "{" Expr "}"  <?  return new Expr\ClassConstFetch($_0, $_3);  ?>
+    | ClassNameOrVar T_PAAMAYIM_NEKUDOTAYIM Error  <?  return new Expr\ClassConstFetch($_0, new Expr\Error($this->attributes()));  ?>
+
+# array_short_syntax
+ArrayShortSyntax
+    = "[" ArrayPairList "]"  <?  return new Expr\Array_($_1, $attrs);  ?>
+
+# dereferenceable_scalar
+DereferenceableScalar
+    = T_ARRAY "(" ArrayPairList ")"  <?  return new Expr\Array_($_2, $attrs);  ?>
+    | T_CONSTANT_ENCAPSED_STRING  <?  return Scalar\String_::fromString($_0, $this->attributes(), true);  ?>
+    | "\"" EncapsList "\""  <?  return new Scalar\InterpolatedString($_1, $attrs);  ?>
+    | ArrayShortSyntax  <?  return $_0;  ?>
+
+# scalar
+Scalar
+    = T_LNUMBER  <?  return $this->parseLNumber($_0, $this->attributes(), false);  ?>
+    | T_DNUMBER  <?  return Scalar\Float_::fromString($_0, $this->attributes());  ?>
+    | T_START_HEREDOC T_ENCAPSED_AND_WHITESPACE T_END_HEREDOC  <?  return $this->parseDocString($_0, $_1, $_2, $this->attributes(), $this->attributes(), true);  ?>
+    | T_START_HEREDOC T_END_HEREDOC  <?  return $this->parseDocString($_0, '', $_1, $this->attributes(), $this->attributes(), true);  ?>
+    | T_START_HEREDOC EncapsList T_END_HEREDOC  <?  return $this->parseDocString($_0, $_1, $_2, $this->attributes(), $this->attributes(), true);  ?>
+    | DereferenceableScalar
+    | Constant
+    | ClassConstant
+
+# optional_expr
+OptionalExpr
+    = Expr
+    | ""  <?  return null;  ?>
+
+# fully_dereferenceable
+FullyDereferenceable
+    = "(" Expr ")"  <?  return $_1;  ?>
+    | DereferenceableScalar
+    | ClassConstant
+    | NewDereferenceable
+    | Variable
+
+# array_object_dereferenceable
+ArrayObjectDereferenceable
+    = Constant
+    | FullyDereferenceable
+
+# callable_expr
+CallableExpr
+    = "(" Expr ")"  <?  return $_1;  ?>
+    | DereferenceableScalar
+    | NewDereferenceable
+    | CallableVariable
+
+# callable_variable
+CallableVariable
+    = SimpleVariable
+    | FunctionCall
+    | ArrayObjectDereferenceable "[" OptionalExpr "]"  <?  return new Expr\ArrayDimFetch($_0, $_2);  ?>
+    | ArrayObjectDereferenceable "{" Expr "}"  <?  return new Expr\ArrayDimFetch($_0, $_2);  ?>
+    | ArrayObjectDereferenceable T_OBJECT_OPERATOR PropertyName ArgumentList  <?  return new Expr\MethodCall($_0, $_2, $_3);  ?>
+    | ArrayObjectDereferenceable T_NULLSAFE_OBJECT_OPERATOR PropertyName ArgumentList  <?  return new Expr\NullsafeMethodCall($_0, $_2, $_3);  ?>
+
+# optional_plain_variable
+OptionalPlainVariable
+    = PlainVariable
+    | ""  <?  return null;  ?>
+
+# variable
+Variable
+    = StaticMember
+    | CallableVariable
+    | ArrayObjectDereferenceable T_OBJECT_OPERATOR PropertyName  <?  return new Expr\PropertyFetch($_0, $_2);  ?>
+    | ArrayObjectDereferenceable T_NULLSAFE_OBJECT_OPERATOR PropertyName  <?  return new Expr\NullsafePropertyFetch($_0, $_2);  ?>
+
+# simple_variable
+SimpleVariable
+    = "$" "{" Expr "}"  <?  return new Expr\Variable($_2);  ?>
+    | "$" SimpleVariable  <?  return new Expr\Variable($_1);  ?>
+    | "$" Error  <?  return new Expr\Variable(new Expr\Error());  ?>
+    | PlainVariable
+
+# static_member_prop_name
+StaticMemberPropName
+    = SimpleVariable  <?  return \is_string($var) ? new Node\VarLikeIdentifier($var) : $var;  ?>
+
+# static_member
+StaticMember
+    = ClassNameOrVar T_PAAMAYIM_NEKUDOTAYIM StaticMemberPropName  <?  return new Expr\StaticPropertyFetch($_0, $_2);  ?>
+
+# new_variable
+NewVariable
+    = SimpleVariable
+    | ClassName T_PAAMAYIM_NEKUDOTAYIM StaticMemberPropName  <?  return new Expr\StaticPropertyFetch($_0, $_2);  ?>
+    | NewVariable "[" OptionalExpr "]"  <?  return new Expr\ArrayDimFetch($_0, $_2);  ?>
+    | NewVariable "{" Expr "}"  <?  return new Expr\ArrayDimFetch($_0, $_2);  ?>
+    | NewVariable T_OBJECT_OPERATOR PropertyName  <?  return new Expr\PropertyFetch($_0, $_2);  ?>
+    | NewVariable T_NULLSAFE_OBJECT_OPERATOR PropertyName  <?  return new Expr\NullsafePropertyFetch($_0, $_2);  ?>
+    | NewVariable T_PAAMAYIM_NEKUDOTAYIM StaticMemberPropName  <?  return new Expr\StaticPropertyFetch($_0, $_2);  ?>
+
+# member_name
+MemberName
+    = "{" Expr "}"  <?  return $_1;  ?>
+    | IdentifierMaybeReserved
+    | SimpleVariable
+
+# property_name
+PropertyName
+    = "{" Expr "}"  <?  return $_1;  ?>
+    | IdentifierNotReserved
+    | SimpleVariable
+
+# list_expr
+ListExpr
+    = T_LIST "(" InnerArrayPairList ")"  <?  return new Expr\List_($_2);  ?>
+
+# array_pair_list
+ArrayPairList
+    = InnerArrayPairList  <?  return $_0;  ?>
+
+# comma_or_error
+CommaOrError
+    = ","
+
+# inner_array_pair_list
+InnerArrayPairList
+    = InnerArrayPairList CommaOrError ArrayPair  <?  return $this->push($_0, $_2);  ?>
+    | ArrayPair  <?  return $this->init($_0);  ?>
+
+# array_pair
+ArrayPair
+    = T_ELLIPSIS Expr  <?  return new Node\ArrayItem($_1, null, false, $this->attributes(), true);  ?>
+    | Expr T_DOUBLE_ARROW Expr  <?  return new Node\ArrayItem($_2, $_0,   false);  ?>
+    | Expr T_DOUBLE_ARROW Ampersand Variable  <?  return new Node\ArrayItem($_3, $_0,   true);  ?>
+    | Expr T_DOUBLE_ARROW ListExpr  <?  return new Node\ArrayItem($_2, $_0,   false);  ?>
+    | Expr  <?  return new Node\ArrayItem($_0, null, false);  ?>
+    | Ampersand Variable  <?  return new Node\ArrayItem($_1, null, true);  ?>
+    | ListExpr  <?  return new Node\ArrayItem($_0, null, false);  ?>
+    | ""  <?  return new Node\ArrayItem(new Expr\Error($attrs), null, false, $attrs);  ?>
+
+# encaps_list
+EncapsList
+    = EncapsList EncapsVar  <?  return $this->push($_0, $_1);  ?>
+    | EncapsList EncapsStringPart  <?  return $this->push($_0, $_1);  ?>
+    | EncapsVar  <?  return $this->init($_0);  ?>
+    | EncapsStringPart EncapsVar  <?  return $this->init($_0, $_1);  ?>
+
+# encaps_string_part
+EncapsStringPart
+    = T_ENCAPSED_AND_WHITESPACE  <?  return new Node\InterpolatedStringPart($_0, $attrs);  ?>
+
+# encaps_str_varname
+EncapsStrVarname
+    = T_STRING_VARNAME  <?  return new Expr\Variable($_0);  ?>
+
+# encaps_var
+EncapsVar
+    = T_DOLLAR_OPEN_CURLY_BRACES Expr "}"  <?  return new Expr\Variable($_1);  ?>
+    | T_DOLLAR_OPEN_CURLY_BRACES T_STRING_VARNAME "}"  <?  return new Expr\Variable($_1);  ?>
+    | T_DOLLAR_OPEN_CURLY_BRACES EncapsStrVarname "[" Expr "]" "}"  <?  return new Expr\ArrayDimFetch($_1, $_3);  ?>
+    | T_CURLY_OPEN Variable "}"  <?  return $_1;  ?>
+    | PlainVariable "[" EncapsVarOffset "]"  <?  return new Expr\ArrayDimFetch($_0, $_2);  ?>
+    | PlainVariable T_OBJECT_OPERATOR IdentifierNotReserved  <?  return new Expr\PropertyFetch($_0, $_2);  ?>
+    | PlainVariable T_NULLSAFE_OBJECT_OPERATOR IdentifierNotReserved  <?  return new Expr\NullsafePropertyFetch($_0, $_2);  ?>
+    | PlainVariable
+
+# encaps_var_offset
+EncapsVarOffset
+    = T_STRING  <?  return new Scalar\String_($_0);  ?>
+    | T_NUM_STRING  <?  return $this->parseNumString($_0, $this->attributes());  ?>
+    | "-" T_NUM_STRING  <?  return $this->parseNumString('-' . $_1, $this->attributes());  ?>
+    | PlainVariable
+

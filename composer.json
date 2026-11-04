@@ -37,5 +37,8 @@
     },
     "scripts": {
         "test": "php run-tests.php"
+    },
+    "suggest": {
+        "nikic/php-parser": "^5 - required by Charm\\Parsing\\Lexers\\PhpLexer (PHP token-mode lexer)"
     }
 }

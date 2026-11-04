@@ -1,0 +1,123 @@
+# YACC/Bison Grammar Parser
+# Parses .y files into an AST for conversion to CPEG format.
+
+# Entry point - just parse the rules section for now
+YaccFile "YACC file"
+    = _ decls:Declaration* _ "%%" _ rules:Rule* _ epilogue:Epilogue? $
+    <? return ['declarations' => $decls, 'rules' => $rules, 'epilogue' => $epilogue]; ?>
+
+Epilogue "epilogue section"
+    = "%%" rest:/[\s\S]*/  <? return $rest; ?>
+
+# Declarations
+Declaration "declaration"
+    = IfDirective
+    | PrecDecl
+    | TokenDecl
+    | OtherDecl
+
+# Preprocessor: #if PHP8 ... #endif
+IfDirective "if directive"
+    = "#if" _ cond:/[A-Z0-9_]+/ _ content:IfContent* _ "#endif" _
+    <? return ['if', $cond, $content]; ?>
+
+IfContent "if content"
+    = !("#endif") d:Declaration  <? return $d; ?>
+
+# %left, %right, %nonassoc
+PrecDecl "precedence declaration"
+    = assoc:AssocKeyword _ tokens:TokenList _
+    <? return ['prec', $assoc, $tokens]; ?>
+
+AssocKeyword "associativity keyword"
+    = "%left"  <? return 'left'; ?>
+    | "%right"  <? return 'right'; ?>
+    | "%nonassoc"  <? return 'none'; ?>
+
+# %token declarations
+TokenDecl "token declaration"
+    = "%token" _ tokens:TokenList _
+    <? return ['token', $tokens]; ?>
+
+# Other declarations we skip
+OtherDecl "other declaration"
+    = "%" [a-z_]+ [^\n]* "\n" _  <? return null; ?>
+
+# Token list - tokens separated by at least one space/tab
+TokenList "token list"
+    = head:TokenOrLiteral tail:([ \t]+ TokenOrLiteral)*
+    <?
+        $result = [$head];
+        foreach ($tail as $item) {
+            $result[] = $item[1];
+        }
+        return $result;
+    ?>
+
+TokenOrLiteral "token or literal"
+    = Token
+    | QuotedChar
+
+Token "token"
+    = first:[A-Z_] rest:[A-Za-z0-9_]*  <? return $first . implode('', $rest); ?>
+
+QuotedChar "quoted char"
+    = "'" char:[^'] "'"  <? return $char; ?>
+
+# Rules section
+Rule "rule"
+    = name:RuleName _ ":" _ alts:Alternatives _ ";"? _
+    <? return ['rule', $name, $alts]; ?>
+
+RuleName "rule name"
+    = first:[a-z_] rest:[a-z0-9_]*  <? return $first . implode('', $rest); ?>
+
+Alternatives "alternatives"
+    = head:Alternative tail:AltTail*
+    <?
+        $result = [$head];
+        foreach ($tail as $item) {
+            if (is_array($item) && isset($item[0]) && $item[0] === 'if') {
+                // Conditional alternatives block
+                $result[] = $item;
+            } else {
+                $result[] = $item;
+            }
+        }
+        return $result;
+    ?>
+
+AltTail "alternative or conditional"
+    = _ "#if" _ cond:/[A-Z0-9_]+/ _ alts:ConditionalAlt* _ "#endif"
+      <? return ['if', $cond, $alts]; ?>
+    | _ "|" _ alt:Alternative  <? return $alt; ?>
+
+ConditionalAlt "conditional alternative"
+    = !("#endif") _ "|" _ alt:Alternative  <? return $alt; ?>
+
+Alternative "alternative"
+    = symbols:Symbol* _ action:Action?
+    <? return ['alt', $symbols, $action]; ?>
+
+Symbol "symbol"
+    = _ s:SymbolItem  <? return $s; ?>
+
+SymbolItem "symbol item"
+    = Token
+    | RuleName
+    | QuotedChar
+    | PrecTag
+
+PrecTag "prec tag"
+    = "%prec" _ token:(Token | QuotedChar)  <? return ['%prec', $token]; ?>
+
+Action "action"
+    = "{" content:ActionContent* "}"  <? return implode('', $content); ?>
+
+ActionContent "action content"
+    = "{" inner:ActionContent* "}"  <? return '{' . implode('', $inner) . '}'; ?>
+    | content:[^{}]+  <? return implode('', $content); ?>
+
+# Whitespace and comments
+_ "whitespace"
+    = /[\s]*(\/\*[\s\S]*?\*\/[\s]*)*/  <? return null; ?>
