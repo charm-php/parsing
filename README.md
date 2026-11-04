@@ -204,6 +204,32 @@ Expr = Expr "**" Expr  %assoc=right   # Right associative
 
 Values: `%assoc=left` (default), `%assoc=right`, `%assoc=none`
 
+Other pragmas: `%prec=N` or `%prec=T_NAME` (explicit precedence level or token) and
+`%silent` (on a rule: its result is not captured in sequences).
+
+### Token mode
+
+Start the grammar with `@lexer <class>` to parse a token stream instead of characters.
+The class must implement `Charm\Parsing\LexerInterface` (its `lex()` returns a
+`Charm\Parsing\TokensInterface`). In token mode:
+
+- `T_NAME` (an identifier starting with `T_`) is a **Token** clause: it matches a token type resolved
+  through the lexer's symbol map, and returns the token's text.
+- `"+"` is a **Literal** clause: it matches a single-character token such as an operator,
+  and returns the literal.
+- `@prec { left "+" "-"  left "*" "/"  right T_POW }` declares a precedence table; each line binds
+  tighter than the previous one.
+
+```
+@lexer Charm\Parsing\Lexers\PhpLexer
+Sum = T_LNUMBER "+" T_LNUMBER
+```
+
+`Charm\Parsing\Lexers\PhpLexer` wraps nikic/php-parser ^5 (install it yourself; it is only suggested).
+Compiled token-mode parsers use `parser-token.template.php` and need `Charm\Parsing\TokensInterface`
+and the lexer class at runtime; string-mode parsers are standalone. See `example-grammars/php/`
+for an unfinished PHP grammar built this way.
+
 ---
 
 ## Example Grammars
@@ -328,6 +354,7 @@ echo 'Num = /[0-9]+/' | vendor/bin/charm-compile - -c NumParser
 #   -n, --namespace <ns>    PHP namespace
 #   -e, --extends <class>   Base class
 #   -i, --implements <if>   Interfaces (comma-separated)
+#   -t, --template <file>   Custom code-generation template (replaces the built-in one)
 #   -q, --quiet             No progress messages
 ```
 

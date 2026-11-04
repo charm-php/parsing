@@ -380,6 +380,29 @@ Expr = Expr "<" Expr  %assoc=none
 # "1<2<3" fails (non-associative)
 ```
 
+Also: `%prec=N|T_NAME` sets explicit precedence and `%silent` on a rule keeps its result out of
+sequence arrays.
+
+---
+
+## Token Mode
+
+A grammar starting with `@lexer Some\Lexer\Class` is parsed over tokens, not characters. The class
+implements `LexerInterface` (`lex(string): TokensInterface`, `getSymbolMap(): array`).
+
+| Syntax | Clause | Matches |
+|--------|--------|---------|
+| `T_NAME` | `Token` | a token whose type is `T_NAME` in the symbol map; returns its text |
+| `"+"` | `Literal` | a single-character token (stored as a string in the token array); returns it |
+
+Directive `@prec { left "+" "-"  left "*" "/"  right T_POW  none "<" }` defines a precedence table
+(later lines bind tighter; `left`, `right` or `none`).
+
+Compile with `charm-compile grammar.cpeg -c Parser -o Parser.php`; the token-mode template is selected
+automatically. `-t, --template <file>` supplies your own template (placeholders such as
+`{{GRAMMAR_NAME}}`, `{{NAMESPACE}}`, `{{CLASS_DECLARATION}}`, `{{PARSE_METHODS}}`, `{{SIGNAL_ENUM}}`).
+Token-mode parsers depend on `Charm\Parsing\TokensInterface` and the lexer class at runtime.
+
 ---
 
 ## Templates (Generics)
