@@ -21,6 +21,8 @@ out("<!bwhite>------------------------------------------<!>\n\n");
 out("<!white>Tests started <!bwhite>".gmdate('Y-m-d H:i:s')." GMT<!><!>\n");
 out("\n");
 
+$passed = 0;
+$failed = 0;
 $testFiles = glob(__DIR__.'/charm-tests/*.php');
 if ($filter !== null) {
     $testFiles = array_filter($testFiles, function($file) use ($filter) {
@@ -63,6 +65,7 @@ foreach ($testFiles as $number => $testFile) {
                 <!>```
 
                 ERROR);
+            $failed++;
             continue;
         }
         $forked = false;
@@ -80,6 +83,7 @@ foreach ($testFiles as $number => $testFile) {
                     $result = pcntl_waitpid($pid, $status, WUNTRACED|WNOHANG);
                     if ($result !== 0) {
                         $statusCode = pcntl_wexitstatus($status);
+                        if ($statusCode === 42) { $passed++; } else { $failed++; }
                         $resultStr = $statusCode === 42 ? "<!bgreen>OK<!>" : "<!bred>ERROR<!>";
                         out("\r<!white>Finished <!bwhite>".str_pad(basename($testFile)." ".($j-1)."/$numberOfTests", 40)."<!>:<!> $resultStr (test completed in ".number_format($runTime, 2)." seconds)\n\n");
     //<!byellow>".number_format($runTime, 3)." sec<!>");
@@ -163,11 +167,15 @@ wer");
             exit($success ? 42 : 1);
         } else {
             $runTime = microtime(true) - $startTime;
+            if ($success) { $passed++; } else { $failed++; }
             $resultStr = $success ? "<!bgreen>OK<!>" : "<!bred>ERROR<!>";
             out("\r<!white>Finished <!bwhite>".str_pad(basename($testFile)." ".($j-1)."/$numberOfTests", 40)."<!>:<!> $resultStr (test completed in ".number_format($runTime, 2)." seconds)\n\n");
         }
     }
 }
+
+out("<!bwhite>Summary: $passed passed / $failed failed<!>\n");
+exit($failed > 0 ? 1 : 0);
 
 function out(string $out) {
     if (!CSI::isTTY()) {
