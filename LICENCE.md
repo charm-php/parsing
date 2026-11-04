@@ -4,6 +4,24 @@ Charm/Parser - Parsing library
 Copyright 2022 by Frode Børli
 
 
+## Additional permission under GNU GPL version 3 section 7 (Charm Parsing output exception)
+
+As a special exception, you may create a work that contains or is derived from the
+output of the Charm Parsing grammar compiler (`charm-compile` / `Charm\Parsing\Compiler`),
+and distribute that output (a "generated parser") under terms of your choice, without
+the output being covered by the GNU General Public License. This exception applies to
+the portions of the compiler's templates and runtime support that the compiler copies
+into its output, and to the generated parser's use of the runtime interfaces and lexer
+classes it needs to run (for example `Charm\Parsing\TokensInterface`,
+`Charm\Parsing\LexerInterface` and the lexer classes in `Charm\Parsing\Lexers`).
+
+This exception does not apply to the compiler itself or to the rest of the Charm Parsing
+library: if you modify the compiler, its templates or the library, that modified material
+remains covered by the GNU General Public License, except to the extent that it is copied
+into generated output. If you modify this exception you may extend it to your version, but
+you are not obliged to do so; if you do not wish to, delete this exception statement
+from your version.
+
 # GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
 
