@@ -46,7 +46,7 @@ class CPEGParser implements ParserInterface {
         $state = new State();
 
     start_over_with_trace:
-        $state->setState($source);
+        $state->setStateString($source);
         $state->globals = $initialState;
 
         $goal = $this->grammar[$this->goal];

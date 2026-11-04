@@ -15,7 +15,9 @@ use Charm\Parsing\Clause\{
     Sequence,
     OrderedChoice,
     Identifier,
-    Snippet
+    Snippet,
+    Token,
+    Literal
 };
 
 /**
@@ -34,6 +36,7 @@ class GrammarCompiler
     private array $snippetMethods = []; // Collected snippet methods to generate
     private ?string $currentRuleName = null; // Track current rule for snippet naming
     private array $snippetCounters = []; // Per-rule snippet counters
+    private bool $isTokenMode = false; // Whether we're compiling for token-mode parsing
 
     /**
      * Compile a grammar to PHP code
@@ -69,8 +72,15 @@ class GrammarCompiler
         // Detect left-recursive rules
         $this->detectLeftRecursion();
 
-        // Load template
-        $templatePath = $this->options['template'] ?? __DIR__ . '/parser.template.php';
+        // Detect token mode and select appropriate template
+        $this->isTokenMode = $grammar->isTokenMode();
+        if ($this->options['template']) {
+            $templatePath = $this->options['template'];
+        } else {
+            $templatePath = $this->isTokenMode
+                ? __DIR__ . '/parser-token.template.php'
+                : __DIR__ . '/parser.template.php';
+        }
         $template = file_get_contents($templatePath);
 
         // Generate components
@@ -88,8 +98,8 @@ class GrammarCompiler
         // Generate local enum for signals
         $signalEnum = "enum {$className}Signal { case HIT; case MISS; }\n";
 
-        // Replace placeholders
-        $code = strtr($template, [
+        // Build replacements
+        $replacements = [
             '{{GRAMMAR_NAME}}' => $grammar->filename ?? $className,
             '{{NAMESPACE}}' => $namespace,
             '{{USE_STATEMENTS}}' => $useStatements,
@@ -102,7 +112,14 @@ class GrammarCompiler
             '{{SIGNAL_ENUM}}' => $signalEnum,
             '{{CLASS_NAME}}' => $className,
             '{{DESCRIPTIONS}}' => $descriptions,
-        ]);
+        ];
+
+        // Add token-mode specific replacements
+        if ($this->isTokenMode) {
+            $replacements['{{LEXER_CLASS}}'] = '\\' . ltrim($grammar->getLexerClass(), '\\');
+        }
+
+        $code = strtr($template, $replacements);
 
         return $code;
     }
@@ -201,6 +218,7 @@ class GrammarCompiler
                 return $this->isLeftRecursive($first, $ruleName, $visited);
             }
         } elseif ($clause instanceof OrderedChoice) {
+            // For detecting if a rule needs Pratt parsing: ANY LR choice means LR
             foreach ($clause as $choice) {
                 if ($this->isLeftRecursive($choice, $ruleName, $visited)) {
                     return true;
@@ -209,6 +227,43 @@ class GrammarCompiler
         }
 
         return false;
+    }
+
+    /**
+     * Check if a clause MUST be left-recursive (all paths lead to LR).
+     * Used for classifying Pratt alternatives - if true, it's an operator.
+     * If false, it can be a primary (has a non-LR exit path).
+     */
+    private function mustBeLeftRecursive(Clause $clause, string $ruleName, array $visited = []): bool
+    {
+        if (in_array($clause, $visited, true)) {
+            return false; // Cycle without hitting target - not LR on this path
+        }
+        $visited[] = $clause;
+
+        if ($clause instanceof Identifier) {
+            if ($clause->getIdentifier() === $ruleName) {
+                return true;
+            }
+            $targetRule = $this->grammar[$clause->getIdentifier()];
+            if ($targetRule) {
+                return $this->mustBeLeftRecursive($targetRule->getClause(), $ruleName, $visited);
+            }
+        } elseif ($clause instanceof Sequence) {
+            foreach ($clause as $first) {
+                return $this->mustBeLeftRecursive($first, $ruleName, $visited);
+            }
+        } elseif ($clause instanceof OrderedChoice) {
+            // ALL choices must be LR for the OrderedChoice to be necessarily LR
+            foreach ($clause as $choice) {
+                if (!$this->mustBeLeftRecursive($choice, $ruleName, $visited)) {
+                    return false; // Found a non-LR exit
+                }
+            }
+            return true;
+        }
+
+        return false; // Terminals are not LR
     }
 
     private function generateNamespace(): string
@@ -277,7 +332,8 @@ class GrammarCompiler
 
         // Generate collected snippet methods
         foreach ($this->snippetMethods as $method) {
-            $this->emitter->line("private function {$method['name']}({$method['params']}): mixed");
+            // No return type - snippets may use return; without value
+            $this->emitter->line("private function {$method['name']}({$method['params']})");
             $this->emitter->openBlock();
             // Make $state available as alias to $this->globals
             $this->emitter->line('$state = &$this->globals;');
@@ -326,21 +382,59 @@ class GrammarCompiler
         $primaryAlts = [];
         $operatorAlts = [];
         $numAlts = count($clause);
+        $hasPrecTable = $this->grammar->hasPrecedenceTable();
 
         foreach ($clause as $index => $choice) {
-            // Check for explicit %prec pragma, otherwise use position-based precedence
+            // Determine precedence and associativity for this alternative
+            $prec = null;
+            $assoc = 'left'; // default
+
+            // 1. Check for explicit %prec pragma
             $explicitPrec = $choice->pragma('prec');
             if ($explicitPrec !== null) {
-                $prec = (int) $explicitPrec[0];
-            } else {
+                $precValue = $explicitPrec[0];
+                if (is_numeric($precValue)) {
+                    $prec = (int) $precValue;
+                } elseif ($hasPrecTable) {
+                    // Look up token name in precedence table
+                    $precInfo = $this->grammar->getPrecedence($precValue);
+                    if ($precInfo !== null) {
+                        $prec = $precInfo['level'];
+                        $assoc = $precInfo['assoc'];
+                    }
+                }
+            }
+
+            // 2. If no explicit prec, try to extract operator from clause and look up in table
+            if ($prec === null && $hasPrecTable) {
+                $operator = $this->extractOperatorFromClause($choice, $ruleName);
+                if ($operator !== null) {
+                    $precInfo = $this->grammar->getPrecedence($operator);
+                    if ($precInfo !== null) {
+                        $prec = $precInfo['level'];
+                        $assoc = $precInfo['assoc'];
+                    }
+                }
+            }
+
+            // 3. Fall back to position-based precedence
+            if ($prec === null) {
                 // First alternative gets highest precedence (binds tightest)
-                // This matches standard operator precedence convention
                 $prec = $numAlts - $index;
             }
-            if ($this->isLeftRecursive($choice, $ruleName)) {
-                $operatorAlts[] = ['clause' => $choice, 'precedence' => $prec];
+
+            // Check for explicit %assoc pragma (overrides table)
+            $explicitAssoc = $choice->pragma('assoc');
+            if ($explicitAssoc !== null) {
+                $assoc = $explicitAssoc[0];
+            }
+
+            // Use mustBeLeftRecursive to check if ALL paths are LR
+            // If not, it can serve as a primary (has non-LR exit path)
+            if ($this->mustBeLeftRecursive($choice, $ruleName)) {
+                $operatorAlts[] = ['clause' => $choice, 'precedence' => $prec, 'assoc' => $assoc];
             } else {
-                $primaryAlts[] = ['clause' => $choice, 'precedence' => $prec];
+                $primaryAlts[] = ['clause' => $choice, 'precedence' => $prec, 'assoc' => $assoc];
             }
         }
 
@@ -408,6 +502,51 @@ class GrammarCompiler
         $this->emitter->line('$this->offset = $_offset;');
         $this->emitter->line('return ' . $this->signalMiss() . ';');
         $this->emitter->closeBlock();
+    }
+
+    /**
+     * Extract the operator from a left-recursive clause like "Expr op Expr".
+     * Returns the operator string/token name, or null if not found.
+     */
+    private function extractOperatorFromClause(Clause $clause, string $ruleName): ?string
+    {
+        if (!($clause instanceof Sequence)) {
+            return null;
+        }
+
+        $parts = iterator_to_array($clause);
+
+        // Look for pattern: Expr op Expr or Expr op Expr snippet
+        // The operator is typically the second element (after the left Expr)
+        foreach ($parts as $i => $part) {
+            // Skip the first element if it's a recursive reference (left operand)
+            if ($i === 0 && $part instanceof Identifier && $part->getIdentifier() === $ruleName) {
+                continue;
+            }
+
+            // Skip recursive references (right operand)
+            if ($part instanceof Identifier && $part->getIdentifier() === $ruleName) {
+                continue;
+            }
+
+            // Skip snippets
+            if ($part instanceof Snippet) {
+                continue;
+            }
+
+            // Found a terminal - this is likely the operator
+            if ($part instanceof Text) {
+                return $part->getText();
+            }
+            if ($part instanceof Literal) {
+                return $part->getLiteral();
+            }
+            if ($part instanceof Token) {
+                return $part->getTokenName();
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -505,22 +644,25 @@ class GrammarCompiler
     {
         $clause = $alt['clause'];
         $precedence = $alt['precedence'];
+        $assoc = $alt['assoc'] ?? 'left';
 
-        // Get right-associativity from pragma if present
-        $rightAssoc = false;
-        if ($clause->pragma('assoc') !== null && $clause->pragma('assoc')[0] === 'right') {
-            $rightAssoc = true;
-        }
+        // Determine associativity
+        $rightAssoc = ($assoc === 'right');
+        $nonAssoc = ($assoc === 'none');
 
-        $this->emitter->line("// Precedence $precedence" . ($rightAssoc ? ' (right-associative)' : ''));
-        $this->emitter->line("if (\$_minPrec < $precedence) {");
+        $assocComment = $rightAssoc ? ' (right-associative)' : ($nonAssoc ? ' (non-associative)' : '');
+        $this->emitter->line("// Precedence $precedence" . $assocComment);
+
+        // For non-associative operators, use <= to prevent chaining
+        $precOp = $nonAssoc ? '<=' : '<';
+        $this->emitter->line("if (\$_minPrec $precOp $precedence) {");
         $this->emitter->indent();
 
         // For a sequence like: Expr "+" Expr { snippet code }
         // We need to skip the first Expr (already parsed as $_left), match the middle parts,
         // then recursively parse the right Expr
         if ($clause instanceof Sequence) {
-            $this->generatePrattSequence($clause, $ruleName, $precedence, $rightAssoc);
+            $this->generatePrattSequence($clause, $ruleName, $precedence, $rightAssoc, $nonAssoc);
         } else {
             // Single clause that is somehow left-recursive (edge case)
             $this->emitter->line('// Single left-recursive clause');
@@ -536,7 +678,7 @@ class GrammarCompiler
         $this->emitter->line();
     }
 
-    private function generatePrattSequence(Sequence $seq, string $ruleName, int $precedence, bool $rightAssoc): void
+    private function generatePrattSequence(Sequence $seq, string $ruleName, int $precedence, bool $rightAssoc, bool $nonAssoc = false): void
     {
         $parts = iterator_to_array($seq);
         $firstIsLR = $this->isLeftRecursive($parts[0], $ruleName);
@@ -644,6 +786,10 @@ class GrammarCompiler
             $this->generateTextCode($clause, $resultVar);
         } elseif ($clause instanceof Regex) {
             $this->generateRegexCode($clause, $resultVar);
+        } elseif ($clause instanceof Token) {
+            $this->generateTokenCode($clause, $resultVar);
+        } elseif ($clause instanceof Literal) {
+            $this->generateLiteralCode($clause, $resultVar);
         } elseif ($clause instanceof Any) {
             $this->generateAnyCode($clause, $resultVar);
         } elseif ($clause instanceof EOF) {
@@ -676,6 +822,25 @@ class GrammarCompiler
         $textValue = trim($text, '"\'');
         $length = strlen($textValue);
         $escaped = var_export($textValue, true);
+
+        // In token mode, empty string means "match zero tokens" = always succeed
+        if ($length === 0 && $this->isTokenMode) {
+            $this->emitter->line("$resultVar = " . $this->signalHit() . "; // Empty match in token mode");
+            return;
+        }
+
+        // In token mode, literal strings match single-character tokens (operators, punctuation)
+        if ($this->isTokenMode && $length === 1) {
+            // Single char literal - check token array for this character
+            $this->emitter->line("if (\$this->offset < \$this->length && \$this->tokens[\$this->offset] === $escaped) {");
+            $this->emitter->indent();
+            $this->emitter->line("$resultVar = \$this->tokenData->getValue(\$this->offset);");
+            $this->emitter->line("\$this->offset++;");
+            $this->emitter->dedent()->line('} else {');
+            $this->emitter->indent()->line("$resultVar = " . $this->signalMiss() . ";");
+            $this->emitter->closeBlock();
+            return;
+        }
 
         $isAscii = preg_match('/^[\x00-\x7F]*$/', $textValue);
         $isCaseInsensitive = $clause->isCaseInsensitive();
@@ -731,6 +896,41 @@ class GrammarCompiler
         $this->emitter->indent();
         $this->emitter->line("$resultVar = \$_m[0];");
         $this->emitter->line('$this->offset += \\strlen($_m[0]);');
+        $this->emitter->dedent()->line('} else {');
+        $this->emitter->indent()->line("$resultVar = " . $this->signalMiss() . ";");
+        $this->emitter->closeBlock();
+    }
+
+    private function generateTokenCode(Token $clause, string $resultVar): void
+    {
+        $tokenName = $clause->getTokenName();
+
+        // Use the PHP constant directly - no need for symbol map indirection
+        $this->emitter->line("if (\$this->offset < \$this->length && \$this->tokens[\$this->offset] === \\$tokenName) {");
+        $this->emitter->indent();
+        $this->emitter->line("$resultVar = \$this->tokenData->getValue(\$this->offset);");
+        $this->emitter->line('$this->offset++;');
+        $this->emitter->dedent()->line('} else {');
+        $this->emitter->indent()->line("$resultVar = " . $this->signalMiss() . ";");
+        $this->emitter->closeBlock();
+    }
+
+    private function generateLiteralCode(Literal $clause, string $resultVar): void
+    {
+        $literalValue = $clause->getLiteral();
+        $literal = var_export($literalValue, true);
+
+        // Empty literal in token mode means "match zero tokens" = always succeed
+        if ($literalValue === '' && $this->isTokenMode) {
+            $this->emitter->line("$resultVar = " . $this->signalHit() . "; // Empty literal in token mode");
+            return;
+        }
+
+        // Direct comparison - works for both token mode (strings like ";") and char mode
+        $this->emitter->line("if (\$this->offset < \$this->length && \$this->tokens[\$this->offset] === $literal) {");
+        $this->emitter->indent();
+        $this->emitter->line("$resultVar = $literal;");
+        $this->emitter->line('$this->offset++;');
         $this->emitter->dedent()->line('} else {');
         $this->emitter->indent()->line("$resultVar = " . $this->signalMiss() . ";");
         $this->emitter->closeBlock();
@@ -1160,8 +1360,14 @@ class GrammarCompiler
                 $snippetNum = ++$this->snippetCounters[$ruleBaseName];
                 $methodName = lcfirst($ruleBaseName) . '_snippet' . $snippetNum;
             }
-            $params = implode(', ', array_values($paramNames));
-            $args = implode(', ', array_keys($paramNames));
+            // Add $_offset as first parameter (provides start position of matched rule)
+            $paramList = array_values($paramNames);
+            array_unshift($paramList, '$_offset');
+            $params = implode(', ', $paramList);
+
+            $argList = array_keys($paramNames);
+            array_unshift($argList, '$_offset');
+            $args = implode(', ', $argList);
 
             $this->snippetMethods[] = [
                 'name' => $methodName,
@@ -1251,7 +1457,12 @@ class GrammarCompiler
 
             // If this alternative has no terminal and no snippet, it might be a fallback
             // (e.g., the last "| ConditionalExpr" in AssignExpr)
+            // But only ONE fallback is allowed - multiple identifier alternatives break the optimization
             if (count($clauses) === 1 && $snippet === null && $clauses[0] instanceof Identifier) {
+                if ($fallbackIndex !== null) {
+                    // Multiple identifier-only alternatives - can't optimize
+                    return null;
+                }
                 $fallbackIndex = $i;
                 continue;
             }

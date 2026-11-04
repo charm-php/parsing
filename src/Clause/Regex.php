@@ -48,6 +48,9 @@ class Regex extends Terminal {
     }
 
     public function interpret(State $state, array $context) {
+        if ($state->source === null) {
+            throw new \LogicException("Regex clause cannot be used in token mode");
+        }
         $offset = $state->offset;
 
         $count = preg_match($this->re, $state->source, $matches, 0, $state->offset);

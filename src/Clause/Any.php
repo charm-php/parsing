@@ -17,13 +17,18 @@ class Any extends Terminal {
     }
 
     public function interpret(State $state, array $context) {
-        $offset = $state->offset;
         if ($state->offset === $state->length) {
             return Signal::MISS;
         }
+
+        // Token mode: return the token at current offset
+        if ($state->tokens !== null) {
+            return $state->tokens[$state->offset++];
+        }
+
+        // String mode: return next UTF-8 character
         $matched = mb_substr(substr($state->source, $state->offset, 4), 0, 1);
-        $length = strlen($matched);
-        $state->offset += $length;
+        $state->offset += strlen($matched);
         return $matched;
     }
 

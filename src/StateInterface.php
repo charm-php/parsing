@@ -4,12 +4,10 @@ namespace Charm\Parsing;
 /**
  * Parsing state is used and updated while a parse is being performed.
  *
- * @property string $source             The source string we're parsing.
- * @property ?array<LexerToken> $tokens The source string as tokens, if using tokenized parsing.
- * @property string $filename           The filename which contains the string being parsed.
- * @property int $offset                The offset we're about to begin parsing (byte offset or token offset if parsing tokens)
- * @property int $length                The total length of the source (byte length or token count if parsing tokens)
- * @property array $extra               Store arbitrary state information for the parser implementation.
+ * @property string|array $source   The source (string for string-mode, array for token-mode)
+ * @property int $offset            The offset we're about to begin parsing (byte offset or token offset)
+ * @property int $length            The total length of the source (byte length or token count)
+ * @property array $extra           Store arbitrary state information for the parser implementation.
  */
 interface StateInterface {
 
@@ -40,8 +38,12 @@ interface StateInterface {
     public function describeOffsetAt(int $offset): string;
 
     /**
-     * Reset the state for a new parse to begin.
+     * Set state for string-mode parsing.
      */
-    public function setState(string $source, array $tokens = null);
+    public function setStateString(string $source): void;
 
+    /**
+     * Set state for token-mode parsing.
+     */
+    public function setStateTokens(TokensInterface $tokenData): void;
 }

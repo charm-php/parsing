@@ -3,16 +3,19 @@ namespace Charm\Parsing;
 
 use Charm\Vector;
 use Charm\Parsing\Clause\{
+    Any,
     Commit,
     Snippet,
     SOF,
     EOF,
+    Literal,
     Nothing,
     Identifier,
     OrderedChoice,
     Sequence,
     Regex,
-    Text
+    Text,
+    Token
 };
 use Charm\Parsing\Util\StringTools;
 use Charm\Parsing\Error\State\ParseError;
@@ -59,9 +62,23 @@ class GrammarParser extends RecursiveDescentParser {
     const T_PRAGMA      = 18;
     const T_SPREAD      = 19;
     const T_NOTHING     = 20;
+    const T_DIRECTIVE   = 21;
 
     protected $options;
-    
+
+    /**
+     * Lexer class for token mode (set by @lexer directive).
+     * Null means string mode (scannerless parsing).
+     */
+    private ?string $lexerClass = null;
+
+    /**
+     * Precedence table from @prec directive.
+     * Maps token/literal to ['level' => int, 'assoc' => string].
+     * @var array<string, array{level: int, assoc: string}>
+     */
+    private array $precedenceTable = [];
+
     public function __construct(GrammarParserOptions $options=null) {
         if ($options === null) {
             $options = new GrammarParserOptions();
@@ -93,8 +110,16 @@ class GrammarParser extends RecursiveDescentParser {
                 RE,
                 function($match): string {
                     $q = $match->text[0];
-                    $match = substr($match->text, 1, -1);
-                    return strtr($match, [ "\\\\" => "\\", "\\$q" => $q ]);
+                    $str = substr($match->text, 1, -1);
+                    // Handle common escape sequences
+                    return strtr($str, [
+                        "\\n" => "\n",
+                        "\\r" => "\r",
+                        "\\t" => "\t",
+                        "\\0" => "\0",
+                        "\\\\" => "\\",
+                        "\\$q" => $q,
+                    ]);
                 }
                 ),
 
@@ -105,7 +130,11 @@ class GrammarParser extends RecursiveDescentParser {
                 RE,
                 function($match) {
                     if ($match->text[0] === '[') {
-                        return '/['.preg_quote(substr($match->text, 1, -1), '/').']/';
+                        // Character class syntax - don't use preg_quote as it breaks ranges
+                        // Only escape the delimiter if present
+                        $content = substr($match->text, 1, -1);
+                        $content = str_replace('/', '\\/', $content);
+                        return '/[' . $content . ']/';
                     }
                     return $match->text;
                 }
@@ -115,6 +144,16 @@ class GrammarParser extends RecursiveDescentParser {
                 self::T_PRAGMA, 'T_PRAGMA',
                 <<<'RE'
                 %[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff\-]*
+                RE,
+                function($match) {
+                    return substr($match->text, 1);
+                }
+                ),
+
+            new LexerPattern(
+                self::T_DIRECTIVE, 'T_DIRECTIVE',
+                <<<'RE'
+                @[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*
                 RE,
                 function($match) {
                     return substr($match->text, 1);
@@ -164,7 +203,7 @@ class GrammarParser extends RecursiveDescentParser {
             new LexerPattern(self::T_OR, 'T_OR', '\||\/'),
 
             new LexerPattern(self::T_SPREAD, 'T_SPREAD', '\.\.\.'),
-            new LexerPattern(self::T_TOKEN, 'T_TOKEN', '\.|,'),
+            new LexerPattern(self::T_TOKEN, 'T_TOKEN', '\.|,|\\\\'),
 
             new LexerPattern(self::T_WHITESPACE, 'T_WHITESPACE', '\\s+'),
         ]);
@@ -176,7 +215,7 @@ class GrammarParser extends RecursiveDescentParser {
         } catch (AbstractParseError $e) {
             $grammarOffset = $this->getByteOffsetAt($this->offset - 1);
 
-            $st = new StringTools($this->source);
+            $st = new StringTools($this->getSourceString());
             $e->setFileInfo($this->filename, $st->getLineNumberAt($grammarOffset), $st->getColumnNumberAt($grammarOffset));
             throw $e;
         } catch (CustomError $e) {
@@ -195,6 +234,15 @@ class GrammarParser extends RecursiveDescentParser {
     }
 
     private function _CPEG() {
+        // Reset state for each parse
+        $this->lexerClass = null;
+        $this->precedenceTable = [];
+
+        // Parse directives at the start
+        while ($this->typeIs(self::T_DIRECTIVE)) {
+            $this->_Directive();
+        }
+
         $rules = null;
 
         while (null !== ($rule = $this->_Rule())) {
@@ -202,10 +250,127 @@ class GrammarParser extends RecursiveDescentParser {
         }
 
         if ($rules !== null) {
-            return new Grammar($rules, $this->filename);
+            $grammar = new Grammar($rules, $this->filename);
+            if ($this->lexerClass !== null) {
+                $grammar->setLexerClass($this->lexerClass);
+            }
+            if (!empty($this->precedenceTable)) {
+                $grammar->setPrecedenceTable($this->precedenceTable);
+            }
+            return $grammar;
         }
 
         return null;
+    }
+
+    private function _Directive(): void {
+        $directive = $this->accept();
+        $name = $directive->getValue();
+
+        switch ($name) {
+            case 'lexer':
+                // Expect a class name (can be namespaced: Foo\Bar\Baz)
+                $className = '';
+                if (!$this->typeIs(self::T_IDENT)) {
+                    throw new ParseError($this, "Expected class name after @lexer on :location");
+                }
+                $className = $this->accept()->text;
+
+                // Handle namespaced class names (Foo\Bar\Baz)
+                while ($this->textIs('\\')) {
+                    $this->accept(); // consume backslash
+                    if (!$this->typeIs(self::T_IDENT)) {
+                        throw new ParseError($this, "Expected identifier after \\ in class name on :location");
+                    }
+                    $className .= '\\' . $this->accept()->text;
+                }
+
+                $this->lexerClass = $className;
+                break;
+
+            case 'prec':
+                $this->_PrecDirective();
+                break;
+
+            default:
+                throw new ParseError($this, "Unknown directive @{$name} on :location");
+        }
+    }
+
+    /**
+     * Parse @prec { ... } block.
+     *
+     * Syntax:
+     *   @prec {
+     *       left "+" "-" "."
+     *       left "*" "/" "%"
+     *       right T_POW
+     *       none "<" ">"
+     *   }
+     *
+     * Each line has higher precedence than the previous.
+     * Associativity: left, right, or none.
+     */
+    private function _PrecDirective(): void {
+        if (!$this->textIs('{')) {
+            throw new ParseError($this, "Expected '{' after @prec on :location");
+        }
+        $this->accept(); // consume {
+
+        $level = 1;
+        $assocKeywords = ['left', 'right', 'none'];
+
+        // Parse lines until we hit }
+        while (!$this->textIs('}') && !$this->eof()) {
+            // Each line: <assoc> <token> <token> ...
+            // Assoc is an identifier: left, right, none
+            if (!$this->typeIs(self::T_IDENT)) {
+                throw new ParseError($this, "Expected 'left', 'right', or 'none' on :location");
+            }
+
+            $assocToken = $this->accept();
+            $assoc = $assocToken->text;
+
+            if (!in_array($assoc, $assocKeywords, true)) {
+                throw new ParseError($this, "Invalid associativity '$assoc' on :location. Expected 'left', 'right', or 'none'");
+            }
+
+            // Parse tokens on this line (strings like "+" or identifiers like T_POW)
+            // Stop when we see an associativity keyword (start of next line) or }
+            $tokens = [];
+            while (!$this->textIs('}') && !$this->eof()) {
+                if ($this->typeIs(self::T_STRING)) {
+                    $tokens[] = $this->accept()->getValue(); // Get unquoted value
+                } elseif ($this->typeIs(self::T_IDENT)) {
+                    // Check if this is the start of a new line (assoc keyword)
+                    if (in_array($this->text(), $assocKeywords, true)) {
+                        break; // Start of new line
+                    }
+                    $tokens[] = $this->accept()->text;
+                } else {
+                    break;
+                }
+            }
+
+            if (empty($tokens)) {
+                throw new ParseError($this, "Expected at least one token after '$assoc' on :location");
+            }
+
+            // Add all tokens at this precedence level
+            foreach ($tokens as $tokenName) {
+                $this->precedenceTable[$tokenName] = [
+                    'level' => $level,
+                    'assoc' => $assoc,
+                ];
+            }
+
+            $level++;
+        }
+
+        if (!$this->textIs('}')) {
+            throw new ParseError($this, "Expected '}' to close @prec block on :location");
+        }
+        $this->accept(); // consume }
     }
 
     private function _RuleName() {
@@ -484,6 +649,7 @@ class GrammarParser extends RecursiveDescentParser {
             }
 
             $clause = $this->accept();
+            $isTokenMode = $this->lexerClass !== null;
 
             switch ($clause->type) {
                 case self::T_IDENT:
@@ -491,16 +657,28 @@ class GrammarParser extends RecursiveDescentParser {
                         case '^' : return new SOF(Clause::NONE, null);
                         case '$' : return new EOF(Clause::NONE, null);
                         case '.' : return new Any(Clause::NONE, null);
-                        default : return new Identifier($clause->text, Clause::NONE, null);
+                        default :
+                            // In token mode, identifiers starting with T_ are token type names
+                            if ($isTokenMode && str_starts_with($clause->text, 'T_')) {
+                                return new Token($clause->text, Clause::NONE, null);
+                            }
+                            return new Identifier($clause->text, Clause::NONE, null);
                     }
 
                 case self::T_STRING:
+                    // In token mode, strings match literal tokens; in string mode, they match substrings
+                    if ($isTokenMode) {
+                        return new Literal($clause->getValue(), Clause::NONE, null);
+                    }
                     return new Text($clause->getValue(), Clause::NONE, null);
 
                 case self::T_SNIPPET:
                     return new Snippet($clause->getValue(), Clause::NONE, null, $this->options->base_namespace);
 
                 case self::T_REGEX:
+                    if ($isTokenMode) {
+                        throw new ParseError($this, "Regex patterns are not supported in token mode on :location");
+                    }
                     return new Regex($clause->getValue(), Clause::NONE, null);
 
                 default :

@@ -1,0 +1,60 @@
+# Simplified JavaScript Expression Grammar
+# Tests Pratt parsing with basic operators
+
+Expr "expression"
+    # Precedence: lower number = binds looser, listed from lowest to highest
+    # Use %prec=N to group operators at the same precedence level
+    = left:Expr _ "||" @ _ right:Expr              %prec=1  <? return ['or', $left, $right]; ?>
+    | left:Expr _ "&&" @ _ right:Expr              %prec=2  <? return ['and', $left, $right]; ?>
+    | left:Expr _ "==" @ _ right:Expr              %prec=3  <? return ['eq', $left, $right]; ?>
+    | left:Expr _ "!=" @ _ right:Expr              %prec=3  <? return ['neq', $left, $right]; ?>
+    | left:Expr _ "<=" @ _ right:Expr              %prec=4  <? return ['lte', $left, $right]; ?>
+    | left:Expr _ ">=" @ _ right:Expr              %prec=4  <? return ['gte', $left, $right]; ?>
+    | left:Expr _ "<" @ _ right:Expr               %prec=4  <? return ['lt', $left, $right]; ?>
+    | left:Expr _ ">" @ _ right:Expr               %prec=4  <? return ['gt', $left, $right]; ?>
+    | left:Expr _ "+" @ _ right:Expr               %prec=5  <? return ['add', $left, $right]; ?>
+    | left:Expr _ "-" @ _ right:Expr               %prec=5  <? return ['sub', $left, $right]; ?>
+    | left:Expr _ "*" @ _ right:Expr               %prec=6  <? return ['mul', $left, $right]; ?>
+    | left:Expr _ "/" @ _ right:Expr               %prec=6  <? return ['div', $left, $right]; ?>
+    | left:Expr _ "%" @ _ right:Expr               %prec=6  <? return ['mod', $left, $right]; ?>
+    | base:Expr _ "**" @ _ exp:Expr  %prec=7 %assoc=right   <? return ['exp', $base, $exp]; ?>
+    | UnaryExpr
+
+UnaryExpr
+    = "!" _ arg:UnaryExpr                          <? return ['not', $arg]; ?>
+    | "-" _ arg:UnaryExpr                          <? return ['neg', $arg]; ?>
+    | "+" _ arg:UnaryExpr                          <? return ['pos', $arg]; ?>
+    | CallExpr
+
+CallExpr
+    = fn:CallExpr "(" _ args:Args? _ ")"           <? return ['call', $fn, $args ?? []]; ?>
+    | obj:CallExpr "." @ name:Ident                <? return ['member', $obj, $name]; ?>
+    | obj:CallExpr "[" @ _ idx:Expr _ "]"          <? return ['index', $obj, $idx]; ?>
+    | Primary
+
+Primary "value"
+    = "(" _ e:Expr _ ")"                           <? return $e; ?>
+    | "true"                                       <? return ['literal', true]; ?>
+    | "false"                                      <? return ['literal', false]; ?>
+    | "null"                                       <? return ['literal', null]; ?>
+    | num:Number                                   <? return $num; ?>
+    | str:String                                   <? return $str; ?>
+    | name:Ident                                   <? return ['ident', $name]; ?>
+
+Number "number"
+    = /[0-9]+\.?[0-9]*/                            <? return ['number', (float)$_0]; ?>
+
+String "string"
+    = /"([^"\\]|\\.)*"/                            <? return ['string', \substr($_0, 1, -1)]; ?>
+
+Ident "identifier"
+    = /[a-zA-Z_$][a-zA-Z0-9_$]*/                   <? return $_0; ?>
+
+Args
+    = first:Expr rest:(_ "," _ e:Expr)*  <?
+        $result = [$first];
+        foreach ($rest as $r) { $result[] = $r['e']; }
+        return $result;
+    ?>
+
+_ = /[ \t\n\r]*/

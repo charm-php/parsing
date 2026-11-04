@@ -36,9 +36,9 @@
             $this->fail('{{GOAL_DESCRIPTION}}');
         }
 
-        // Signal::HIT means success with no value - return null
+        // Signal::HIT means success with no value - return true
         if ($result === {{CLASS_NAME}}Signal::HIT) {
-            return null;
+            return true;
         }
 
         return $result;

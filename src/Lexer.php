@@ -2,13 +2,20 @@
 namespace Charm\Parsing;
 
 use Charm\Parsing\Error\ParseError;
+use Charm\Parsing\Lexers\LexerTokens;
 
 /**
  * A very fast string tokenizer based on regular expressions.
  */
-class Lexer implements LexerInterface{
+class Lexer implements LexerInterface {
 
     private array $patterns;
+
+    /**
+     * Symbol map for token names to type IDs.
+     * Built lazily from patterns.
+     */
+    private ?array $symbolMap = null;
 
     /**
      * @param array<LexerPattern> $patterns
@@ -94,5 +101,30 @@ class Lexer implements LexerInterface{
 //        return array_values(array_filter($matches[0]));
     }
 
+    /**
+     * Lex a source string into a TokensInterface.
+     *
+     * This is the new interface method that wraps tokenize() for unified lexer usage.
+     */
+    public function lex(string $source): TokensInterface {
+        $tokens = $this->tokenize($source, '');
+        return new LexerTokens($source, $tokens);
+    }
 
+    /**
+     * Get the symbol map: token names to their type IDs.
+     *
+     * Maps pattern names (like "T_IDENT") to their integer type values.
+     */
+    public function getSymbolMap(): array {
+        if ($this->symbolMap === null) {
+            $this->symbolMap = [];
+            foreach ($this->patterns as $pattern) {
+                if ($pattern->type >= 0) {
+                    $this->symbolMap[$pattern->name] = $pattern->type;
+                }
+            }
+        }
+        return $this->symbolMap;
+    }
 }

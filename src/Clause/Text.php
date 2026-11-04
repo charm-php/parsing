@@ -34,7 +34,6 @@ class Text extends Terminal {
     }
 
     public function interpret(State $state, array $context) {
-        $offset = $state->offset;
         $source = substr($state->source, $state->offset, $this->length);
         if ($this->isCaseInsensitive()) {
             if (mb_strtolower($source) !== $this->text) {

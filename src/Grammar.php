@@ -80,6 +80,19 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
      */
     private array $snippets = [];
 
+    /**
+     * Lexer class for token mode parsing.
+     * Null means string mode (scannerless parsing).
+     */
+    private ?string $lexerClass = null;
+
+    /**
+     * Precedence table from @prec directive.
+     * Maps token/literal to ['level' => int, 'assoc' => string].
+     * @var array<string, array{level: int, assoc: string}>
+     */
+    private array $precedenceTable = [];
+
     public function __construct(iterable $rules, string $filename=null) {
         $this->filename = $filename;
         foreach ($rules as $rule) {
@@ -134,6 +147,59 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
      */
     public function getSnippets(): array {
         return $this->snippets;
+    }
+
+    /**
+     * Set the lexer class for token mode parsing.
+     */
+    public function setLexerClass(string $lexerClass): void {
+        $this->lexerClass = $lexerClass;
+    }
+
+    /**
+     * Get the lexer class for token mode parsing.
+     * Returns null for string mode (scannerless) grammars.
+     */
+    public function getLexerClass(): ?string {
+        return $this->lexerClass;
+    }
+
+    /**
+     * Check if this grammar uses token mode parsing.
+     */
+    public function isTokenMode(): bool {
+        return $this->lexerClass !== null;
+    }
+
+    /**
+     * Set the precedence table from @prec directive.
+     * @param array<string, array{level: int, assoc: string}> $table
+     */
+    public function setPrecedenceTable(array $table): void {
+        $this->precedenceTable = $table;
+    }
+
+    /**
+     * Get the precedence table.
+     * @return array<string, array{level: int, assoc: string}>
+     */
+    public function getPrecedenceTable(): array {
+        return $this->precedenceTable;
+    }
+
+    /**
+     * Check if this grammar has precedence declarations.
+     */
+    public function hasPrecedenceTable(): bool {
+        return !empty($this->precedenceTable);
+    }
+
+    /**
+     * Get precedence info for a token/literal.
+     * Returns ['level' => int, 'assoc' => string] or null if not declared.
+     */
+    public function getPrecedence(string $token): ?array {
+        return $this->precedenceTable[$token] ?? null;
     }
 
     public function count() {

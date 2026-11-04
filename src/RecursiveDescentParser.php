@@ -1,7 +1,7 @@
 <?php
 namespace Charm\Parsing;
 
-use Charm\Vector;
+use Charm\Parsing\Lexers\LexerTokens;
 use Charm\Parsing\Util\{
     StringTools,
     ExceptionTools,
@@ -36,9 +36,9 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      */
     protected final function byteOffset(): int {
         if ($this->offset >= $this->length) {
-            return strlen($this->source);
+            return strlen($this->getSourceString());
         }
-        return $this->tokens[$this->offset]->offset;
+        return $this->tokenData->getOffset($this->offset) ?? strlen($this->getSourceString());
     }
 
     /**
@@ -67,9 +67,7 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
             return self::$cache[$hash];
         }
         $lexer = $this->getLexer();
-        $tokens = $lexer->tokenize($source, $filename, $lineOffset, $columnOffset);
-        // yes we invoke the constructor
-        $this->setState($source, $tokens);
+        $this->setStateTokens($lexer->lex($source));
         $this->filename = $filename;
         $this->lineOffset = $lineOffset;
         $this->columnOffset = $columnOffset;
@@ -82,11 +80,12 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
             /**
              * Rewrite the exception with correct location information.
              */
-            $offendingToken = $this->tokens[$this->offset - 1];
+            $tokenIndex = max(0, $this->offset - 1);
+            $tokenOffset = $this->tokenData->getOffset($tokenIndex) ?? 0;
             $st = new StringTools($source);
             $et = new ExceptionTools($e);
             $et->setFileName($filename);
-            $et->setLine($st->getLineNumberAt($offendingToken->offset) + $lineOffset);
+            $et->setLine($st->getLineNumberAt($tokenOffset) + $lineOffset);
             throw $e;
         }
     }
@@ -96,7 +95,7 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * to parse, PHP's return type handling will trigger a TypeError.
      */
     protected final function accept(): LexerToken {
-        return $this->tokens[$this->offset++];
+        return $this->getLexerTokens()->getLexerToken($this->offset++);
     }
 
     /**
@@ -104,7 +103,7 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * relative to the current token (for implementing lookahead).
      */
     protected final function type(int $offset=0): int {
-        return $this->tokens[$offset + $this->offset]->type ?? -1;
+        return $this->tokenData->getToken($offset + $this->offset) ?? -1;
     }
 
     /**
@@ -112,17 +111,15 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * offset relative to the current token (for implementing lookahead).
      */
     protected final function text(int $offset=0): string {
-        return $this->tokens[$offset + $this->offset]->text ?? '';
+        return $this->tokenData->getValue($offset + $this->offset) ?? '';
     }
 
     /**
      * Utility function to check the token type at the current offset.
      */
     protected final function typeIs(int $type, int $offset=0): bool {
-        if ($this->offset + $offset < $this->length) {
-            return $this->tokens[$this->offset + $offset]->type === $type;
-        }
-        return false;
+        $index = $this->offset + $offset;
+        return $index < $this->length && $this->tokenData->getToken($index) === $type;
     }
 
     /**
@@ -130,17 +127,23 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * a particular text.
      */
     protected final function textIs(string $text, int $offset=0): bool {
-        if ($this->offset + $offset < $this->length) {
-            return $this->tokens[$this->offset + $offset]->text === $text;
-        }
-        return false;
+        $index = $this->offset + $offset;
+        return $index < $this->length && $this->tokenData->getValue($index) === $text;
     }
 
     /**
      * Get the lexer token at an offset relative to the current offset.
      */
     protected final function peek(int $offset): ?LexerToken {
-        return $this->tokens[$this->offset + $offset] ?? null;
+        return $this->getLexerTokens()->getLexerToken($this->offset + $offset);
+    }
+
+    /**
+     * Get the LexerTokens instance. Only valid for parsers using the internal Lexer.
+     */
+    private function getLexerTokens(): LexerTokens {
+        assert($this->tokenData instanceof LexerTokens);
+        return $this->tokenData;
     }
 
     /**
@@ -157,29 +160,6 @@ abstract class RecursiveDescentParser extends State implements ParserInterface {
      * The column offset (added to error message offset descriptions)
      */
     protected int $columnOffset = 0;
-
-    /**
-     * A map of terminal regex patterns for the lexer. Added by {@see self::addTerminal()}.
-     *
-     * @var array<int, string>
-     */
-    private array $terminals = [];    // terminal patterns
-
-    /**
-     * An array of terminal names which should be removed by the tokenizer. Added by
-     * {@see self::addIgnore()}
-     *
-     * @var array<int, bool>
-     */
-    private array $ignores = [];      // ignore patterns
-
-    /**
-     * Array of LexerToken objects from tokenizing the source code passed to {@see self::parse()}
-     *
-     * @var array<int, LexerToken>
-     */
-    public $tokens;            // regex matches
-
 }
 
 

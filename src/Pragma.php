@@ -19,10 +19,17 @@ final class Pragma implements \ArrayAccess {
                 break;
             case 'prec':
                 $value = (string) $params[0];
-                if ($params[0] === null || !ctype_digit($value)) {
-                    throw new \LogicException("Pragma directive %prec requires a numeric precedence level, e.g. '%prec=5'");
+                if ($params[0] === null) {
+                    throw new \LogicException("Pragma directive %prec requires a value, e.g. '%prec=5' or '%prec=T_POW'");
                 }
-                $params[0] = (int) $value;
+                // Allow numeric values or token names (identifiers)
+                if (ctype_digit($value)) {
+                    $params[0] = (int) $value;
+                } elseif (preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $value)) {
+                    $params[0] = $value; // Keep as string for token name lookup
+                } else {
+                    throw new \LogicException("Pragma directive %prec requires a number or token name, e.g. '%prec=5' or '%prec=T_POW'");
+                }
                 break;
             case 'silent':
                 // %silent marks a rule's result as not to be captured in sequences

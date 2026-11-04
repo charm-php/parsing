@@ -20,11 +20,17 @@ class ParseError extends AbstractParseError {
     }
 
     public function getInternalLineNumber(): int {
+        if ($this->_state->source === null) {
+            return 0;
+        }
         $st = new StringTools($this->_state->source);
         return $st->getLineNumberAt($this->_state->getByteOffsetAt($this->_offset));
     }
 
     public function getInternalColumnNumber(): int {
+        if ($this->_state->source === null) {
+            return 0;
+        }
         $st = new StringTools($this->_state->source);
         return $st->getColumnNumberAt($this->_state->getByteOffsetAt($this->_offset));
     }

@@ -4,6 +4,7 @@ namespace Charm\Parsing;
 class LexerPattern {
 
     public int $type;
+    public string $name;
     public string $regex;
     private $processor;
 
