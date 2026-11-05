@@ -213,9 +213,10 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
                 do {
                     $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
-                    if ($partial !== Signal::MISS) {
+                    if ($partial !== Signal::MISS && $parser->offset !== $loopOffset) {
                         $result[] = $partial;
                     } else {
+                        // a miss, or an iteration that consumed nothing (which would repeat forever), ends it
                         if ($doTrace) $parser->traceEnd($this, $result);
                         return $result;
                     }
@@ -226,9 +227,14 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
                 do {
                     $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
-                    if ($partial !== Signal::MISS) {
+                    if ($partial !== Signal::MISS && $parser->offset !== $loopOffset) {
                         $result[] = $partial;
                     } else {
+                        // An iteration that consumed nothing ends the repetition (it would repeat forever),
+                        // but the first one still counts as the one match that + requires
+                        if ($partial !== Signal::MISS && $result === []) {
+                            $result[] = $partial;
+                        }
                         // Return Signal::MISS if no matches, otherwise return the array
                         if ($result === []) {
                             $result = Signal::MISS;

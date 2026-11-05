@@ -90,4 +90,14 @@ N = /[0-9]/ <? return intval($_0); ?>', '1+2+3'], both(6) ],
     [ ['S = Expr
 Expr = Expr "+" Expr <? return $MISS; ?> | N
 N = /[0-9]/', '1+2'], both('1') ],
+
+    // a repetition iteration that consumes nothing ends the repetition and is not collected (the
+    // first one still counts for +); 0031 has the basic cases
+    [ ['S = ("a"?)+', 'b'], both([null]) ],
+    [ ['S = ("a"?)+', 'aab'], both(['a', 'a']) ],
+    [ ['S = ("a"*)* "b"', 'aab'], both([[['a', 'a']], 'b']) ],
+    [ ['S = ("a" | ε)*', 'aa'], both(['a', 'a']) ],
+    [ ['S = A*
+A = "a"?', 'aa'], both(['a', 'a']) ],
+    [ ['S = "b"? "a"* "c"', 'c'], both([null, [], 'c']) ],
 ];

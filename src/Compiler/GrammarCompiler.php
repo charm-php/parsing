@@ -1273,43 +1273,49 @@ class GrammarCompiler
 
     private function generateOneOrMoreCode(Clause $clause, string $resultVar): void
     {
-        $inner = clone $clause;
-        $inner->setModifier(Clause::NONE);
-
-        $loopVar = (++$this->tempVarCounter);
-        $itemVar = '$_rep' . $loopVar;
-
-        $this->emitter->line("$resultVar = [];");
-        $this->emitter->line('do {');
-        $this->emitter->indent();
-
-        $this->generateDirectClauseCode($inner, $itemVar);
-        $this->emitter->line("if ($itemVar !== " . $this->signalMiss() . ") {");
-        $this->emitter->indent()->line("{$resultVar}[] = $itemVar;");
-        $this->emitter->closeBlock();
-
-        $this->emitter->dedent()->line("} while ($itemVar !== " . $this->signalMiss() . ");");
-        $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalMiss() . "; }");
+        $this->generateRepetitionCode($clause, $resultVar, true);
     }
 
     private function generateZeroOrMoreCode(Clause $clause, string $resultVar): void
+    {
+        $this->generateRepetitionCode($clause, $resultVar, false);
+    }
+
+    /**
+     * `+` and `*`. An iteration that consumes nothing ends the repetition (it would repeat forever);
+     * it is not collected, except that the first one still counts as the match `+` requires.
+     */
+    private function generateRepetitionCode(Clause $clause, string $resultVar, bool $atLeastOne): void
     {
         $inner = clone $clause;
         $inner->setModifier(Clause::NONE);
 
         $loopVar = (++$this->tempVarCounter);
         $itemVar = '$_rep' . $loopVar;
+        $startVar = '$_repOffset' . $loopVar;
 
         $this->emitter->line("$resultVar = [];");
         $this->emitter->line('do {');
         $this->emitter->indent();
+        $this->emitter->line("$startVar = \$this->offset;");
 
         $this->generateDirectClauseCode($inner, $itemVar);
         $this->emitter->line("if ($itemVar !== " . $this->signalMiss() . ") {");
-        $this->emitter->indent()->line("{$resultVar}[] = $itemVar;");
+        $this->emitter->indent();
+        $this->emitter->line("if (\$this->offset === $startVar) {");
+        $this->emitter->indent();
+        if ($atLeastOne) {
+            $this->emitter->line("if ($resultVar === []) { {$resultVar}[] = $itemVar; }");
+        }
+        $this->emitter->line('break;');
+        $this->emitter->closeBlock();
+        $this->emitter->line("{$resultVar}[] = $itemVar;");
         $this->emitter->closeBlock();
 
         $this->emitter->dedent()->line("} while ($itemVar !== " . $this->signalMiss() . ");");
+        if ($atLeastOne) {
+            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalMiss() . "; }");
+        }
     }
 
     private function generatePredicateCode(Clause $clause, string $resultVar): void
