@@ -105,13 +105,15 @@ class Identifier extends NonTerminal {
 
     private static array $visitedMinLength = [];
     private static array $visitedFirstChars = [];
-    private static array $minLengthCache = [];
-    private static array $firstBytesCache = [];
+    // Caches are per referenced clause: rule names are not unique across grammars
+    private static ?\WeakMap $minLengthCache = null;
+    private static ?\WeakMap $firstBytesCache = null;
 
     public function getMinByteLength(): int {
+        self::$minLengthCache ??= new \WeakMap();
         // Return cached result if available
-        if (isset(self::$minLengthCache[$this->identifier])) {
-            return self::$minLengthCache[$this->identifier];
+        if ($this->targetClause !== null && isset(self::$minLengthCache[$this->targetClause])) {
+            return self::$minLengthCache[$this->targetClause];
         }
         // Cycle detection for left-recursive rules
         if (isset(self::$visitedMinLength[$this->identifier])) {
@@ -121,7 +123,7 @@ class Identifier extends NonTerminal {
             self::$visitedMinLength[$this->identifier] = true;
             try {
                 $result = $this->targetClause->getMinByteLength();
-                self::$minLengthCache[$this->identifier] = $result;
+                self::$minLengthCache[$this->targetClause] = $result;
                 return $result;
             } finally {
                 unset(self::$visitedMinLength[$this->identifier]);
@@ -131,9 +133,10 @@ class Identifier extends NonTerminal {
     }
 
     public function getFirstBytes(): ?string {
-        // Return cached result if available (use array_key_exists since null is valid)
-        if (array_key_exists($this->identifier, self::$firstBytesCache)) {
-            return self::$firstBytesCache[$this->identifier];
+        self::$firstBytesCache ??= new \WeakMap();
+        // Return cached result if available (use isset on the map entry's existence since null is valid)
+        if ($this->targetClause !== null && self::$firstBytesCache->offsetExists($this->targetClause)) {
+            return self::$firstBytesCache[$this->targetClause];
         }
         // Cycle detection for left-recursive rules
         if (isset(self::$visitedFirstChars[$this->identifier])) {
@@ -143,7 +146,7 @@ class Identifier extends NonTerminal {
             self::$visitedFirstChars[$this->identifier] = true;
             try {
                 $result = $this->targetClause->getFirstBytes();
-                self::$firstBytesCache[$this->identifier] = $result;
+                self::$firstBytesCache[$this->targetClause] = $result;
                 return $result;
             } finally {
                 unset(self::$visitedFirstChars[$this->identifier]);

@@ -178,8 +178,13 @@ class Sequence extends NonTerminal {
             if ($subClause->hasAndPredicate() || $subClause->hasNotPredicate()) {
                 continue;
             }
-            // Skip optional elements - they might not be present
+            // An optional element might not be present, so the next element may start the match too
             if ($subClause->isOptional()) {
+                $optionalChars = $subClause->getFirstBytes();
+                if ($optionalChars === null) {
+                    return null;
+                }
+                $chars .= $optionalChars;
                 continue;
             }
 

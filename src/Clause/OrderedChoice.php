@@ -341,7 +341,8 @@ class OrderedChoice extends NonTerminal {
     public function getMinByteLength(): int {
         $min = PHP_INT_MAX;
         foreach ($this as $choice) {
-            $choiceMin = $choice->getMinByteLength();
+            // an optional alternative or a predicate can succeed without consuming input
+            $choiceMin = ($choice->isOptional() || $choice->hasAndPredicate() || $choice->hasNotPredicate()) ? 0 : $choice->getMinByteLength();
             if ($choiceMin < $min) {
                 $min = $choiceMin;
             }

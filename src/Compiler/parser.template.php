@@ -15,7 +15,6 @@
     private int $length;
     private int $maxOffset = 0;
     private ?string $expected = null;
-    private ?int $commitOffset = null;
 {{PROPERTIES}}
 
     /** @var array<string, string> Rule name to description mapping */
@@ -28,7 +27,6 @@
         $this->length = \strlen($source);
         $this->maxOffset = 0;
         $this->expected = null;
-        $this->commitOffset = null;
         $this->globals = array_merge($this->globals, $initialState);
 {{INIT_CODE}}
         $result = $this->parse{{GOAL_RULE}}();
@@ -45,7 +43,8 @@
         return $result;
     }
 
-    private function fail(string $expected): never
+    /** @param bool $committed true for a failure after a commit (`@`); such an error is not backtracked over (exception code 1) */
+    private function fail(string $expected, bool $committed = false): never
     {
         $offset = \max($this->offset, $this->maxOffset);
         $line = 1 + \substr_count($this->source, "\n", 0, $offset);
@@ -60,7 +59,7 @@
             $found = \ctype_print($char) ? "'{$char}'" : '\x' . \bin2hex($char);
         }
 
-        throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}");
+        throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed ? 1 : 0);
     }
 
     private function expect(string $rule): void
