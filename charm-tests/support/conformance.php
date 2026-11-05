@@ -25,14 +25,14 @@ function conformance_outcome(callable $run, bool $position): mixed {
     } catch (ConformanceTimeout) {
         return 'HANG';
     } catch (AbstractParseError $e) {
-        if ($e instanceof \Charm\Parsing\Error\State\ParseError) {
+        if ($e instanceof \Charm\Parsing\Error\State\ParseError && !$e instanceof \Charm\Parsing\Error\State\CommittedError) {
             return 'GRAMMAR_ERROR'; // the grammar text itself is invalid
         }
         // interpreter: "... on parsed source:L:C ..." with a 0-based column
         return $position && preg_match('/:(\d+):(\d+)/', $e->getMessage(), $m) ? "ERROR@$m[1]:" . ($m[2] + 1) : 'PARSE_ERROR';
     } catch (\RuntimeException $e) {
-        // compiled fail(): "... line L, column C ..." (a RuntimeException that is not one of ours)
-        if (str_starts_with(get_class($e), 'Charm\\Parsing\\Error\\')) {
+        // compiled fail(): "Parse error at line L, column C: ..." (a plain RuntimeException)
+        if (!str_starts_with($e->getMessage(), 'Parse error at line ')) {
             return get_class($e) . ': ' . $e->getMessage();
         }
         return $position && preg_match('/line (\d+), column (\d+)/', $e->getMessage(), $m) ? "ERROR@$m[1]:$m[2]" : 'PARSE_ERROR';
@@ -69,4 +69,9 @@ function conformance_case(array $args): array {
 /** The usual expectation: both paths produce the same value. */
 function both(mixed $v): array {
     return [$v, $v];
+}
+
+/** Like conformance_case, but a parse failure is reported as 'ERROR@line:column' (1-based, byte column). */
+function conformance_position(array $args): array {
+    return conformance_run($args, true);
 }
