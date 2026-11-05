@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Compiled parsers return `null` again when the goal rule matches with no value, as `cpeg_parse()`
+  and 0.0.7 did; 0.1.0 returned `true` from compiled parsers only. Regression test 0021.
+
 ## 0.1.0
 
 - Grammar compiler (`charm-compile`, `Charm\Parsing\Compiler\GrammarCompiler`) producing standalone

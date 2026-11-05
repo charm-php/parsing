@@ -37,9 +37,9 @@
             $this->fail('{{GOAL_DESCRIPTION}}');
         }
 
-        // Signal::HIT means success with no value - return true
+        // Signal::HIT means success with no value - return null, like cpeg_parse()
         if ($result === {{CLASS_NAME}}Signal::HIT) {
-            return true;
+            return null;
         }
 
         return $result;
