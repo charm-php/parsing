@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2 (unreleased)
+## 0.1.2
 
 Conformance suite `charm-tests/0030`-`0039`: the interpreter and the compiled parser now agree on
 every row. Fixes, by engine:
