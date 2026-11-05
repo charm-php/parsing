@@ -817,9 +817,7 @@ class GrammarCompiler
 
     private function generateTextCode(Text $clause, string $resultVar): void
     {
-        $text = (string) $clause;
-        // Extract the actual text value from the grammar string representation
-        $textValue = trim($text, '"\'');
+        $textValue = $clause->getText();
         $length = strlen($textValue);
         $escaped = var_export($textValue, true);
 
