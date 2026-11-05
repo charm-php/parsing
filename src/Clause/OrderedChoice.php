@@ -23,24 +23,11 @@ class OrderedChoice extends NonTerminal {
 
     public function interpret(State $state, array $context) {
         $offset = $state->offset;
+        // A reference to this rule that ends a prefix-operator alternative sets the floor (see Identifier)
+        $floor = $state->extra['lrFloor'] ?? 0;
+        unset($state->extra['lrFloor']);
         if ($this->isLeftRecursive) {
-
-
-        //echo "************** STARTING PRATT ************\n";
-        //echo $this->ruleName." ::=\n";
-        //foreach ($this->prepared as $prep) {
-            //echo " (p=".$prep->precedence.")   {$prep->clause}\n";
-        //}
-        //echo "******************************************\n";
-            $result = $this->lrParse($state);
-            /*
-            foreach ($this->prepared as $prep) {
-                $result = $this->lrParse($state, 0, $prep->clause->pragma('assoc') !== null && $prep->clause->pragma('assoc')[0] === 'right');
-                if ($result !== null) {
-                    break;
-                }
-            }
-            */
+            $result = $this->lrParse($state, $floor);
             if ($result === null) {
                 return Signal::MISS;
             }
@@ -73,50 +60,17 @@ class OrderedChoice extends NonTerminal {
         // First, find a non-left-recursive "start" value (e.g., a number or parenthesized expr)
         $start = null;
 
-        // Track which rule is currently in its "finding start" phase via State->extra.
-        // This allows:
-        // - Prefix operators: when Expr re-enters itself while finding start, return early
-        // - Parentheses: when Expr is entered from Primary (different rule), do full parse
-        $findingStartKey = 'lrFindingStart';
-        $prevFinding = $state->extra[$findingStartKey] ?? null;
-        $wasAlreadyFindingThis = ($prevFinding === $this->ruleName);
-        $state->extra[$findingStartKey] = $this->ruleName;
-
-        foreach ($this->prepared as $i => $prep) {
+        // The start value is the first non-left-recursive alternative that matches. A reference to this
+        // rule inside such an alternative is a fresh expression (floor 0), except when it ends the
+        // alternative (a prefix operator): that one only binds operators tighter than the alternative.
+        foreach ($this->prepared as $prep) {
             if ($prep->isLeftRecursive) {
                 continue;
             }
-
-            // Check if this non-LR clause is a simple reference to a different rule.
-            // If so, clear finding-start to allow fresh expression contexts (like
-            // parentheses). If the clause directly contains Expr references (like
-            // prefix operators), keep finding-start set to prevent them from
-            // capturing operators meant for the outer expression.
-            $isSimpleRuleRef = ($prep->clause instanceof Identifier &&
-                                $prep->clause->getIdentifier() !== $this->ruleName);
-
-            if ($isSimpleRuleRef) {
-                $state->extra[$findingStartKey] = $prevFinding;
-            }
-
             $start = $this->parsePreparedClause($state, $prep, null);
-
-            if ($isSimpleRuleRef) {
-                $state->extra[$findingStartKey] = $this->ruleName;
-            }
-
             if ($start !== null) {
                 break;
             }
-        }
-
-        // Restore previous state
-        $state->extra[$findingStartKey] = $prevFinding;
-
-        if ($wasAlreadyFindingThis) {
-            // We re-entered this rule's lrParse while it was already finding start
-            // (e.g., prefix operator's right-hand side) - return just the start
-            return $start;
         }
 
         if ($start === null) {
@@ -197,7 +151,7 @@ class OrderedChoice extends NonTerminal {
                 $subClause = $prep->clause[$i];
 
                 if ($subClause->getModifier() === Clause::NONE && $subClause instanceof Identifier && $subClause->getIdentifier() === $this->ruleName) {
-                    $match = $this->lrParse($state, $prep->precedence, $prep->clause->pragma('assoc') !== null && $prep->clause->pragma('assoc')[0] === 'right');
+                    $match = $this->lrParse($state, $prep->precedence, $prep->rightAssoc);
 
                     if ($match !== null) {
                         //echo $prefix()." - right recursive clause $i `$subClause` matched with result `$match`\n";
@@ -210,9 +164,8 @@ class OrderedChoice extends NonTerminal {
                 } elseif ($subClause instanceof Snippet) {
                     //echo $prefix()." - parsing snippet $i\n";
                     $match = $subClause->parse($state, $result);
-                    // Snippets always terminate the sequence (return the result)
-                    //echo $prefix()." - snippet finished the sequence\n";
-                    $result = $match;
+                    // Snippets always terminate the sequence (return the result); $MISS fails it
+                    $result = $match === Signal::MISS ? null : $match;
                     goto done;
                 } else {
                     //echo $prefix()." - parsing normal sub-clause $i `$subClause`\n";
@@ -306,14 +259,25 @@ class OrderedChoice extends NonTerminal {
             };
 
             $length = count($this);
+            $this->prepared = [];
+            $this->isLeftRecursive = false;
             foreach ($this as $index => $child) {
-                if ($path = $refersBack($child)) {
-                    // left recursive clause
-                    $this->prepared[] = new PreparedClause(true, $child, $length-$index);
+                [$precedence, $assoc] = $grammar->resolveAlternativePrecedence($child, $this->ruleName, $index, $length);
+                $isLeftRecursive = $refersBack($child) !== null;
+                $this->prepared[] = new PreparedClause($isLeftRecursive, $child, $precedence, $assoc === 'right');
+                if ($isLeftRecursive) {
                     $this->isLeftRecursive = true;
-                } else {
-                    // not recursive clause
-                    $this->prepared[] = new PreparedClause(false, $child, $length-$index);
+                } elseif ($child instanceof Sequence) {
+                    // a trailing reference to this rule (a prefix operator's operand) binds tighter than the alternative
+                    $last = null;
+                    foreach ($child as $element) {
+                        if (!($element instanceof Snippet) && !($element instanceof Commit)) {
+                            $last = $element;
+                        }
+                    }
+                    if ($last instanceof Identifier && $last->getIdentifier() === $this->ruleName && $last->getModifier() === Clause::NONE) {
+                        $last->setTailFloor($precedence);
+                    }
                 }
             }
         }
@@ -372,10 +336,12 @@ class PreparedClause {
     public $isLeftRecursive;
     public $clause;
     public $precedence;
-    public function __construct(bool $isLeftRecursive, Clause $clause, int $precedence) {
+    public $rightAssoc;
+    public function __construct(bool $isLeftRecursive, Clause $clause, int $precedence, bool $rightAssoc = false) {
         $this->isLeftRecursive = $isLeftRecursive;
         $this->clause = $clause;
         $this->precedence = $precedence;
+        $this->rightAssoc = $rightAssoc;
     }
 
     public function __toString() {

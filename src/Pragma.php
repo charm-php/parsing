@@ -12,14 +12,14 @@ final class Pragma implements \ArrayAccess {
 
         switch ($name) {
             case 'assoc':
-                if ($params[0] === null || !in_array((string) $params[0], ['left', 'right', 'none'])) {
+                if (!isset($params[0]) || !in_array((string) $params[0], ['left', 'right', 'none'])) {
                     throw new \LogicException("Pragma directive %assoc requires an argument 'left', 'right' or 'none', e.g. '%assoc=right'");
                 }
                 $params[0] = (string) $params[0];
                 break;
             case 'prec':
-                $value = (string) $params[0];
-                if ($params[0] === null) {
+                $value = (string) ($params[0] ?? '');
+                if (!isset($params[0])) {
                     throw new \LogicException("Pragma directive %prec requires a value, e.g. '%prec=5' or '%prec=T_POW'");
                 }
                 // Allow numeric values or token names (identifiers)

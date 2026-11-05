@@ -250,7 +250,7 @@ class GrammarParser extends RecursiveDescentParser {
         }
 
         if ($rules !== null) {
-            $grammar = new Grammar($rules, $this->filename);
+            $grammar = new Grammar($rules, $this->filename, $this->precedenceTable);
             if ($this->lexerClass !== null) {
                 $grammar->setLexerClass($this->lexerClass);
             }
@@ -560,6 +560,22 @@ class GrammarParser extends RecursiveDescentParser {
 
         $predicate = $this->_Predicate();
         $clause = $this->_Clause();
+        if ($clause === null && $predicate !== null && $this->typeIs(self::T_PREDICATE)) {
+            // Stacked predicates (`!!x`, `&!x`): the inner ones apply to a group of their own
+            $inner = [];
+            while (null !== ($p = $this->_Predicate())) {
+                $inner[] = $p;
+            }
+            $clause = $this->_Clause();
+            if ($clause !== null) {
+                foreach (array_reverse($inner) as $p) {
+                    $clause->setModifier($p->text === '&' ? Clause::AND : Clause::NOT);
+                    $group = new Sequence(Clause::NONE, null);
+                    $group[] = $clause;
+                    $clause = $group;
+                }
+            }
+        }
 
         if ($clause === null && ($label !== null || $predicate !== null || $spread !== null)) {
             throw new ParseError($this, "Excpected clause on :location, got :source_description");
@@ -708,7 +724,12 @@ class GrammarParser extends RecursiveDescentParser {
              */
             $newClauses = new Sequence(Clause::NONE, null);
             $newClauses[] = $clauses;
-            $newClauses[] = new Snippet('return $_0;', Clause::NONE, null);
+            // a group of one clause is that clause's value - unless it has none ($_0 would not exist)
+            $isValueless = $clauses->hasAndPredicate() || $clauses->hasNotPredicate()
+                || $clauses instanceof Nothing || $clauses instanceof SOF || $clauses instanceof EOF || $clauses instanceof Commit;
+            if (!$isValueless) {
+                $newClauses[] = new Snippet('return $_0;', Clause::NONE, null);
+            }
             $clauses = $newClauses;
         }
 

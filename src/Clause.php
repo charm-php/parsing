@@ -6,6 +6,7 @@ use Charm\Parsing\Clause\{
     OrderedChoice,
     NonTerminal
 };
+use Charm\Parsing\Error\State\CommittedError;
 use JSONSerializable;
 
 /**
@@ -163,10 +164,10 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
 
                 if ($doTrace) $parser->traceEnd($this, $matched);
                 return $matched ? Signal::HIT : Signal::MISS;
-            } catch (ExceptionInterface $e) {
+            } catch (CommittedError $e) {
                 $parser->offset = $offset;
                 if ($doTrace) $parser->traceEnd($this, false);
-                // For predicates, exceptions mean "didn't match"
+                // A failure after a commit inside a predicate just means the predicate didn't match
                 $matched = false;
                 if ($this->modifier & self::NOT) {
                     return Signal::HIT; // NOT predicate succeeds if inner failed

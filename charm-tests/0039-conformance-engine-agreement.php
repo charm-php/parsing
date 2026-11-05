@@ -38,7 +38,56 @@ T = "a" "b" <? return new \Charm\Parsing\SequenceResume; ?>', 'xaby'], both(['x'
 T = "x" <? return $MISS; ?>', 'xa'], both('xa') ],
 
     // a commit followed by a failure inside a predicate only makes the predicate fail
+    [ ['S = !("a" @ "b") "a"', 'ac'], both(['a']) ],
     [ ['S = &("a" @ "b") "a" "b"', 'ab'], both(['a', 'b']) ],
     // a commit is local to its sequence: after the sequence succeeded it is forgotten
     [ ['S = "a" ("b" @ "c") "d" | "a" "b" "c" "e"', 'abce'], both(['a', 'b', 'c', 'e']) ],
+
+    // a pragma without its argument is reported like one with a bad argument (no "Undefined array key")
+    [ ['S = "a" "b" %assoc', 'ab'], both("LogicException: Pragma directive %assoc requires an argument 'left', 'right' or 'none', e.g. '%assoc=right'") ],
+    [ ['S = "a" "b" %prec', 'ab'], both("LogicException: Pragma directive %prec requires a value, e.g. '%prec=5' or '%prec=T_POW'") ],
+    [ ['S = "a" "b" %prec=+', 'ab'], both('GRAMMAR_ERROR') ],
+
+    // groups of one valueless clause
+    [ ['S = (&"a") "a"', 'a'], both([null, 'a']) ],
+    [ ['S = ($) ', ''], both(null) ],
+    [ ['S = !(&"a") "b"', 'b'], both(['b']) ],
+
+    // prefix operators bind to the alternative's precedence, bracketed expressions are complete expressions
+    [ ['S = Expr
+Expr = "-" Expr | Expr "+" Expr | N
+N = /[0-9]/', '-1+2'], both([['-', '1'], '+', '2']) ],
+    [ ['S = Expr
+Expr = Expr "+" Expr | "-" Expr | N
+N = /[0-9]/', '-1+2'], both(['-', ['1', '+', '2']]) ],
+    [ ['S = Expr
+Expr = Expr "+" Expr | "(" Expr ")" | "-" Expr | N
+N = /[0-9]/', '-(1+2)+3'], both(['-', [['(', ['1', '+', '2'], ')'], '+', '3']]) ],
+
+    // %assoc overrides the table; %prec=N overrides the table's level
+    [ ['@prec {
+  left "+"
+  left "*"
+}
+S = Expr
+Expr = Expr "+" Expr %assoc=right | Expr "*" Expr | N
+N = /[0-9]/', '1+2+3'], both(['1', '+', ['2', '+', '3']]) ],
+    [ ['@prec {
+  left "+"
+  left "*"
+}
+S = Expr
+Expr = Expr "+" Expr %prec=3 | Expr "*" Expr | N
+N = /[0-9]/', '1*2+3'], both(['1', '*', ['2', '+', '3']]) ],
+    [ ['S = Expr
+Expr = Expr "+" Expr %assoc=none | N
+N = /[0-9]/', '1+2+3'], both([['1', '+', '2'], '+', '3']) ],
+
+    // snippets on left-recursive alternatives
+    [ ['S = Expr
+Expr = Expr "+" Expr <? return $_0 + $_2; ?> | N
+N = /[0-9]/ <? return intval($_0); ?>', '1+2+3'], both(6) ],
+    [ ['S = Expr
+Expr = Expr "+" Expr <? return $MISS; ?> | N
+N = /[0-9]/', '1+2'], both('1') ],
 ];

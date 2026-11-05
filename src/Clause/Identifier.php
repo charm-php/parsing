@@ -17,6 +17,7 @@ class Identifier extends NonTerminal {
     private $identifier;
     private $grammar;
     private $targetClause;
+    private ?int $tailFloor = null;
 
     public function __construct(string $identifier, int $modifier, ?string $name) {
         parent::__construct($modifier, $name);
@@ -84,8 +85,19 @@ class Identifier extends NonTerminal {
         return $this->targetClause !== null && $this->targetClause->pragma('silent') !== null;
     }
 
+    /**
+     * Mark this reference as the operand of a prefix operator in a left-recursive rule: the rule is
+     * parsed with this precedence as its floor, so it only takes operators that bind tighter.
+     */
+    public function setTailFloor(int $floor): void {
+        $this->tailFloor = $floor;
+    }
+
     public function interpret(State $state, array $context, array $args=null) {
         $offset = $state->offset;
+        if ($this->tailFloor !== null) {
+            $state->extra['lrFloor'] = $this->tailFloor;
+        }
 
         // Use args as context for the rule clause, if provided
         $result = $this->targetClause->parse($state, $args ?? []);

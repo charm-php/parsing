@@ -93,8 +93,10 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
      */
     private array $precedenceTable = [];
 
-    public function __construct(iterable $rules, string $filename=null) {
+    public function __construct(iterable $rules, string $filename=null, array $precedenceTable=[]) {
         $this->filename = $filename;
+        // must be known before prepare(): left-recursive rules read it there
+        $this->precedenceTable = $precedenceTable;
         foreach ($rules as $rule) {
             if (isset($this->ruleMap[$rule->getRuleName()])) {
                 throw new CustomError("Rule '".$rule->getRuleName()."' is already declared in this grammar. Use the Choice operator `/` to add multiple rules to a grammar");
@@ -200,6 +202,78 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
      */
     public function getPrecedence(string $token): ?array {
         return $this->precedenceTable[$token] ?? null;
+    }
+
+    /**
+     * Resolve the precedence and associativity of one alternative of a left-recursive rule. Both the
+     * interpreter and the compiler use this, so that they agree:
+     *
+     * 1. `%prec=N` is used as-is; `%prec=NAME` looks NAME up in the `@prec` table (level and associativity).
+     * 2. Otherwise, with a `@prec` table, the alternative's operator (the first literal, string or
+     *    token that is not a reference to the rule itself) is looked up in the table.
+     * 3. Otherwise the position decides: the first alternative binds tightest.
+     *
+     * `%assoc` overrides the associativity found in the table (default `left`; `none` groups like `left`).
+     *
+     * @return array{0: int, 1: string} precedence and associativity (`left`, `right` or `none`)
+     */
+    public function resolveAlternativePrecedence(Clause $choice, string $ruleName, int $index, int $numAlternatives): array {
+        $prec = null;
+        $assoc = 'left';
+
+        $explicitPrec = $choice->pragma('prec');
+        if ($explicitPrec !== null) {
+            $precValue = $explicitPrec[0];
+            if (is_numeric($precValue)) {
+                $prec = (int) $precValue;
+            } elseif (($precInfo = $this->getPrecedence((string) $precValue)) !== null) {
+                $prec = $precInfo['level'];
+                $assoc = $precInfo['assoc'];
+            }
+        }
+
+        if ($prec === null && $this->hasPrecedenceTable()) {
+            $operator = $this->extractOperator($choice, $ruleName);
+            if ($operator !== null && ($precInfo = $this->getPrecedence($operator)) !== null) {
+                $prec = $precInfo['level'];
+                $assoc = $precInfo['assoc'];
+            }
+        }
+
+        if ($prec === null) {
+            $prec = $numAlternatives - $index;
+        }
+
+        $explicitAssoc = $choice->pragma('assoc');
+        if ($explicitAssoc !== null) {
+            $assoc = $explicitAssoc[0];
+        }
+        return [$prec, $assoc];
+    }
+
+    /**
+     * The operator of an alternative like `Expr "+" Expr`: the first literal, string or token in the
+     * sequence that is not a reference to the rule itself or a snippet.
+     */
+    private function extractOperator(Clause $clause, string $ruleName): ?string {
+        if (!($clause instanceof Sequence)) {
+            return null;
+        }
+        foreach ($clause as $part) {
+            if (($part instanceof Clause\Identifier && $part->getIdentifier() === $ruleName) || $part instanceof Snippet) {
+                continue;
+            }
+            if ($part instanceof Clause\Text) {
+                return $part->getText();
+            }
+            if ($part instanceof Clause\Literal) {
+                return $part->getLiteral();
+            }
+            if ($part instanceof Clause\Token) {
+                return $part->getTokenName();
+            }
+        }
+        return null;
     }
 
     public function count() {

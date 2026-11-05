@@ -397,52 +397,9 @@ class GrammarCompiler
         $primaryAlts = [];
         $operatorAlts = [];
         $numAlts = count($clause);
-        $hasPrecTable = $this->grammar->hasPrecedenceTable();
 
         foreach ($clause as $index => $choice) {
-            // Determine precedence and associativity for this alternative
-            $prec = null;
-            $assoc = 'left'; // default
-
-            // 1. Check for explicit %prec pragma
-            $explicitPrec = $choice->pragma('prec');
-            if ($explicitPrec !== null) {
-                $precValue = $explicitPrec[0];
-                if (is_numeric($precValue)) {
-                    $prec = (int) $precValue;
-                } elseif ($hasPrecTable) {
-                    // Look up token name in precedence table
-                    $precInfo = $this->grammar->getPrecedence($precValue);
-                    if ($precInfo !== null) {
-                        $prec = $precInfo['level'];
-                        $assoc = $precInfo['assoc'];
-                    }
-                }
-            }
-
-            // 2. If no explicit prec, try to extract operator from clause and look up in table
-            if ($prec === null && $hasPrecTable) {
-                $operator = $this->extractOperatorFromClause($choice, $ruleName);
-                if ($operator !== null) {
-                    $precInfo = $this->grammar->getPrecedence($operator);
-                    if ($precInfo !== null) {
-                        $prec = $precInfo['level'];
-                        $assoc = $precInfo['assoc'];
-                    }
-                }
-            }
-
-            // 3. Fall back to position-based precedence
-            if ($prec === null) {
-                // First alternative gets highest precedence (binds tightest)
-                $prec = $numAlts - $index;
-            }
-
-            // Check for explicit %assoc pragma (overrides table)
-            $explicitAssoc = $choice->pragma('assoc');
-            if ($explicitAssoc !== null) {
-                $assoc = $explicitAssoc[0];
-            }
+            [$prec, $assoc] = $this->grammar->resolveAlternativePrecedence($choice, $ruleName, $index, $numAlts);
 
             // Use mustBeLeftRecursive to check if ALL paths are LR
             // If not, it can serve as a primary (has non-LR exit path)
@@ -517,51 +474,6 @@ class GrammarCompiler
         $this->emitter->line('$this->offset = $_offset;');
         $this->emitter->line('return ' . $this->signalMiss() . ';');
         $this->emitter->closeBlock();
-    }
-
-    /**
-     * Extract the operator from a left-recursive clause like "Expr op Expr".
-     * Returns the operator string/token name, or null if not found.
-     */
-    private function extractOperatorFromClause(Clause $clause, string $ruleName): ?string
-    {
-        if (!($clause instanceof Sequence)) {
-            return null;
-        }
-
-        $parts = iterator_to_array($clause);
-
-        // Look for pattern: Expr op Expr or Expr op Expr snippet
-        // The operator is typically the second element (after the left Expr)
-        foreach ($parts as $i => $part) {
-            // Skip the first element if it's a recursive reference (left operand)
-            if ($i === 0 && $part instanceof Identifier && $part->getIdentifier() === $ruleName) {
-                continue;
-            }
-
-            // Skip recursive references (right operand)
-            if ($part instanceof Identifier && $part->getIdentifier() === $ruleName) {
-                continue;
-            }
-
-            // Skip snippets
-            if ($part instanceof Snippet) {
-                continue;
-            }
-
-            // Found a terminal - this is likely the operator
-            if ($part instanceof Text) {
-                return $part->getText();
-            }
-            if ($part instanceof Literal) {
-                return $part->getLiteral();
-            }
-            if ($part instanceof Token) {
-                return $part->getTokenName();
-            }
-        }
-
-        return null;
     }
 
     /**
