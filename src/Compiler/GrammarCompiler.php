@@ -1665,10 +1665,8 @@ class GrammarCompiler
     {
         $counter = ++$this->tempVarCounter;
         $tempOffset = '$_svOffset' . $counter;
-        $savedCommit = '$_svCommit' . $counter;
 
         $this->emitter->line("// Optimized: single-variance-point pattern");
-        $this->emitter->line("$savedCommit = \$this->commitOffset;");
         $this->emitter->line("$tempOffset = \$this->offset;");
 
         // Build context for snippets (prefix clauses contribute to context)
