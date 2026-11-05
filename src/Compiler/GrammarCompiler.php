@@ -1001,8 +1001,13 @@ class GrammarCompiler
      * a parse error that no alternative can recover from; otherwise the sequence rewinds and
      * reports MISS so that the caller can try something else.
      */
-    private function emitSequenceMiss(string $resultVar, string $tempOffset, int $seqId, bool $committed, bool $isTopLevel): void
+    private function emitSequenceMiss(string $resultVar, string $tempOffset, int $seqId, bool $committed, bool $isTopLevel, bool $hasPredicate = false): void
     {
+        if ($hasPredicate) {
+            // A predicate that fails leaves no terminal failure behind, but the interpreter still
+            // reports the sequence's start as a failure position
+            $this->emitter->line("if ($tempOffset > \$this->maxOffset) { \$this->maxOffset = $tempOffset; \$this->expected = null; }");
+        }
         if ($committed) {
             $this->emitter->line('$this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
             return;
@@ -1068,7 +1073,7 @@ class GrammarCompiler
      * SequenceIgnore ends it as a success without a value, SequenceResume carries on, anything else
      * is the value of the sequence. Returns false if the snippet had no `return` and was inlined.
      */
-    private function generateSequenceSnippet(Snippet $snippet, array $context, array $contextNames, string $resultVar, string $tempOffset, int $seqId, int $index, bool $committed, bool $isTopLevel): bool
+    private function generateSequenceSnippet(Snippet $snippet, array $context, array $contextNames, string $resultVar, string $tempOffset, int $seqId, int $index, bool $committed, bool $isTopLevel, bool $hasPredicate = false): bool
     {
         $snVar = '$_sn' . $seqId . '_' . $index;
         if (!$this->generateSnippetCode($snippet, $context, $contextNames, $snVar)) {
@@ -1076,7 +1081,7 @@ class GrammarCompiler
         }
         $this->emitter->line("if ($snVar instanceof \\UnitEnum && {$snVar}->name === 'MISS') {");
         $this->emitter->indent();
-        $this->emitSequenceMiss($resultVar, $tempOffset, $seqId, $committed, $isTopLevel);
+        $this->emitSequenceMiss($resultVar, $tempOffset, $seqId, $committed, $isTopLevel, $hasPredicate);
         $this->emitter->closeBlock();
         $this->emitter->line("if ($snVar instanceof \\Charm\\Parsing\\SequenceIgnore) { $snVar = " . $this->signalHit() . "; }");
         $this->emitter->line("if (!($snVar instanceof \\Charm\\Parsing\\SequenceResume)) {");
@@ -1102,6 +1107,10 @@ class GrammarCompiler
         $contextNames = [];
         $hasInlineSnippet = false;
         $committed = false; // passed an `@` in this sequence: a later failure is a parse error
+        $hasPredicate = false;
+        foreach ($clause as $subClause) {
+            $hasPredicate = $hasPredicate || $subClause->hasAndPredicate() || $subClause->hasNotPredicate();
+        }
 
         foreach ($clause as $i => $subClause) {
             if ($subClause instanceof Commit) {
@@ -1109,7 +1118,7 @@ class GrammarCompiler
                 continue;
             }
             if ($subClause instanceof Snippet) {
-                $hasInlineSnippet = !$this->generateSequenceSnippet($subClause, $context, $contextNames, $resultVar, $tempOffset, $seqId, $i, $committed, $isTopLevel) || $hasInlineSnippet;
+                $hasInlineSnippet = !$this->generateSequenceSnippet($subClause, $context, $contextNames, $resultVar, $tempOffset, $seqId, $i, $committed, $isTopLevel, $hasPredicate) || $hasInlineSnippet;
                 continue;
             }
 
@@ -1118,7 +1127,7 @@ class GrammarCompiler
 
             $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
             $this->emitter->indent();
-            $this->emitSequenceMiss($resultVar, $tempOffset, $seqId, $committed, $isTopLevel);
+            $this->emitSequenceMiss($resultVar, $tempOffset, $seqId, $committed, $isTopLevel, $hasPredicate);
             $this->emitter->closeBlock();
 
             $this->emitSequenceItem($subClause, $itemVar, $resultVar, $context, $contextNames);
@@ -1180,6 +1189,13 @@ class GrammarCompiler
         }
 
         // All choices failed
+        foreach ($clause as $choice) {
+            if ($choice->hasAndPredicate() || $choice->hasNotPredicate()) {
+                // see emitSequenceMiss(): a failed predicate leaves no terminal failure behind
+                $this->emitter->line("if ($tempOffset > \$this->maxOffset) { \$this->maxOffset = $tempOffset; \$this->expected = null; }");
+                break;
+            }
+        }
         $this->emitter->line("\$this->offset = $tempOffset;");
         $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
         $this->emitter->line("_choiceEnd{$counter}:");
@@ -1294,6 +1310,13 @@ class GrammarCompiler
         $itemVar = '$_rep' . $loopVar;
         $startVar = '$_repOffset' . $loopVar;
 
+        // The interpreter doesn't see the attempt that ends a repetition of a plain terminal (it calls the
+        // terminal directly), so that failure isn't remembered either - the clause after the loop is
+        // tried at the same offset and reports it if it matters
+        $quiet = $inner->isTerminal();
+        if ($quiet) {
+            $this->emitter->line("{$itemVar}Max = \$this->maxOffset; {$itemVar}Exp = \$this->expected;");
+        }
         $this->emitter->line("$resultVar = [];");
         $this->emitter->line('do {');
         $this->emitter->indent();
@@ -1313,6 +1336,10 @@ class GrammarCompiler
         $this->emitter->closeBlock();
 
         $this->emitter->dedent()->line("} while ($itemVar !== " . $this->signalMiss() . ");");
+        if ($quiet) {
+            $restore = "\$this->maxOffset = {$itemVar}Max; \$this->expected = {$itemVar}Exp;";
+            $this->emitter->line($atLeastOne ? "if ($resultVar !== []) { $restore }" : $restore);
+        }
         if ($atLeastOne) {
             $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalMiss() . "; }");
         }
@@ -1323,11 +1350,18 @@ class GrammarCompiler
         $tempOffset = '$_predOffset' . (++$this->tempVarCounter);
         $this->emitter->line("$tempOffset = \$this->offset;");
 
-        // Create a copy without predicate flags for matching
+        // Create a copy without predicate flags for matching. A quantifier on a predicate (`&A*`) is
+        // ignored, as in the interpreter: the predicate looks for one match of A.
         $inner = clone $clause;
-        $inner->setModifier($clause->getModifier() & ~(Clause::AND | Clause::NOT));
+        $inner->setModifier($clause->getModifier() & ~(Clause::AND | Clause::NOT | Clause::OPTIONAL | Clause::REPEATING));
 
         $innerVar = '$_pred' . $this->tempVarCounter;
+        // A predicate on a plain terminal never counts as a failure position (the interpreter's trace
+        // doesn't see it either), so the failure that makes `&"a"` miss isn't remembered
+        $quiet = $inner->isTerminal();
+        if ($quiet) {
+            $this->emitter->line("{$innerVar}Max = \$this->maxOffset; {$innerVar}Exp = \$this->expected;");
+        }
         if ($this->hasCommit) {
             // A failure after a commit inside a predicate just means the predicate didn't match
             $this->emitter->line('try {');
@@ -1344,14 +1378,12 @@ class GrammarCompiler
 
         // Restore offset (predicates don't consume)
         $this->emitter->line("\$this->offset = $tempOffset;");
+        if ($quiet) {
+            $this->emitter->line("\$this->maxOffset = {$innerVar}Max; \$this->expected = {$innerVar}Exp;");
+        }
 
         if ($clause->hasNotPredicate()) {
-            $this->emitter->line("if ($innerVar === " . $this->signalMiss() . ") {");
-            $this->emitter->indent()->line("$resultVar = " . $this->signalHit() . ";");
-            $this->emitter->dedent()->line("} else {");
-            $this->emitter->indent();
-            $this->emitTerminalMiss($resultVar, 'not ' . $clause->toGrammarString());
-            $this->emitter->closeBlock();
+            $this->emitter->line("$resultVar = ($innerVar === " . $this->signalMiss() . ") ? " . $this->signalHit() . " : " . $this->signalMiss() . ";");
         } else {
             $this->emitter->line("$resultVar = ($innerVar !== " . $this->signalMiss() . ") ? " . $this->signalHit() . " : " . $this->signalMiss() . ";");
         }

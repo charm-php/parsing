@@ -265,6 +265,12 @@ private function fail(string $expected): never
   message, exception code `1`. It is not caught by choices or repetitions (a
   predicate treats it as "did not match").
 
+Failure positions are the same in both engines. Two details follow from how the
+interpreter's trace works: a predicate on a plain terminal (`&"b"`, `!"c"`) and the
+attempt that ends a repetition of a plain terminal (`"a"*`) are not failure
+positions - the position is where the enclosing sequence started, or where the next
+clause failed.
+
 Line and column are 1-based here, unlike the interpreted engine. The token-mode
 template produces the same message shape with `found` taken from
 `$this->tokenData->describe($offset)`.

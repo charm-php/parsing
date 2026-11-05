@@ -81,7 +81,8 @@ never end: `("a"*)*` on `aaa` is `[["a", "a", "a"]]`, `("a"?)*` is `["a", "a",
 the first iteration of `+` still counts as the one match `+` requires.
 
 Predicates may be stacked: `!!A` is `&A`, and `&!A` is `!A`, written out as nested
-groups.
+groups. A quantifier on a predicate (`&A*`) is ignored; the predicate looks for one
+match of `A`.
 
 Groups may also be written with `< >` (and `{ }`), but `[ ]` is unavailable
 because square brackets are read as a character-class regex first.

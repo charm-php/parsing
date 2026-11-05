@@ -18,6 +18,7 @@ Both engines
 - Left recursion: a reference to the rule inside a bracketed alternative (`"(" Expr ")"`) is a complete
   expression in both engines; only a trailing reference (prefix operator) is bound by the alternative's
   precedence. Fixes `(1+2)+3` (interpreter) and `(1+2)` (both) for grammars with the brackets first.
+- A quantifier on a predicate (`&A*`) is ignored by the compiled parser too, as in the interpreter.
 - A bare `%assoc` or `%prec` reports the missing argument instead of "Undefined array key 0".
 - `!!A`, `&!A` (stacked predicates) parse; `(&A)` and `($)` no longer crash with "Undefined variable $0".
 

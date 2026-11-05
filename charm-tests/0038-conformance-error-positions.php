@@ -69,4 +69,17 @@ L = /[^\n]+/ "\n"', "日本\nè\nx"], both('ERROR@3:2') ],
 Num "a number" = /[0-9]+/', 'x'], both('ERROR@1:1') ],
     // a successful parse is not an error
     [ ['S = "a" "b"', 'ab'], both(['a', 'b']) ],
+
+    // a failing predicate on a terminal is not itself a failure position: the error is where the
+    // enclosing sequence started (the interpreter's trace never sees the predicate's terminal)
+    [ ['S = "a" &"b"', 'ac'], both('ERROR@1:1') ],
+    [ ['S = "a" !"c"', 'ac'], both('ERROR@1:1') ],
+    [ ['S = (/[ab]/+ &/[ab]/)+ "z"', 'abcc'], both('ERROR@1:1') ],
+    // ...but a sequence that fails because of a predicate is a failure position of its own
+    [ ['S = ("a" R)+ "z"
+R = !"a" "b"', 'aab'], both('ERROR@1:2') ],
+    // the attempt that ends a repetition of a terminal is not a failure position; what follows is
+    [ ['S = /[ab]/+ "z"', 'abc'], both('ERROR@1:3') ],
+    [ ['S = "a"* "b"', 'aax'], both('ERROR@1:3') ],
+    [ ['S = ("a" "b")+ "c"', 'abax'], both('ERROR@1:4') ],
 ];

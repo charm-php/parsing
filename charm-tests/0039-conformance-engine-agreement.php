@@ -100,4 +100,10 @@ N = /[0-9]/', '1+2'], both('1') ],
     [ ['S = A*
 A = "a"?', 'aa'], both(['a', 'a']) ],
     [ ['S = "b"? "a"* "c"', 'c'], both([null, [], 'c']) ],
+
+    // a quantifier on a predicate is ignored: the predicate looks for one match
+    [ ['S = &"b"* "b"', 'b'], both(['b']) ],
+    [ ['S = &"b"* "b"', 'a'], both($E) ],
+    [ ['S = !"b"+ "a"', 'a'], both(['a']) ],
+    [ ['S = !"b"? "a"', 'b'], both($E) ],
 ];
