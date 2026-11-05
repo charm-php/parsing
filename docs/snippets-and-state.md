@@ -250,3 +250,4 @@ returns the rewritten code the compiler embeds.
 * [Compiled parsers and the CLI](compiled-parsers-and-cli.md) - the generated
   snippet methods
 * [Errors and debugging](errors-and-debugging.md) - `SnippetError` and friends
+* [Documentation index](index.md)

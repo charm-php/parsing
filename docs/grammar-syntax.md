@@ -178,3 +178,4 @@ used for the code the snippet is compiled into.
 * [Snippets and state](snippets-and-state.md)
 * [Precedence and pragmas](precedence-and-pragmas.md)
 * [Errors and debugging](errors-and-debugging.md)
+* [Documentation index](index.md)

@@ -343,3 +343,4 @@ extending `Charm\Parser` report an unhelpful error when `GRAMMAR` is missing.
   `fail()`/`expect()` code in context.
 * [Token mode](token-mode.md) and [The lexer API](LEXER.md) - token
   descriptions and lexing errors.
+* [Documentation index](index.md)

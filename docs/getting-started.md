@@ -151,6 +151,7 @@ found ...")`. See [compiled parsers and the CLI](compiled-parsers-and-cli.md).
 * [Snippets and state](snippets-and-state.md) - running PHP from a grammar.
 * [Precedence and pragmas](precedence-and-pragmas.md) - operator grammars.
 * [Errors and debugging](errors-and-debugging.md) - what to catch and why.
+* [Documentation index](index.md) - the two engines side by side.
 
 ## The test suite
 

@@ -129,7 +129,7 @@ class State implements StateInterface {
 
         // String mode
         $st = new StringTools($this->source);
-        return $st->describeOffsetAt($offset);
+        return $st->describeOffset($this->getByteOffsetAt($offset));
     }
 
     public function getTrace(): ?Trace {

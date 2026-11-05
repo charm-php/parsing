@@ -315,3 +315,4 @@ Run it with `php run-tests.php 0004`.
 * [Grammar syntax](grammar-syntax.md)
 * [Token mode](token-mode.md)
 * [Compiled parsers and the CLI](compiled-parsers-and-cli.md)
+* [Documentation index](index.md)

@@ -4,6 +4,7 @@ namespace Charm\Parsing\Clause;
 use Charm\Parsing\State;
 use Charm\Parsing\Clause;
 use Charm\Parsing\Clause\Commit;
+use Charm\Parsing\Error\State\CommittedError;
 use Charm\Parsing\Rule;
 use Charm\Parsing\{
     SequenceInstruction,

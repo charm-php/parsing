@@ -426,3 +426,4 @@ header comment lacks the output-exception line - so treat the templates in
 * [Precedence and pragmas](precedence-and-pragmas.md) - the Pratt code generator.
 * [Token mode](token-mode.md) - grammars over PHP tokens.
 * [Errors and debugging](errors-and-debugging.md) - the interpreted error classes.
+* [Documentation index](index.md)

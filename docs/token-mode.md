@@ -260,3 +260,4 @@ are used and why they only apply to compiled parsers.
 * [Lexing](LEXER.md) - building token streams with `Lexer` and `LexerPattern`
 * [Precedence and pragmas](precedence-and-pragmas.md)
 * [Compiled parsers and the CLI](compiled-parsers-and-cli.md)
+* [Documentation index](index.md)

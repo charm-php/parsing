@@ -197,3 +197,4 @@ processor on every pattern whose text needs unescaping or converting
 * [Token mode](token-mode.md) - grammars that match tokens instead of characters
 * [Grammar syntax](grammar-syntax.md)
 * [Errors and debugging](errors-and-debugging.md)
+* [Documentation index](index.md)
