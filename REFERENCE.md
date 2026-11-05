@@ -55,15 +55,16 @@ Escape sequences: `\\`, `\"`, `\'`, `\n`, `\r`, `\t`
 | Syntax | Description |
 |--------|-------------|
 | `/regex/` | Regular expression (PCRE) |
-| `/regex/i` | Case-insensitive regex |
 | `[a-z]` | Character class (shorthand for `/[a-z]/`) |
 
-Regex patterns are anchored at the current position automatically.
+Regex patterns are anchored at the current position automatically. There are no regex flags: `/foo/i` is the
+regex `/foo/` followed by the rule name `i` - use an inline group, `/(?i:foo)/`.
 
 ```
 Identifier = /[a-zA-Z_][a-zA-Z0-9_]*/
 Whitespace = /\s+/
-HexNumber = /0x[0-9a-fA-F]+/i
+HexNumber = /0x[0-9a-fA-F]+/
+KeywordIf = /(?i:if)\b/
 Vowel = [aeiouAEIOU]
 ```
 
@@ -71,7 +72,6 @@ Vowel = [aeiouAEIOU]
 
 | Symbol | Description |
 |--------|-------------|
-| `.` | Any single UTF-8 character |
 | `^` | Start of input (zero-width assertion) |
 | `$` | End of input (zero-width assertion) |
 | `\nothing` | Always succeeds without consuming input (epsilon) |
@@ -79,8 +79,8 @@ Vowel = [aeiouAEIOU]
 **Examples:**
 
 ```
-# Match any character except newline
-AnyButNewline = !"\n" .
+# Match any single character except newline (there is no `.` wildcard in the grammar text)
+AnyButNewline = /[^\n]/
 
 # Ensure we're at the start
 StartAnchored = ^ "BEGIN"

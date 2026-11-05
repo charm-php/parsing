@@ -228,9 +228,11 @@ The differences that matter when a grammar has to run both ways:
 
 | | Interpreted | Compiled |
 |---|---|---|
-| `$MISS` return fails the sequence | Yes | No - the generated code assigns the return value and continues |
-| `SequenceIgnore` / `SequenceResume` | Honoured | Not checked |
-| `$context`, `$HIT`, `$MISS` | Available | Not defined; use `\Charm\Parsing\...` constants with care, they are not imported |
+| `$MISS` return fails the sequence | Yes | Yes - any enum case named `MISS` counts, so `\Charm\Parsing\Signal::MISS` works too |
+| `SequenceIgnore` / `SequenceResume` | Honoured | Honoured (a class check on `\Charm\Parsing\SequenceIgnore`/`SequenceResume`; the class need not be loaded) |
+| Exceptions | Wrapped in `Error\SnippetError` | Wrapped in `Error\SnippetError` when that class exists, rethrown as-is in a standalone parser; PHP warnings are not converted |
+| `$HIT`, `$MISS` | Available | Available |
+| `$context` | Available | Not defined |
 | `$_offset` | Not defined | Rule start offset |
 | `$initialState` | Replaces globals on each parse | `array_merge` into the parser's `$globals` property, so values persist across `parse()` calls on one instance |
 

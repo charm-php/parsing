@@ -16,7 +16,7 @@ Unknown pragma directive %foo. Supported: %assoc=left|right|none, %prec=N, %sile
 | Pragma | Arguments | Read by |
 |--------|-----------|---------|
 | `%assoc` | `left`, `right` or `none` (required) | both engines |
-| `%prec` | an integer, or a token name in the `@prec` table | compiled engine only |
+| `%prec` | an integer, or a token name in the `@prec` table | both engines |
 | `%silent` | none | both engines |
 
 Bad arguments are rejected while the grammar is being parsed:
@@ -69,8 +69,10 @@ Expr = Expr "**" Expr        # precedence 4 - binds tightest
      | Number                # precedence 1
 ```
 
-Numbered alternatives are the only precedence source the interpreted engine
-uses; `@prec` and `%prec` are ignored there.
+Both engines resolve the number the same way, through
+`Grammar::resolveAlternativePrecedence()` (see [Precedence for an
+alternative](#precedence-for-an-alternative) below): `%prec`, then the `@prec`
+table, then position.
 
 ### Interpreted engine
 
@@ -86,21 +88,25 @@ trees:
 1 + 2 + 3      ->  [[1, "+", 2], "+", 3]
 ```
 
-Only the value `right` of `%assoc` is consulted at runtime:
+Only the value `right` of the associativity is consulted at runtime
+(`PreparedClause::$rightAssoc`):
 
 ```php
-$match = $this->lrParse($state, $prep->precedence,
-    $prep->clause->pragma('assoc') !== null && $prep->clause->pragma('assoc')[0] === 'right');
+$match = $this->lrParse($state, $prep->precedence, $prep->rightAssoc);
 ```
 
 With `right`, an alternative at exactly the floor precedence is allowed on the
 right-hand side, so `1 ** 2 ** 3` groups as `[1, "**", [2, "**", 3]]`. `left`
-and `none` are equivalent in the interpreted engine.
+and `none` are equivalent, in both engines.
 
-Prefix operators (alternatives that reference the rule but do not start with
-it) are handled by the same loop; a `State->extra` marker records that a rule is
-still looking for a start value, which is what lets `-10` parse as `["-", 10]`
-and `!!!!10` nest without swallowing the following operators.
+Alternatives that reference the rule but do not start with it are the start
+values. A reference that **ends** such an alternative is a prefix operator's
+operand (`"-" Expr`): it is parsed with the alternative's precedence as the
+floor, so it only takes operators that bind tighter, and `-1 + 2` can group as
+`[["-", 1], "+", 2]`. A reference that is followed by something else
+(`"(" Expr ")"`) is delimited and is a complete expression, whatever the
+alternative's precedence. The compiled engine does the same in
+`generatePrattPrimarySequence()`.
 
 ### Compiled engine
 
@@ -120,25 +126,27 @@ and only applies one when it outranks the caller's floor:
 // Precedence 3 (right-associative)
 if ($_minPrec < 3) { ... }
 
-// Precedence 2 (non-associative)
-if ($_minPrec <= 2) { ... }
+// Precedence 2 (left-associative, and `none`)
+if ($_minPrec < 2) { ... }
 ```
 
 The right operand of an operator is parsed with `$_minPrec` set to the
 operator's precedence, or one lower for `%assoc=right`
 (`$nextPrec = $rightAssoc ? ($precedence - 1) : $precedence`).
 
-Precedence for an alternative is resolved in this order:
+### Precedence for an alternative
+
+Both engines resolve the precedence of an alternative in this order:
 
 1. `%prec=N`, used as-is. `%prec=NAME` looks `NAME` up in the `@prec` table and
    takes both its level and its associativity.
 2. If the grammar has a `@prec` table, the operator of the alternative is
    extracted - the first literal, string or token that is not a recursive
    reference or a snippet - and looked up in the table.
-3. Otherwise the position fallback `$numAlts - $index` applies, matching the
-   interpreted engine.
+3. Otherwise the position fallback `$numAlts - $index` applies.
 
-`%assoc` always overrides the associativity that came from the table.
+`%assoc` always overrides the associativity that came from the table. `none`
+groups like `left`.
 
 ## %prec
 
@@ -153,9 +161,8 @@ Expr =  Expr "+"  Expr %prec=2
 ```
 
 `%prec=T_NAME` resolves the name through the `@prec` table and therefore does
-nothing unless the grammar also declares `@prec`. The interpreted engine ignores
-`%prec` entirely - it is accepted, and the alternative falls back to its
-position.
+nothing unless the grammar also declares `@prec`; the alternative then falls
+back to its position. Both engines honour `%prec`.
 
 ## @prec
 
@@ -201,8 +208,9 @@ Expected at least one token after 'left' on :location
 Expected '}' to close @prec block on :location
 ```
 
-As with `%prec`, the table is only consulted when compiling. An interpreted
-parse of the same grammar still uses alternative order.
+Both engines consult the table (`GrammarParser` hands it to the `Grammar`
+before the rules are prepared), so an interpreted parse and a compiled parse of
+the same grammar group operators the same way.
 
 ## %silent
 
@@ -237,22 +245,28 @@ Statement = "if" @ Expr Block
           | Expression ";"
 ```
 
-Compiled parsers implement this with a `commitOffset` field. Matching `@` sets
-it to the current offset. A sequence that fails after a commit rewinds the
-offset only if the commit lies behind where the sequence started, and an
-ordered choice that fails on an alternative checks
-`$this->commitOffset !== $savedCommit` and gives up instead of trying the
-remaining alternatives. `parse()` resets the field to `null` on every call, and
-a commit inside a successful alternative is discarded, so it does not block
-later backtracking.
+The commit belongs to the sequence that contains it. Once that sequence has
+passed the `@`, a later failure in the same sequence (including a snippet that
+returns `$MISS`) is a parse error: no other alternative is tried, and the error
+is not swallowed by an enclosing `*`, `+`, `?` or choice. A commit inside an
+alternative that succeeded is forgotten, so it does not block later
+backtracking:
 
-In the interpreted engine a `Commit` clause is recorded by `Sequence::interpret`
-but the failure path throws `CommittedError`, and a `Commit` that reaches
-`Commit::interpret()` throws `InternalError`. Neither class is part of the
-autoloaded `Charm\Parsing` namespace in this version, so a commit that fires
-under `cpeg_parse()` surfaces as a PHP "Class not found" error rather than a
-parse error. Treat `@` as a compiled-parser feature; see
-[compiled parsers](compiled-parsers-and-cli.md).
+```
+S = A "z" | "xy" "q"
+A = "x" @ "y"           # S on "xyq": A succeeds, "z" fails, the second alternative matches
+```
+
+A commit that is the first thing in an alternative (`S = @ "a" | "b"`) commits
+to that alternative on entry, so `S` fails on `b`. Inside a predicate a
+committed failure only means that the predicate does not match.
+
+Both engines implement this the same way: the interpreter's `Sequence` throws
+`Error\State\CommittedError`, the generated code calls `fail($expected, true)`,
+which throws a `RuntimeException` whose code is `1`. Compiled parsers also stop
+using the first-byte `switch` and the single-variance-point optimization for a
+grammar that contains `@`, since those skip alternatives that would otherwise
+have committed.
 
 ## A worked example
 

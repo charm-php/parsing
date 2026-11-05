@@ -27,9 +27,9 @@ The same grammar text runs two ways.
 | Dependency at runtime | This library | Nothing, for string-mode grammars |
 | Failure | `Charm\Parsing\Error\ParseError` (`RuntimeException`) | `\RuntimeException("Parse error at line N, column C: expected ..., found ...")` |
 | Columns in messages | 0-based | 1-based |
-| Left recursion | `OrderedChoice::lrParse()` - alternative order, `%assoc=right` | Generated Pratt pair `parseRule(int $_minPrec)` / `parseRulePrimary()`, with `@prec` and `%prec` |
+| Left recursion | `OrderedChoice::lrParse()` - same precedence rules as the compiler (alternative order, `%prec`, `@prec`, `%assoc`) | Generated Pratt pair `parseRule(int $_minPrec)` / `parseRulePrimary()` |
 | Token mode (`@lexer`) | No - a `Clause\Token` throws `\LogicException` | Yes |
-| Commit (`@`) | No - the class it throws is not autoloaded | Yes, via a `commitOffset` field |
+| Commit (`@`) | Yes - `Sequence` throws `Error\State\CommittedError` | Yes - the sequence throws a `RuntimeException` with code 1 |
 | Global state | Replaced by `$initialState` on every `parse()` | `array_merge`d into the parser's `$globals`, so values persist per instance |
 
 Grammar template rules (`List<T,S>`) are a third axis: they are expanded by

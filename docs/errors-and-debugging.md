@@ -250,16 +250,20 @@ private function fail(string $expected): never
 
 * `found` is `end of input`, or the character in single quotes, or
   `\x<hex>` for non-printables.
-* `expected` is whatever `expect($rule)` recorded last - and `expect()` only
-  stores when `$this->offset > $this->maxOffset`, i.e. the expectation that
-  belongs to the deepest attempt wins.
+* `expected` is whatever was recorded last when the failure offset moved
+  forward - a failing terminal records its own description, `expect($rule)`
+  records a rule's - and it is only stored when `$this->offset >
+  $this->maxOffset`, i.e. the expectation that belongs to the deepest attempt
+  wins. The position is the furthest offset any terminal failed at, which is
+  the start of the deepest failing clause the interpreter reports.
 * `expect()` calls are emitted for rules that carry a description and can
   consume input (`getMinByteLength() > 0`), plus `$this->expect('$')` for the
   end-of-input check. Descriptions live in the generated `DESCRIPTIONS`
   constant, which always contains `'$' => 'end of input'`; an unknown rule name
   falls back to the rule name itself.
-* `$this->commitOffset` is saved and restored around alternatives, so a commit
-  (`@`) inside a failed alternative does not leak into the reported position.
+* A failure after a commit (`@`) is thrown by `fail($expected, true)`: same
+  message, exception code `1`. It is not caught by choices or repetitions (a
+  predicate treats it as "did not match").
 
 Line and column are 1-based here, unlike the interpreted engine. The token-mode
 template produces the same message shape with `found` taken from
@@ -322,16 +326,16 @@ with `Error: Class "..." not found`:
 |---|---|---|
 | `Charm\Parsing\InternalError` | `Clause.php`, `Node.php`, `Clause\Commit` (imported), `Clause\NonTerminal` (imported) | "Class not found" instead of the internal error message |
 | `Error\InternalError` (relative name: `Charm\Parsing\Error\InternalError` in `Trace.php`, `Charm\Parsing\Clause\Error\InternalError` in `Clause\Identifier.php`) | `Trace::assertHasResult()`, `Clause\Identifier::getClauseName()` on a clause with neither parent nor rule | as above, when reading an unfinished trace or an orphan clause |
-| `Charm\Parsing\Clause\CommittedError` (unqualified `new` in namespace `Charm\Parsing\Clause`) | `Sequence::interpret()` after a `@` commit | using `@` in the interpreted engine ends in "Class not found" |
 | `Charm\Parsing\ExpectedError` | `Clause\Sequence` import list | unused, but the import is unresolved |
 | `ExceptionInterface` (`Charm\Parsing\ExceptionInterface` in `Clause`, `RecursiveDescentParser` and `Charm\Parser`; `Charm\Parsing\Clause\ExceptionInterface` in `Sequence`) | `catch` blocks | never matches, so nothing is caught - snippet exceptions escape instead of being turned into a miss, and the file/line fix-ups never run |
 | `Charm\Parsing\Exception` | `Charm\Parser::__construct()` when `GRAMMAR` is unset | "Class not found" instead of the "GRAMMAR is not declared" message |
 
-Practical consequences: commit symbols (`@`) are usable only in compiled
-parsers, `SequenceFail` is honoured by neither engine
+Practical consequences: `SequenceFail` is honoured by neither engine
 (`Sequence::interpret()` checks only for `SequenceIgnore` and
-`SequenceResume`, and the compiler emits no check at all), and grammar classes
-extending `Charm\Parser` report an unhelpful error when `GRAMMAR` is missing.
+`SequenceResume`, and so does the compiler), and grammar classes extending
+`Charm\Parser` report an unhelpful error when `GRAMMAR` is missing. (A commit,
+`@`, works in both engines: `Sequence` throws `Error\State\CommittedError`, which
+exists since 0.1.2.)
 
 ## See also
 

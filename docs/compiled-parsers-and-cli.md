@@ -62,7 +62,6 @@ A grammar with no rules throws `\RuntimeException("Grammar has no rules")`.
     private int $length;
     private int $maxOffset = 0;
     private ?string $expected = null;
-    private ?int $commitOffset = null;
 {{PROPERTIES}}
 
     /** @var array<string, string> Rule name to description mapping */
@@ -75,7 +74,6 @@ A grammar with no rules throws `\RuntimeException("Grammar has no rules")`.
         $this->length = \strlen($source);
         $this->maxOffset = 0;
         $this->expected = null;
-        $this->commitOffset = null;
         $this->globals = array_merge($this->globals, $initialState);
 
         $result = $this->parse{{GOAL_RULE}}();
@@ -157,7 +155,7 @@ Clause code generation:
 | `$` | `$this->offset === $this->length`, else `$this->expect('$')` |
 | `^` | `$this->offset === 0` |
 | `\nothing` | `Signal::HIT` |
-| `@` | `$this->commitOffset = $this->offset;` then `Signal::HIT` |
+| `@` | nothing at runtime - the sequence knows it has passed it; a later failure in that sequence calls `$this->fail($rule, true)` |
 | `Foo?` | `($x !== MISS) ? $x : null` |
 | `Foo+` | `do { ... } while` collecting into an array, `MISS` if empty |
 | `Foo*` | same loop, empty array is a success |
@@ -171,7 +169,7 @@ in Charm syntax switches a terminal to a case-insensitive match. Likewise
 `Clause\Any` compiles to `\mb_substr(\substr($this->source, $this->offset, 4), 0, 1)`,
 but a bare `.` in a grammar lexes as `T_TOKEN` and is never accepted as a clause.
 
-Sequences save the offset and `commitOffset`, use `goto` to the end label, keep
+Sequences save the offset, use `goto` to the end label, keep
 named captures as keys (`$result['name']`), drop references to `%silent` rules,
 flatten `spread:` results, and collapse an empty result to `null` when the
 sequence has no snippet.
@@ -186,15 +184,23 @@ Ordered choices are compiled in one of three ways, tried in this order:
    first bytes, a `switch ($this->source[$this->offset])` selects the
    alternative.
 3. **Sequential** - try each alternative, restoring `$_choiceOffset` between
-   them. A commit inside an alternative stops the search: the generated code
-   checks `if ($this->commitOffset !== $_savedCommitN)` and returns `MISS`
-   instead of trying the rest.
+   them. The first alternative that does not return `MISS` wins, even if it
+   matched nothing. (A commit inside an alternative needs no check here: a
+   failure after it throws.)
+
+The first two are only used when they cannot change the outcome: every
+alternative must consume input (no optional, `*`, predicate or nullable
+alternative), the grammar must not contain `@`, and the single-variance
+optimization additionally needs the alternatives' terminals to be unable to match
+at the same place whenever something follows them or a snippet decides the
+result.
 
 References to other rules are guarded at the call site when the target rule has
-a minimum byte length > 0:
+a minimum byte length > 0 and known first bytes (only the first byte is tested, so
+that a rule that would fail further in still runs and records the failure offset):
 
 ```php
-if ($this->length - $this->offset < 1 || !\str_contains('"-0123456789[fnt{', $this->source[$this->offset])) {
+if ($this->offset >= $this->length || !\str_contains('"-0123456789[fnt{', $this->source[$this->offset])) {
     $this->expect('Value');
     $_seq1_1 = JsonParserSignal::MISS;
 } else {
@@ -206,8 +212,8 @@ Left-recursive rules become a Pratt pair - `parseExpr(int $_minPrec = 0)` plus
 `parseExprPrimary()` - and precedence comes from `%prec`, then the `@prec`
 table, then `count($alternatives) - $index`. See
 [Precedence and pragmas](precedence-and-pragmas.md) for the rules and the
-associativity tests (`<` for left/right, `<=` for `none`, `$precedence - 1` for
-the right operand of a right-associative operator).
+associativity tests (`<` for every operator - `none` groups like `left` - and
+`$precedence - 1` for the right operand of a right-associative operator).
 
 ## Snippets in generated code
 
@@ -231,10 +237,13 @@ private function snippet_Pair_1($_offset, $_p0, $_p1, $_p2, $_p3, $_p4, $_p5)
   `Charm\Parsing\State`. Methods like `$state->getToken()` do not exist here.
 - Snippets without `return` are inlined as a single statement.
 
-`Charm\Parsing\SequenceIgnore`, `SequenceResume` and `Charm\Parsing\Signal` are
-never referenced by the compiler: returning them from a compiled snippet just
-produces a value. Control flow in generated code is driven only by the class's
-own `{ClassName}Signal` enum.
+A snippet's return value is recognised by class (`Charm\Parsing\SequenceIgnore`,
+`SequenceResume`) and by enum case name (`MISS`), so the library does not have to
+be loaded: `$MISS` or `\Charm\Parsing\Signal::MISS` fails the sequence,
+`SequenceIgnore` ends it as a valueless success and `SequenceResume` carries on.
+Anything a snippet throws is rethrown as `Charm\Parsing\Error\SnippetError` when
+that class exists. Control flow is otherwise driven by the class's own
+`{ClassName}Signal` enum.
 
 A clause type the compiler does not know emits
 `$_result = false; // Unknown clause type: {class}`, so unusual grammars fail
@@ -253,8 +262,9 @@ private function fail(string $expected): never
 }
 ```
 
-`expect()` records the furthest offset reached, so the message points at the
-deepest failure rather than the goal rule. `$found` is the character in single
+Every terminal that fails records the offset it failed at (and what it expected)
+in `$maxOffset`, so the message points at the deepest failure rather than the goal
+rule, with the same line and column the interpreter reports. `$found` is the character in single
 quotes, `\xNN` for non-printable bytes, or `end of input`. Line and column are
 recomputed from the source on failure. See
 [Errors and debugging](errors-and-debugging.md).

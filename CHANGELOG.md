@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.1.2 (unreleased)
+
+Conformance suite `charm-tests/0030`-`0039`: the interpreter and the compiled parser now agree on
+every row. Fixes, by engine:
+
+Both engines
+- Commit operator `@`: the interpreter threw `Class CommittedError not found` (f1eddd6; the class is
+  `Error\State\CommittedError` now). In both engines a commit is scoped to its sequence, a failure after
+  it is a parse error that `*`, `+`, `?` and choices do not swallow, a commit inside an alternative
+  that succeeded is forgotten, and inside a predicate a committed failure just means "no match".
+- `*` / `+` over a group that can match nothing (`("a"*)*`, `("a"?)*`, `ε*`) hung. An iteration that
+  consumes nothing now ends the repetition and is not collected (the first one still counts for `+`).
+- `%prec=N`, `%prec=NAME` and `@prec` tables are honoured by the interpreter too; both engines resolve
+  precedence through `Grammar::resolveAlternativePrecedence()`. `%assoc=none` groups like `left`
+  in both (the compiled parser used to group it to the right).
+- Left recursion: a reference to the rule inside a bracketed alternative (`"(" Expr ")"`) is a complete
+  expression in both engines; only a trailing reference (prefix operator) is bound by the alternative's
+  precedence. Fixes `(1+2)+3` (interpreter) and `(1+2)` (both) for grammars with the brackets first.
+- A bare `%assoc` or `%prec` reports the missing argument instead of "Undefined array key 0".
+- `!!A`, `&!A` (stacked predicates) parse; `(&A)` and `($)` no longer crash with "Undefined variable $0".
+
+Compiled parser
+- Ordered choice: first success wins, including an empty success. The first-byte `switch` and the
+  single-variance-point optimizer no longer skip optional, nullable or predicate alternatives or
+  quantified groups, and no longer lose a later terminal when the suffix of an earlier one fails.
+  Both are off for grammars containing `@`.
+- Snippets: predicates and named captures no longer occupy a `$_N` slot (a lone `&` used to pass a
+  Signal object); `$MISS` / `Signal::MISS` fails the sequence, `SequenceIgnore` and `SequenceResume` are
+  honoured; anything thrown is wrapped in `Error\SnippetError`; `$MISS` and `$HIT` are defined.
+- Error positions: terminals record the furthest failure offset, so line:col equals the interpreter's
+  (`fail()` used to report where the rule started). The rule-call guard only tests the first byte.
+- `Identifier::getMinByteLength()` / `getFirstBytes()` caches were keyed by rule name across grammars;
+  `Sequence::getFirstBytes()` ignored the first bytes of optional elements.
+- String literals containing quotes (`"a\"b"`, `"'"`) matched wrongly (3b5a04b).
+- Templates: `$commitOffset` is gone; `fail(string $expected, bool $committed = false)`.
+
+Docs: `REFERENCE.md` no longer lists the `.` wildcard or `/regex/i` (the grammar text has neither; see
+`docs/grammar-syntax.md`); the precedence, commit, snippet and error chapters describe the agreed
+behaviour. Case-insensitive terminals (`Clause::CASE_INSENSITIVE`) remain unreachable from grammar text.
+
 ## 0.1.1
 
 - Compiled parsers return `null` again when the goal rule matches with no value, as `cpeg_parse()`

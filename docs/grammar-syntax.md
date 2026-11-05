@@ -71,7 +71,17 @@ and does not become a clause. Match any character with a regex such as `/[\s\S]/
 | `@` | commit | see [precedence and pragmas](precedence-and-pragmas.md) |
 
 Choice is ordered, not "longest match": the first alternative that succeeds
-wins, even if a later one would have matched more input.
+wins, even if a later one would have matched more input - including an
+alternative that succeeds without consuming anything (`"" | "a"` never reaches
+`"a"`, and neither does anything after `"a"? |`).
+
+`*` and `+` stop at an iteration that consumes nothing, since repeating it would
+never end: `("a"*)*` on `aaa` is `[["a", "a", "a"]]`, `("a"?)*` is `["a", "a",
+"a"]`, and `\nothing*` is `[]`. The empty iteration is not collected, except that
+the first iteration of `+` still counts as the one match `+` requires.
+
+Predicates may be stacked: `!!A` is `&A`, and `&!A` is `!A`, written out as nested
+groups.
 
 Groups may also be written with `< >` (and `{ }`), but `[ ]` is unavailable
 because square brackets are read as a character-class regex first.
