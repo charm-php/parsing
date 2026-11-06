@@ -254,7 +254,10 @@ class OrderedChoice extends NonTerminal {
             $rule = $this->getRule();
             $this->ruleName = $rule->getRuleName();
 
-            $refersBack = function(Clause $clause, array $path=[]) use ($rule, &$refersBack, $grammar) {
+            // Does the alternative start with a reference to this rule itself? Only such direct left
+            // recursion is parsed with the precedence loop; a cycle through another rule is grown by
+            // Rule::parse() and its alternative is an ordinary one here.
+            $refersBack = function(Clause $clause, array $path=[]) use (&$refersBack, $grammar) {
                 if (in_array($clause, $path)) {
                     return null;
                 }
@@ -263,11 +266,10 @@ class OrderedChoice extends NonTerminal {
                     return $path;
                 }
                 if ($clause instanceof Identifier) {
-                    $nextRule = $grammar[$clause->getIdentifier()];
-                    if ($nextRule === null) {
+                    if (!isset($grammar[$clause->getIdentifier()])) {
                         throw new CustomError("Rule `".$clause->getIdentifier()."` does not exist in the grammar", 0);
                     }
-                    return $refersBack($nextRule->getClause(), $path);
+                    return $clause->getIdentifier() === $this->ruleName ? $path : null;
                 }
                 if ($clause instanceof Sequence) {
                     foreach ($clause as $subClause) {

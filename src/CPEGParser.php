@@ -52,7 +52,7 @@ class CPEGParser implements ParserInterface {
         $goal = $this->grammar[$this->goal];
         $vars = [];
 
-        $result = $goal->getClause()->parse($state, $vars, []);
+        $result = $goal->parse($state, $vars);
 
         if ($result !== Signal::MISS) {
 //            echo "Got final result:\n".json_encode($result, JSON_PRETTY_PRINT)."\n";

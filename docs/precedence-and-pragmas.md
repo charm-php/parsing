@@ -58,10 +58,16 @@ interpreted engine, `GrammarCompiler::isLeftRecursive()` when compiling) and
 parse those rules with a precedence loop instead of recursing into the first
 alternative forever.
 
-Only **direct** left recursion is grown. An indirect cycle (`A = B "x" | "y"`, `B = A "z"`) is not: on
-`yzx` both engines return just `y`, and with a second alternative in `B` the interpreter stops with
-`Call to a member function getName() on null` while a compiled parser can hang. Rewrite such a grammar so
-that the rule starts with itself.
+The precedence loop handles **direct** recursion only. An **indirect** cycle, where the rule reaches itself
+in left position through other rules (`A = B "x" | "y"`, `B = A "z"`), is parsed by *seed growing*
+(`Rule::parse()` in the interpreter, a `parseA()` wrapper around `growA()` in a compiled parser): while
+`A` is being parsed at an offset, a nested `A` at the same offset returns the best result so far - at
+first a miss, so `B "x"` fails and `"y"` provides the seed - and `A` is re-parsed until the match stops
+getting longer. On `yzxzx` both engines give `[[[["y","z"],"x"],"z"],"x"]`. The alternatives are tried in
+order on every pass and a right operand is parsed greedily, so `%prec`/`%assoc` and the `@prec` table have
+no effect inside a cycle (`E = T`, `T = E "*" E | E "+" E | Num` groups `1+2*3` as `1+(2*3)`): use direct
+recursion for operator rules. A snippet in a grown rule runs once per pass. A rule that is in such a cycle
+and also starts with itself gets both: the loop for its direct alternatives, growing around the whole rule.
 
 Each alternative gets a precedence number. In both engines the default is
 positional, and **the first alternative gets the highest number**, so it binds

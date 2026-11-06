@@ -32,6 +32,7 @@ class GrammarCompiler
     private CodeEmitter $emitter;
     private int $tempVarCounter = 0;
     private array $leftRecursiveRules = [];
+    private bool $hasGrownRules = false;
     private string $className;
     private array $snippetMethods = []; // Collected snippet methods to generate
     private ?string $currentRuleName = null; // Track current rule for snippet naming
@@ -67,6 +68,10 @@ class GrammarCompiler
         ], $options);
         $this->tempVarCounter = 0;
         $this->leftRecursiveRules = [];
+        $this->hasGrownRules = false;
+        foreach ($grammar as $ruleName => $rule) {
+            $this->hasGrownRules = $this->hasGrownRules || $grammar->isInLeftRecursiveCycle($ruleName);
+        }
         $this->snippetMethods = [];
         $this->currentRuleName = null;
         $this->snippetCounters = [];
@@ -246,14 +251,8 @@ PHP;
         $visited[] = $clause;
 
         if ($clause instanceof Identifier) {
-            if ($clause->getIdentifier() === $ruleName) {
-                return true;
-            }
-            // Check through referenced rule
-            $targetRule = $this->grammar[$clause->getIdentifier()];
-            if ($targetRule) {
-                return $this->isLeftRecursive($targetRule->getClause(), $ruleName, $visited);
-            }
+            // Only direct recursion counts: a cycle through another rule is seed-grown (Grammar::isInLeftRecursiveCycle())
+            return $clause->getIdentifier() === $ruleName;
         } elseif ($clause instanceof Sequence) {
             // Only check first element for left recursion
             foreach ($clause as $first) {
@@ -284,13 +283,7 @@ PHP;
         $visited[] = $clause;
 
         if ($clause instanceof Identifier) {
-            if ($clause->getIdentifier() === $ruleName) {
-                return true;
-            }
-            $targetRule = $this->grammar[$clause->getIdentifier()];
-            if ($targetRule) {
-                return $this->mustBeLeftRecursive($targetRule->getClause(), $ruleName, $visited);
-            }
+            return $clause->getIdentifier() === $ruleName;
         } elseif ($clause instanceof Sequence) {
             foreach ($clause as $first) {
                 return $this->mustBeLeftRecursive($first, $ruleName, $visited);
@@ -341,12 +334,16 @@ PHP;
         } else {
             $props .= "    private array \$globals = [];\n";
         }
+        if ($this->hasGrownRules) {
+            $props .= "    /** @var array<string, array<int|string, array{mixed, int}>> best result so far of a rule being grown at an offset */\n";
+            $props .= "    private array \$lrSeeds = [];\n";
+        }
         return $props;
     }
 
     private function generateInitCode(): string
     {
-        return '';
+        return $this->hasGrownRules ? "        \$this->lrSeeds = [];\n" : '';
     }
 
     private function generateDescriptions(): string
@@ -406,9 +403,16 @@ PHP;
         $methodName = 'parse' . $this->toMethodName($ruleName);
         $clause = $rule->getClause();
         $isLeftRecursive = isset($this->leftRecursiveRules[$ruleName]);
+        $isPratt = $isLeftRecursive && $clause instanceof OrderedChoice;
 
-        if ($isLeftRecursive && $clause instanceof OrderedChoice) {
-            $this->generatePrattMethod($ruleName, $rule);
+        if ($this->grammar->isInLeftRecursiveCycle($ruleName)) {
+            // parseX() grows the seed (as Rule::parse() does when interpreted) around the rule body in growX()
+            $this->generateGrowMethod($ruleName, $methodName, $isPratt);
+            $methodName = 'grow' . $this->toMethodName($ruleName);
+        }
+
+        if ($isPratt) {
+            $this->generatePrattMethod($ruleName, $rule, $methodName);
         } else {
             $this->emitter->line("private function $methodName(): mixed");
             $this->emitter->openBlock();
@@ -426,11 +430,49 @@ PHP;
     }
 
     /**
+     * Rule in an indirect left-recursive cycle: parseX() memoizes the best result at the offset while the
+     * rule body (growX()) is being parsed there, so a nested call at that offset returns it (initially a
+     * miss), and re-parses the body until the match stops getting longer. Same algorithm as Rule::parse().
+     */
+    private function generateGrowMethod(string $ruleName, string $methodName, bool $isPratt): void
+    {
+        $bodyMethod = 'grow' . $this->toMethodName($ruleName);
+        $seeds = '$this->lrSeeds[' . var_export($ruleName, true) . '][$_key]';
+        $this->emitter->line("private function $methodName(" . ($isPratt ? 'int $_minPrec = 0' : '') . "): mixed");
+        $this->emitter->openBlock();
+        $this->emitter->line('$_offset = $this->offset;');
+        $this->emitter->line($isPratt ? '$_key = $_offset . \':\' . $_minPrec;' : '$_key = $_offset;');
+        $this->emitter->line("if (isset($seeds)) {");
+        $this->emitter->indent();
+        $this->emitter->line("[\$_value, \$this->offset] = $seeds;");
+        $this->emitter->line('return $_value;');
+        $this->emitter->closeBlock();
+        $this->emitter->line("$seeds = \$_seed = [" . $this->signalMiss() . ', $_offset];');
+        $this->emitter->line('try {');
+        $this->emitter->indent();
+        $this->emitter->line('while (true) {');
+        $this->emitter->indent();
+        $this->emitter->line('$this->offset = $_offset;');
+        $this->emitter->line("\$_value = \$this->$bodyMethod(" . ($isPratt ? '$_minPrec' : '') . ");");
+        $this->emitter->line('if ($_value === ' . $this->signalMiss() . ' || $this->offset <= $_seed[1]) {');
+        $this->emitter->indent()->line('break;');
+        $this->emitter->closeBlock();
+        $this->emitter->line("$seeds = \$_seed = [\$_value, \$this->offset];");
+        $this->emitter->closeBlock();
+        $this->emitter->dedent()->line('} finally {');
+        $this->emitter->indent()->line("unset($seeds);");
+        $this->emitter->closeBlock();
+        $this->emitter->line('$this->offset = $_seed[1];');
+        $this->emitter->line('return $_seed[0];');
+        $this->emitter->closeBlock();
+        $this->emitter->line();
+    }
+
+    /**
      * Generate Pratt parser for left-recursive rules
      */
-    private function generatePrattMethod(string $ruleName, Rule $rule): void
+    private function generatePrattMethod(string $ruleName, Rule $rule, string $methodName): void
     {
-        $methodName = 'parse' . $this->toMethodName($ruleName);
         $clause = $rule->getClause();
 
         // Collect primary (non-left-recursive) and operator (left-recursive) alternatives

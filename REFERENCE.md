@@ -228,9 +228,14 @@ A grammar that contains `@` loses two compiler optimizations ([Performance](#per
 A rule is left-recursive when one of its alternatives **starts with a reference to the rule itself**. Both
 engines grow such a rule by repeatedly wrapping a *start value* (parsed from the non-recursive alternatives)
 in the recursive alternatives; the grouping comes from each alternative's precedence level and associativity.
-Only **direct** left recursion is supported. An indirect cycle (`A = B "x" | "y"`, `B = A "z"`) is not grown:
-the interpreter returns the non-recursive prefix or fails with an internal error, and a compiled parser can
-hang. Rewrite it as direct recursion.
+Precedence and associativity apply to **direct** recursion only. An **indirect** cycle, a rule that reaches
+itself in left position through other rules (`A = B "x" | "y"`, `B = A "z"`), is *seed-grown* instead: while
+`A` is being parsed at an offset, a nested `A` at that offset returns the best result so far (at first a miss,
+so `B "x"` fails and `"y"` provides the seed), and `A` is re-parsed until it stops getting longer. `yzxzx`
+gives `[[[["y","z"],"x"],"z"],"x"]`. Alternatives are tried in order on every pass and a right operand is
+parsed greedily, so `T = E "*" E | E "+" E | Num` with `E = T` groups `1+2*3` as `["1","+",["2","*","3"]]`
+whatever `%prec` says; write operator rules with direct recursion. A snippet in a grown rule runs once per
+pass. A reference only reached after consuming input (`A = "(" B ")"`) is ordinary recursion, not a cycle.
 
 **Precedence of an alternative**, resolved in this order (`Grammar::resolveAlternativePrecedence()`, shared by
 both engines):

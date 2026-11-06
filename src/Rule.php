@@ -24,7 +24,45 @@ class Rule implements \JSONSerializable {
     }
 
     public function prepare(Grammar $grammar) {
+        $this->grown = $grammar->isInLeftRecursiveCycle($this->ruleName);
         $this->clause->prepare($grammar);
+    }
+
+    /** True when the rule is in an indirect left-recursive cycle (Grammar::isInLeftRecursiveCycle()) */
+    private bool $grown = false;
+
+    /**
+     * Parse this rule at the state's offset. A rule in an indirect left-recursive cycle is seed-grown:
+     * while it is being parsed at an offset, a nested call at the same offset returns the best result so
+     * far (initially a miss, so the recursive alternatives fail and a non-recursive one provides the
+     * seed), and the rule is re-parsed until the match stops getting longer.
+     */
+    public function parse(State $state, array $context) {
+        if (!$this->grown) {
+            return $this->clause->parse($state, $context);
+        }
+        $offset = $state->offset;
+        $seeds = &$state->extra['lrSeeds'];
+        if (isset($seeds[$offset][$this->ruleName])) {
+            [$value, $state->offset] = $seeds[$offset][$this->ruleName];
+            return $value;
+        }
+        $seed = [Signal::MISS, $offset];
+        $seeds[$offset][$this->ruleName] = $seed;
+        try {
+            for (;;) {
+                $state->offset = $offset;
+                $value = $this->clause->parse($state, $context);
+                if ($value === Signal::MISS || $state->offset <= $seed[1]) {
+                    break;
+                }
+                $seeds[$offset][$this->ruleName] = $seed = [$value, $state->offset];
+            }
+        } finally {
+            unset($seeds[$offset][$this->ruleName]);
+        }
+        $state->offset = $seed[1];
+        return $seed[0];
     }
 
     public function getRuleName(): string {

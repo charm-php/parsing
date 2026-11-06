@@ -31,8 +31,11 @@ class Identifier extends NonTerminal {
         if (!isset($grammar[$this->getIdentifier()])) {
             throw new Error\CustomError("Unknown identifier '".$this->getIdentifier()."' in grammar");
         }
-        $this->targetClause = $grammar[$this->getIdentifier()]->getClause();
+        $this->targetRule = $grammar[$this->getIdentifier()];
+        $this->targetClause = $this->targetRule->getClause();
     }
+
+    private ?\Charm\Parsing\Rule $targetRule = null;
 
     public function getDescription(): string {
         $str = $this->getModifierDescription();
@@ -100,8 +103,7 @@ class Identifier extends NonTerminal {
         }
 
         // Use args as context for the rule clause, if provided
-        $result = $this->targetClause->parse($state, $args ?? []);
-        return $result;
+        return $this->targetRule->parse($state, $args ?? []);
     }
 
     public function jsonSerialize() {

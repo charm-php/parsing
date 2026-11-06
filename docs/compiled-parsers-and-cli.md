@@ -215,6 +215,12 @@ table, then `count($alternatives) - $index`. See
 associativity tests (`<` for every operator - `none` groups like `left` - and
 `$precedence - 1` for the right operand of a right-associative operator).
 
+A rule in an indirect left-recursive cycle (`A = B "x" | "y"`, `B = A "z"`) gets a
+`parseA()` that seed-grows around the rule body in `growA()`, with the best result so
+far per offset in `$this->lrSeeds` (the property only exists when the grammar has such
+a rule). The algorithm is `Rule::parse()`'s; see
+[Precedence and pragmas](precedence-and-pragmas.md#left-recursion-the-short-version).
+
 ## Snippets in generated code
 
 A snippet that contains `return` is lifted into its own private method named

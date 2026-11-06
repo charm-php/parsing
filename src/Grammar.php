@@ -103,7 +103,78 @@ class Grammar implements IteratorAggregate, GrammarInterface, \JSONSerializable 
             }
             $this->ruleMap[$rule->getRuleName()] = $rule;
         }
+        $this->detectLeftRecursiveCycles();
         $this->prepare();
+    }
+
+    /**
+     * Rules that reach themselves in left position through at least one other rule (`A = B "x" | "y"`,
+     * `B = A "z"`). Both engines parse such a rule by seed growing (see Rule::parse()); direct left
+     * recursion (`A = A "x" | "y"`) is handled by the precedence loop instead.
+     *
+     * @var array<string, true>
+     */
+    private array $leftRecursiveCycles = [];
+
+    /**
+     * Is this rule part of an indirect left-recursive cycle?
+     */
+    public function isInLeftRecursiveCycle(string $ruleName): bool {
+        return isset($this->leftRecursiveCycles[$ruleName]);
+    }
+
+    private function detectLeftRecursiveCycles(): void {
+        // one step: the rules a rule can call before consuming input
+        $reach = [];
+        foreach ($this->ruleMap as $ruleName => $rule) {
+            $reach[$ruleName] = [];
+            $this->leftReach($rule->getClause(), $reach[$ruleName]);
+        }
+        // transitive closure
+        foreach ($reach as $ruleName => $set) {
+            $queue = array_keys($set);
+            while ($queue !== []) {
+                $next = array_pop($queue);
+                foreach ($reach[$next] ?? [] as $target => $_) {
+                    if (!isset($reach[$ruleName][$target])) {
+                        $reach[$ruleName][$target] = true;
+                        $queue[] = $target;
+                    }
+                }
+            }
+        }
+        $this->leftRecursiveCycles = [];
+        foreach ($reach as $ruleName => $set) {
+            foreach ($set as $target => $_) {
+                if ($target !== $ruleName && isset($reach[$target][$ruleName])) {
+                    $this->leftRecursiveCycles[$ruleName] = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Collect the rules `$clause` may call at its start, into $out (name => true).
+     */
+    private function leftReach(Clause $clause, array &$out): void {
+        if ($clause instanceof Identifier) {
+            $out[$clause->getIdentifier()] = true;
+        } elseif ($clause instanceof Sequence) {
+            foreach ($clause as $element) {
+                $this->leftReach($element, $out);
+                // the next element is in left position only when this one can match without consuming input
+                if (!($element->isOptional() || $element->hasAndPredicate() || $element->hasNotPredicate()
+                    || $element instanceof Snippet || $element instanceof Clause\Commit
+                    || $element instanceof SOF || $element instanceof EOF || $element instanceof Nothing)) {
+                    break;
+                }
+            }
+        } elseif ($clause instanceof OrderedChoice) {
+            foreach ($clause as $alternative) {
+                $this->leftReach($alternative, $out);
+            }
+        }
     }
 
     protected function prepare() {
