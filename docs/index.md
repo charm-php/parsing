@@ -25,11 +25,11 @@ The same grammar text runs two ways.
 | Started by | `Charm\cpeg_parse()` / `cpeg_create()`, or a `Charm\Parser` subclass | `Charm\Parsing\Compiler\GrammarCompiler`, or `vendor/bin/charm-compile` |
 | At runtime | `Charm\Parsing\CPEGParser` walks the clause objects built by `GrammarParser` | A generated PHP method per rule (two for a left-recursive rule), plus a per-class `Signal` enum |
 | Dependency at runtime | This library | Nothing, for string-mode grammars |
-| Failure | `Charm\Parsing\Error\ParseError` (`RuntimeException`) | `\RuntimeException("Parse error at line N, column C: expected ..., found ...")` |
+| Failure | `Charm\Parsing\Error\ParseError` (`RuntimeException`) | a generated `{Class}ParseError` (`RuntimeException`): "Parse error at line N, column C: expected ..., found ..." |
 | Columns in messages | 0-based | 1-based |
 | Left recursion | `OrderedChoice::lrParse()` - same precedence rules as the compiler (alternative order, `%prec`, `@prec`, `%assoc`) | Generated Pratt pair `parseRule(int $_minPrec)` / `parseRulePrimary()` |
 | Token mode (`@lexer`) | No - a `Clause\Token` throws `\LogicException` | Yes |
-| Commit (`@`) | Yes - `Sequence` throws `Error\State\CommittedError` | Yes - the sequence throws a `RuntimeException` with code 1 |
+| Commit (`@`) | Yes - `Sequence` throws `Error\State\CommittedError` | Yes - the sequence throws the parser's `{Class}ParseError` with `committed === true` |
 | Global state | Replaced by `$initialState` on every `parse()` | `array_merge`d into the parser's `$globals`, so values persist per instance |
 
 Grammar template rules (`List<T,S>`) are a third axis: they are expanded by
@@ -40,6 +40,10 @@ first.
 
 ## Pages
 
+* [Tutorial: parsing SQL](tutorial-sql.md) - build a `SELECT` parser step by step, from
+  literals to a compiled standalone class; the result is `example-grammars/sql.cpeg`.
+* [Reference](../REFERENCE.md) - every operator, pragma, snippet variable, API call and CLI flag in one
+  table, with the value each yields.
 * [Getting started](getting-started.md) - install, `cpeg_parse()`, a
   `Charm\Parser` subclass, a compiled parser, the regression runner.
 * [Grammar syntax](grammar-syntax.md) - rules, terminals, operators, captures,
@@ -59,7 +63,7 @@ first.
 * [Errors and debugging](errors-and-debugging.md) - what to catch, the message
   placeholders, snippet errors, compiled `fail()`/`expect()`, the trace, options.
 
-A sensible first pass is getting started, then grammar syntax, then snippets.
+A sensible first pass is getting started, then the tutorial, then grammar syntax and snippets.
 Reach for the precedence page as soon as a rule is left-recursive, the token
 mode and lexing pages when you want the input split into tokens, and the compiled
 page when a grammar has to run fast enough to be worth generating code for.
@@ -73,7 +77,7 @@ page when a grammar has to run fast enough to be worth generating code for.
 | `src/` | `Charm\Parsing\` (composer `psr-4`): clauses, `GrammarParser`, `Grammar`, `CPEGParser`, `State`, `Lexer*`, `Error/`, `Compiler/`, `Lexers/`, `Optimizer/`, `Util/` |
 | `bin/charm-compile` | The compiler CLI (`vendor/bin/charm-compile`) |
 | `charm-tests/` | Regression tests run by `run-tests.php` |
-| `example-grammars/` | `.cpeg` grammars, including the yacc-derived PHP grammar |
+| `example-grammars/` | `.cpeg` grammars: `sql.cpeg` (the tutorial's), JSON, JavaScript expressions, ES3, ECMAScript regex, yacc, and the yacc-derived PHP grammar |
 | `benchmarks/` | Benchmark scripts and their `.log` result history |
 | `cleanup/` | Code that is not autoloaded and not part of the API |
 
@@ -90,5 +94,5 @@ needed for `Charm\Parsing\Lexers\PhpLexer`. The source uses `enum` and
 `php` constraint.
 
 The library is GPL-3.0-only, with an output exception in `LICENCE.md` that lets
-generated parsers be distributed under other terms. `CHANGELOG.md` records what
-changed between releases; these pages describe the tree at 0.1.1.
+generated parsers be distributed under other terms: a parser that `charm-compile` generates from your
+grammar is yours. `CHANGELOG.md` records what changed between releases; these pages describe the tree at 0.1.3.
