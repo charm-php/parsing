@@ -9,7 +9,7 @@ interpreter and compiled parsers), which agree on all of them except where a not
 How to read the examples: the grammar, the input, and `=>` the value that `cpeg_parse()` returns, shown as
 `json_encode()` shows it.
 
-```
+```text
 S = "a" "b"      "ab"  =>  ["a","b"]
 ```
 
@@ -113,7 +113,7 @@ What a clause yields, in full. "Value-less" clauses produce no value at all (int
 | sequence whose clauses all lack a value | value-less |
 | sequence ending in a snippet | the snippet's return value |
 
-```
+```text
 S = ("a")                 "a"     =>  "a"
 S = !"b" "a"              "a"     =>  ["a"]
 S = "a"? "b"              "b"     =>  [null,"b"]
@@ -127,7 +127,7 @@ S = ("a" | ε)*            "aab"   =>  ["a","a"]
 **Positions in a sequence.** Only clauses that have a value take a slot (`$_0`, `$_1`, ...). Value-less
 clauses, silent references, predicates and named captures do not:
 
-```
+```text
 S = x:"a" "b" "c"                       "abc"  =>  {"x":"a","0":"b","1":"c"}
 S = ws:_ "a"                            " a"   =>  {"ws":" ","0":"a"}     with _ = /\s*/ %silent: a name wins
 S = "a" _ "b" <? return $_1; ?>         "a b"  =>  "b"                    _ takes no slot
@@ -141,7 +141,7 @@ of its items, and an item that is itself a list is replaced by its own items (tw
 adds nothing; a non-list value is added as it is. Spread matters only in a sequence of two or more clauses:
 `S = ...A*` alone returns what `A*` returns.
 
-```
+```text
 S = ...("a" "b")* "z"           "ababz"  =>  ["a","b","a","b","z"]
 S = ("a" "b")* "z"              "ababz"  =>  [[["a","b"],["a","b"]],"z"]      without spread
 S = "z" ...A    A = "a" ("b" "c")   "zabc"  =>  ["z","a","b","c"]             two levels
@@ -167,7 +167,7 @@ require it.
 **Ordered choice.** The first alternative that succeeds wins, even if a later one would match more input, and
 even if it succeeds without consuming anything.
 
-```
+```text
 S = "" | "a"                       "a"  =>  ""          the empty alternative wins
 S = "a"? | "b"                     "b"  =>  null
 S = A | "x"    A = "x" | \nothing  "x"  =>  "x"
@@ -180,7 +180,7 @@ consuming input (otherwise they would never end). An empty iteration is not coll
 iteration of `+` still counts as the one match `+` needs. Iterations without a value (`ε`, `$`, a
 predicate-only group) add nothing.
 
-```
+```text
 S = ("a"*)*              "aaa"   =>  [["a","a","a"]]
 S = ("a"?)*              "aaa"   =>  ["a","a","a"]
 S = ε*                   ""      =>  []
@@ -191,7 +191,7 @@ S = ("a" | "b")* "c"     "abac"  =>  [["a","b","a"],"c"]
 **Predicates.** `&A` and `!A` try A at the current position and restore the position. A predicate yields no
 value and takes no `$_N` slot.
 
-```
+```text
 S = &"a" "a" !"b" /[a-z]/ <? return [$_0, $_1]; ?>      "ac"  =>  ["a","c"]
 ```
 
@@ -208,7 +208,7 @@ something else."
   `S = A "z" | "xy" "q"`, `A = "x" @ "y"` on `xyq` yields `["xy","q"]`.
 * It is value-less and takes no slot; a trailing `@` is harmless.
 
-```
+```text
 S = "a" @ "b" | "a" "c"        "ac"   =>  ERROR@1:2     without @ the second alternative matches
 S = ("a" @ "b")* "c"           "abac" =>  ERROR@1:4     not swallowed by *
 S = ("a" @ "b")? "a"           "a"    =>  ERROR@1:2     not swallowed by ?
@@ -243,7 +243,7 @@ is treated like `left` in both engines: `E = E "<" E %assoc=none | /[0-9]/` on `
 `[["1","<","2"],"<","3"]`. To forbid chaining, keep the operator out of a left-recursive rule, as the
 [SQL tutorial](docs/tutorial-sql.md) does.
 
-```
+```text
 E = E "*" E | E "+" E | /[0-9]/                    "1+2*3"  =>  ["1","+",["2","*","3"]]       position
 E = E "+" E | E "*" E | /[0-9]/                    "1+2*3"  =>  [["1","+","2"],"*","3"]
 E = E "-" E | /[0-9]/                              "1-2-3"  =>  [["1","-","2"],"-","3"]       left
@@ -254,7 +254,7 @@ E = E "+" E %prec=2 | E "*" E %prec=1 | /[0-9]/    "1+2*3"  =>  [["1","+","2"],"
 With an `@prec` table (levels number from 1, later lines bind tighter; operators are strings, or identifiers
 that `%prec=NAME` can refer to):
 
-```
+```text
 @prec { left "+" "-"  left "*" }
 E = E "*" E | E "+" E | /[0-9]/                    "1+2*3"  =>  ["1","+",["2","*","3"]]
 
@@ -274,7 +274,7 @@ only tighter operators fold into it. A reference followed by something else (`"(
 `E "?" E ":" E`) is delimited and is a complete expression whatever the precedence. A postfix alternative
 (`E "!"`) wraps the left value like an infix one.
 
-```
+```text
 E = "-" E | E "+" E | /[0-9]/              "-1+2"    =>  [["-","1"],"+","2"]      prefix listed first: tightest
 E = E "+" E | "-" E | /[0-9]/              "-1+2"    =>  ["-",["1","+","2"]]
 E = "(" E ")" | E "+" E | /[0-9]/          "(1+2)+3" =>  [["(",["1","+","2"],")"],"+","3"]
@@ -313,7 +313,7 @@ compiled parser reads `null`.
 | `new \Charm\Parsing\SequenceResume` | the snippet counts as not there; the sequence's value is what was collected before it |
 | an exception thrown | `Charm\Parsing\Error\SnippetError` (message `Error in snippet: ...`, original in `getPrevious()`); the parse ends and no alternative is tried. A compiled parser rethrows it as it is when `SnippetError` is not loaded |
 
-```
+```text
 S = /[0-9]+/ <? return (int) $_0 > 9 ? $MISS : $_0; ?> | /[0-9]+/     "12"  =>  "12"     the second alternative
 S = "a" <? return false; ?>                                           "a"   =>  false
 S = "x" A "y"    A = "a" <? return new \Charm\Parsing\SequenceIgnore(); ?>    "xay"  =>  ["x","y"]
@@ -327,7 +327,7 @@ previous `parse()` on the same object left behind, so seed whatever you read. **
 sequence matches, even if an enclosing alternative later fails and backtracks, and `$state` is not rolled
 back.**
 
-```
+```text
 S = A A    A = "a" <? $n = $state['n'] ?? 0; $state['n'] = $n + 1; return $n; ?>     "aa"  =>  [0,1]
 ```
 
@@ -375,7 +375,7 @@ literal. `@prec` works as in string mode. See [token mode](docs/token-mode.md) a
 
 ## Template rules
 
-```
+```text
 S = Paren<Num>        Paren<T> = "(" T ")"          "(1)"  =>  ["(","1",")"]
 S = List<Num, ",">    List<T, Sep> = T (Sep T)*     "1,2"  =>  ["1",[[",","2"]]]
 ```
