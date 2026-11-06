@@ -251,14 +251,29 @@ rather than crash at compile time.
 
 ## Errors
 
-Generated parsers throw `\RuntimeException` and nothing else:
+Generated parsers throw their own `{ClassName}ParseError`, emitted into the same file next to the
+`{ClassName}Signal` enum (so the parser stays standalone). It extends `\RuntimeException`, so
+`catch (\RuntimeException)` works, and carries the details as readonly properties:
 
 ```php
-private function fail(string $expected): never
+class JsonParserParseError extends \RuntimeException
 {
-    $offset = \max($this->offset, $this->maxOffset);
+    public readonly bool $committed;   // a commit (`@`) had been passed: no alternative could recover
+    public readonly int $sourceLine;   // 1-based (`line` is taken by \Exception)
+    public readonly int $sourceColumn; // 1-based, in bytes
+    public readonly int $offset;       // byte offset of the failure
+    public readonly string $expected;
+    public readonly string $found;     // 'x', \xNN or "end of input"
+}
+```
+
+`fail()` computes the values and throws it:
+
+```php
+private function fail(string $expected, bool $committed = false): never
+{
     ...
-    throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}");
+    throw new JsonParserParseError("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed, $line, $col, $offset, $expected, $found);
 }
 ```
 

@@ -5,6 +5,9 @@
 - Repetition: `*` and `+` no longer collect value-less iterations. `ε*`, `ε+` and a predicate-only
   group under `*` give `[]` (the interpreter pushed its internal `Signal::HIT`; compiled parsers pushed
   their private enum). Conformance rows in `charm-tests/0040`.
+- Compiled parsers throw `{ClassName}ParseError extends \RuntimeException` (emitted into every generated
+  file, like the `Signal` enum) with readonly `committed`, `sourceLine`, `sourceColumn`, `offset`,
+  `expected`, `found`, instead of a `\RuntimeException` with code 0/1. `catch (\RuntimeException)` keeps working. Rows in `charm-tests/0041`.
 
 ## 0.1.2
 

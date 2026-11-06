@@ -81,7 +81,7 @@ use PhpParser\Error;
             $found = $this->tokenData->describe($offset);
         }
 
-        throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}");
+        throw new {{CLASS_NAME}}ParseError("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", false, $line, $col, $byteOffset, $expected, $found);
     }
 
     private function expect(string $rule): void
@@ -232,3 +232,4 @@ use PhpParser\Error;
 }
 
 {{SIGNAL_ENUM}}
+{{PARSE_ERROR_CLASS}}

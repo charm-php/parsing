@@ -103,6 +103,26 @@ class GrammarCompiler
         // Generate local enum for signals
         $signalEnum = "enum {$className}Signal { case HIT; case MISS; }\n";
 
+        // Generated parsers are standalone, so each carries its own exception class
+        $parseErrorClass = <<<PHP
+/** Thrown by {$className}::parse(). `\$committed` is true if a commit (`@`) had been passed, so no alternative could recover. */
+class {$className}ParseError extends \\RuntimeException
+{
+    public function __construct(
+        string \$message,
+        public readonly bool \$committed,
+        public readonly int \$sourceLine,
+        public readonly int \$sourceColumn,
+        public readonly int \$offset,
+        public readonly string \$expected,
+        public readonly string \$found,
+    ) {
+        parent::__construct(\$message);
+    }
+}
+
+PHP;
+
         // Build replacements
         $replacements = [
             '{{GRAMMAR_NAME}}' => $grammar->filename ?? $className,
@@ -115,6 +135,7 @@ class GrammarCompiler
             '{{GOAL_DESCRIPTION}}' => $goalDescription,
             '{{PARSE_METHODS}}' => $parseMethods,
             '{{SIGNAL_ENUM}}' => $signalEnum,
+            '{{PARSE_ERROR_CLASS}}' => $parseErrorClass,
             '{{CLASS_NAME}}' => $className,
             '{{DESCRIPTIONS}}' => $descriptions,
         ];
@@ -1372,9 +1393,9 @@ class GrammarCompiler
             $this->emitter->line('try {');
             $this->emitter->indent();
             $this->generateClauseCode($inner, $innerVar);
-            $this->emitter->dedent()->line('} catch (\\RuntimeException $_e) {');
+            $this->emitter->dedent()->line('} catch (' . $this->className . 'ParseError $_e) {');
             $this->emitter->indent();
-            $this->emitter->line('if ($_e->getCode() !== 1) { throw $_e; }');
+            $this->emitter->line('if (!$_e->committed) { throw $_e; }');
             $this->emitter->line("$innerVar = " . $this->signalMiss() . ";");
             $this->emitter->closeBlock();
         } else {

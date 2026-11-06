@@ -11,7 +11,7 @@ information out of a failing parse.
 | `Charm\Parsing\Error\State\ParseError` | `AbstractParseError` | `GrammarParser` - errors in grammar text (`@prec` blocks, missing `;`, bad directives) |
 | `Charm\Parsing\Error\SnippetError` | `\RuntimeException` | `Clause\Snippet::interpret()` - any `\Throwable` that escapes inline grammar code |
 | `Charm\Parsing\Error\CustomError` | `\Exception` | Grammar construction and snippet validation: duplicate rule name, unknown rule reference, invalid regex, snippet not last in a sequence |
-| `\RuntimeException` | - | Compiled parsers, from the generated `fail()` method |
+| `{ClassName}ParseError` (generated, per parser) | `\RuntimeException` | Compiled parsers, from the generated `fail()` method; has `committed`, `sourceLine`, `sourceColumn`, `offset`, `expected`, `found` |
 | `\LogicException` | - | `Regex` clause used in token mode; writing an undeclared property on `State` |
 
 Both `AbstractParseError` subclasses and `SnippetError` extend
@@ -237,17 +237,21 @@ see [Snippets and state](snippets-and-state.md).
 ## Compiled parser errors
 
 Generated parsers do not use the `Error\*` classes. Each method that can fail
-records the furthest point reached and throws a `\RuntimeException`:
+records the furthest point reached and throws the parser's own `{ClassName}ParseError` (a
+`\RuntimeException` subclass emitted into the generated file; `sourceLine` because `line` is `\Exception`'s own):
 
 ```php
 private function fail(string $expected): never
 {
     $offset = \max($this->offset, $this->maxOffset);
     ...
-    throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}");
+    throw new JsonParserParseError("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed, $line, $col, $offset, $expected, $found);
 }
 ```
 
+* The exception has readonly properties `committed`, `sourceLine`, `sourceColumn`, `offset` (byte offset),
+  `expected` and `found`; `committed` is true for a failure after a commit (`@`), which no
+  alternative could recover from.
 * `found` is `end of input`, or the character in single quotes, or
   `\x<hex>` for non-printables.
 * `expected` is whatever was recorded last when the failure offset moved
@@ -262,7 +266,7 @@ private function fail(string $expected): never
   constant, which always contains `'$' => 'end of input'`; an unknown rule name
   falls back to the rule name itself.
 * A failure after a commit (`@`) is thrown by `fail($expected, true)`: same
-  message, exception code `1`. It is not caught by choices or repetitions (a
+  message, `$e->committed === true`. It is not caught by choices or repetitions (a
   predicate treats it as "did not match").
 
 Failure positions are the same in both engines. Two details follow from how the
@@ -279,8 +283,9 @@ template produces the same message shape with `found` taken from
 try {
     $parser = new App\Parser\JsonParser();
     $data = $parser->parse(file_get_contents($file));
-} catch (\RuntimeException $e) {
+} catch (App\Parser\JsonParserParseError $e) {   // or \RuntimeException
     // Parse error at line 12, column 5: expected ',' or '}', found ':'
+    echo "{$e->sourceLine}:{$e->sourceColumn} expected {$e->expected}", $e->committed ? ' (after a commit)' : '';
 }
 ```
 

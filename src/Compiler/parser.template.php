@@ -43,7 +43,7 @@
         return $result;
     }
 
-    /** @param bool $committed true for a failure after a commit (`@`); such an error is not backtracked over (exception code 1) */
+    /** @param bool $committed true for a failure after a commit (`@`); such an error is not backtracked over (`ParseError::$committed`) */
     private function fail(string $expected, bool $committed = false): never
     {
         $offset = \max($this->offset, $this->maxOffset);
@@ -59,7 +59,7 @@
             $found = \ctype_print($char) ? "'{$char}'" : '\x' . \bin2hex($char);
         }
 
-        throw new \RuntimeException("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed ? 1 : 0);
+        throw new {{CLASS_NAME}}ParseError("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed, $line, $col, $offset, $expected, $found);
     }
 
     private function expect(string $rule): void
@@ -74,3 +74,4 @@
 }
 
 {{SIGNAL_ENUM}}
+{{PARSE_ERROR_CLASS}}
