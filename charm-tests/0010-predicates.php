@@ -18,23 +18,23 @@
     },
 
     // NOT predicate (!) - negative lookahead
-    [ ["hello", "not-stop"], ["hello"] ],
-    [ ["world", "not-stop"], ["world"] ],
+    [ ["hello", "not-stop"], "hello" ],
+    [ ["world", "not-stop"], "world" ],
     [ ["stop", "not-stop"], Charm\Parsing\Error\ParseError::class ],
 
     // AND predicate (&) - positive lookahead
-    [ ["hello", "and-hello"], ["hello"] ],
+    [ ["hello", "and-hello"], "hello" ],
     [ ["world", "and-hello"], Charm\Parsing\Error\ParseError::class ],
 
     // Predicate doesn't consume input
-    [ ["hello", "and-letter"], ["hello"] ],
+    [ ["hello", "and-letter"], "hello" ],
     [ ["123", "and-letter"], Charm\Parsing\Error\ParseError::class ],
 
     // NOT predicate with end-of-input check
-    [ ["abc", "not-eof"], [["a"], ["b"], ["c"]] ],
+    [ ["abc", "not-eof"], ["a", "b", "c"] ],
 
     // Combining NOT with keywords
-    [ ["myvar", "not-keyword"], ["myvar"] ],
+    [ ["myvar", "not-keyword"], "myvar" ],
     [ ["if", "not-keyword"], Charm\Parsing\Error\ParseError::class ],
     [ ["while", "not-keyword"], Charm\Parsing\Error\ParseError::class ],
 ];

@@ -53,7 +53,7 @@ return [
     [ ['S = [^a-c]', 'd'], both('d') ],
     [ ['S = [^a-c]', 'b'], both($E) ],
     [ ['S = [abc]+', 'cabd'], both(['c', 'a', 'b']) ],
-    [ ['S = [0-9a-f]+ $', '09af'], both([['0', '9', 'a', 'f']]) ],
+    [ ['S = [0-9a-f]+ $', '09af'], both(['0', '9', 'a', 'f']) ],
     [ ['S = [0-9a-f]+ $', '09ag'], both($E) ],
     [ ['S = [à-ü]', 'é'], both('é') ],
     [ ['S = [à-ü]', 'a'], both($E) ],
@@ -84,9 +84,9 @@ return [
     [ ['S = .', 'a'], both('GRAMMAR_ERROR') ],
 
     // SOF / EOF / nothing
-    [ ['S = ^ "a"', 'a'], both(['a']) ],
+    [ ['S = ^ "a"', 'a'], both('a') ],
     [ ['S = "a" ^', 'a'], both($E) ],
-    [ ['S = "a" $', 'a'], both(['a']) ],
+    [ ['S = "a" $', 'a'], both('a') ],
     [ ['S = "a" $', 'ab'], both($E) ],
     [ ['S = $', ''], both(null) ],
     [ ['S = $', 'a'], both($E) ],
@@ -96,7 +96,7 @@ return [
     [ ['S = "a" "b" $', "ab"], both(['a', 'b']) ],
     [ ['S = \nothing', 'x'], both(null) ],
     [ ['S = ε', ''], both(null) ],
-    [ ['S = ε "a"', 'a'], both(['a']) ],
+    [ ['S = ε "a"', 'a'], both('a') ],
     [ ['S = "a" \nothing "b"', 'ab'], both(['a', 'b']) ],
     [ ['S = ε $', ''], both(null) ],
 ];

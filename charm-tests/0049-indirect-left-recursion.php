@@ -39,7 +39,7 @@ A = B "x" | "y"', 'wxzxz'], both([[[['w', 'x'], 'z'], 'x'], 'z']) ],
     // the grown result is what the caller sees: $ after it, and the longest attempt sets the error position
     [ ['S = A $
 A = B "x" | "y"
-B = A "z"', 'yzx'], both([[['y', 'z'], 'x']]) ],
+B = A "z"', 'yzx'], both([['y', 'z'], 'x']) ],
     [ ['S = A $
 A = B "x" | "y"
 B = A "z"', 'yzxz'], both('ERROR@1:5') ],

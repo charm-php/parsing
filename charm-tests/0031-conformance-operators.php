@@ -23,8 +23,8 @@ return [
     // value shape: a lone clause is a scalar, a sequence is an array, zero-width clauses add nothing
     [ ['S = "a"', 'a'], both('a') ],
     [ ['S = ("a")', 'a'], both('a') ],
-    [ ['S = "a" ε', 'a'], both(['a']) ],
-    [ ['S = ^ "a" $', 'a'], both(['a']) ],
+    [ ['S = "a" ε', 'a'], both('a') ],
+    [ ['S = ^ "a" $', 'a'], both('a') ],
     [ ['S = ("a" "b")', 'ab'], both(['a', 'b']) ],
     [ ['S = ("a" "b") "c"', 'abc'], both([['a', 'b'], 'c']) ],
     [ ['S = "a" ("b" "c")', 'abc'], both(['a', ['b', 'c']]) ],

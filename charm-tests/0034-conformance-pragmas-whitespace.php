@@ -16,7 +16,7 @@ return [
     [ ['S = "a" _ "b"' . $ws, 'ab'], both(['a', 'b']) ],
     [ ['S = "a" _ "b"' . $ws, "a\n\t b"], both(['a', 'b']) ],
     [ ['S = "a" _ "b"' . $ws, 'a  c'], both($E) ],
-    [ ['S = _ "a" _' . $ws, '  a  '], both(['a']) ],
+    [ ['S = _ "a" _' . $ws, '  a  '], both('a') ],
     [ ['S = _ "a" _ $' . $ws, '  a  x'], both($E) ],
     [ ['S = "a" _ "b"
 _ = /\s*/', 'a  b'], both(['a', '  ', 'b']) ],

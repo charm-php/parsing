@@ -16,11 +16,11 @@ return [
 
     // direct left recursion, left associative by default
     [ ['S = A $
-A = A "x" | "y"', 'y'], both(['y']) ],
+A = A "x" | "y"', 'y'], both('y') ],
     [ ['S = A
 A = A "x" | "y"', 'yxx'], both([['y', 'x'], 'x']) ],
     [ ['S = A $
-A = A "x" | "y"', 'yxx'], both([[['y', 'x'], 'x']]) ],
+A = A "x" | "y"', 'yxx'], both([['y', 'x'], 'x']) ],
     [ ['S = A
 A = A "x" | "y"', 'x'], both($E) ],
     [ ['S = A

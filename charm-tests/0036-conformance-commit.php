@@ -22,7 +22,7 @@ return [
     [ ['S = "a" @ "b"', 'a'], both($E) ],
     [ ['S = "a" @ "b"', 'ab'], both(['a', 'b']) ],
     // a trailing commit is harmless
-    [ ['S = "a" @', 'a'], both(['a']) ],
+    [ ['S = "a" @', 'a'], both('a') ],
     // commit position: earlier alternatives still backtrack, later ones are never reached
     [ ['S = "a" "b" | "a" @ "c" | "a" "d"', 'ab'], both(['a', 'b']) ],
     [ ['S = "a" "b" | "a" @ "c" | "a" "d"', 'ad'], both($E) ],
@@ -30,7 +30,7 @@ return [
     [ ['S = "a" @ "b" "c" | "a"', 'abc'], both(['a', 'b', 'c']) ],
     [ ['S = "a" @ "b" "c" | "a"', 'abx'], both($E) ],
     // a commit before anything else commits to the alternative on entry
-    [ ['S = @ "a" | "b"', 'a'], both(['a']) ],
+    [ ['S = @ "a" | "b"', 'a'], both('a') ],
     [ ['S = @ "a" | "b"', 'b'], both($E) ],
 
     // in nested sequences and groups

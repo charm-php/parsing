@@ -136,7 +136,8 @@ class Identifier extends NonTerminal {
         if ($this->targetClause !== null) {
             self::$visitedMinLength[$this->identifier] = true;
             try {
-                $result = $this->targetClause->getMinByteLength();
+                // a rule that is itself optional (`_ = " "*`) can match nothing
+                $result = $this->targetClause->isOptional() ? 0 : $this->targetClause->getMinByteLength();
                 self::$minLengthCache[$this->targetClause] = $result;
                 return $result;
             } finally {

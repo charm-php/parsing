@@ -645,7 +645,7 @@ PHP;
         }
 
         if (!$hasInlineSnippet) {
-            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }");
+            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }" . ($clause->collapses() ? " else { $resultVar = {$resultVar}[0]; }" : ''));
         }
 
         $this->emitter->line("_seqEnd{$seqId}:");
@@ -1048,7 +1048,8 @@ PHP;
         // Only guard when minByteLen > 0 - if rule can match empty, we can't short-circuit
         if ($targetRule) {
             $targetClause = $targetRule->getClause();
-            $minByteLen = $targetClause->getMinByteLength();
+            // a rule that is itself optional (`_ = " "*`) can match nothing
+            $minByteLen = $targetClause->isOptional() ? 0 : $targetClause->getMinByteLength();
             $hasDescription = $targetRule->getDescription() !== null;
 
             $firstBytes = $minByteLen > 0 ? $targetClause->getFirstBytes() : null;
@@ -1250,7 +1251,7 @@ PHP;
 
         // If nothing was collected the sequence is value-less (HIT)
         if (!$hasInlineSnippet) {
-            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }");
+            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }" . ($clause->collapses() ? " else { $resultVar = {$resultVar}[0]; }" : ''));
         }
 
         if (!$isTopLevel) {
@@ -1751,6 +1752,11 @@ PHP;
             }
 
             if ($alt instanceof Sequence) {
+                // without a snippet the shortcut would build the list itself, so it only does what a
+                // collapsing sequence does
+                if (!$alt->collapses() && !array_filter(iterator_to_array($alt), fn($c) => $c instanceof Snippet)) {
+                    return null;
+                }
                 foreach ($alt as $sub) {
                     if ($sub instanceof Snippet) {
                         $snippet = $sub;

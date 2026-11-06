@@ -32,6 +32,38 @@ class Sequence extends NonTerminal {
         }
     }
 
+    /**
+     * Does this sequence return its single value itself instead of a one-element list?
+     *
+     * Decided from the grammar alone, so the shape of the result never depends on the input. The
+     * compiler calls this too, which keeps both engines identical. A sequence collapses when exactly
+     * one element can produce a value: predicates, `^`, `$`, `\nothing`, `@` and references to %silent
+     * rules never do; an optional element does (a miss is `null`). A named capture or a spread element
+     * makes the result an array of several values, and a snippet decides the value itself, so a
+     * sequence with any of those never collapses.
+     */
+    public function collapses(): bool {
+        $producers = 0;
+        foreach ($this as $element) {
+            if ($element instanceof Snippet) {
+                return false;
+            }
+            if ($element->hasAndPredicate() || $element->hasNotPredicate()
+                || $element instanceof Commit || $element instanceof Nothing
+                || $element instanceof SOF || $element instanceof EOF) {
+                continue;
+            }
+            if ($element->getName() !== null || $element->hasSpread()) {
+                return false;
+            }
+            if ($element instanceof Identifier && $element->isSilent()) {
+                continue;
+            }
+            $producers++;
+        }
+        return $producers === 1;
+    }
+
     public function interpret(State $state, array $context) {
         $offset = $state->offset;
         $committed = null;
@@ -114,6 +146,8 @@ class Sequence extends NonTerminal {
             if ($result === []) {
                 // nothing collected: the sequence is value-less, like a lone predicate
                 $result = Signal::HIT;
+            } elseif ($this->collapses()) {
+                $result = $result[0];
             }
         } catch (ExceptionInterface $e) {
             $state->offset = $offset;

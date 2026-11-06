@@ -38,7 +38,7 @@ T = "a" "b" <? return new \Charm\Parsing\SequenceResume; ?>', 'xaby'], both(['x'
 T = "x" <? return $MISS; ?>', 'xa'], both('xa') ],
 
     // a commit followed by a failure inside a predicate only makes the predicate fail
-    [ ['S = !("a" @ "b") "a"', 'ac'], both(['a']) ],
+    [ ['S = !("a" @ "b") "a"', 'ac'], both('a') ],
     [ ['S = &("a" @ "b") "a" "b"', 'ab'], both(['a', 'b']) ],
     // a commit is local to its sequence: after the sequence succeeded it is forgotten
     [ ['S = "a" ("b" @ "c") "d" | "a" "b" "c" "e"', 'abce'], both(['a', 'b', 'c', 'e']) ],
@@ -53,12 +53,12 @@ T = "x" <? return $MISS; ?>', 'xa'], both('xa') ],
     [ ['S = "x" (&"a") "a"', 'xa'], both(['x', 'a']) ],
     [ ['S = (&"a")+', 'a'], both([]) ],
     [ ['S = (&"a")*', 'a'], both([]) ],
-    [ ['S = (&"a" "a")*', 'aa'], both([['a'], ['a']]) ],
-    [ ['S = ("a" &"b")+', 'ab'], both([['a']]) ],
+    [ ['S = (&"a" "a")*', 'aa'], both(['a', 'a']) ],
+    [ ['S = ("a" &"b")+', 'ab'], both(['a']) ],
     [ ['S = &"a" &"a"', 'a'], both(null) ],
     [ ['S = (&"a" !"b")', 'a'], both(null) ],
     [ ['S = ($) ', ''], both(null) ],
-    [ ['S = !(&"a") "b"', 'b'], both(['b']) ],
+    [ ['S = !(&"a") "b"', 'b'], both('b') ],
 
     // prefix operators bind to the alternative's precedence, bracketed expressions are complete expressions
     [ ['S = Expr
@@ -109,8 +109,8 @@ A = "a"?', 'aa'], both(['a', 'a']) ],
     [ ['S = "b"? "a"* "c"', 'c'], both([null, [], 'c']) ],
 
     // a quantifier on a predicate is ignored: the predicate looks for one match
-    [ ['S = &"b"* "b"', 'b'], both(['b']) ],
+    [ ['S = &"b"* "b"', 'b'], both('b') ],
     [ ['S = &"b"* "b"', 'a'], both($E) ],
-    [ ['S = !"b"+ "a"', 'a'], both(['a']) ],
+    [ ['S = !"b"+ "a"', 'a'], both('a') ],
     [ ['S = !"b"? "a"', 'b'], both($E) ],
 ];
