@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.5
 
 - New: indirect left recursion. A rule that reaches itself in left position through other rules
   (`A = B "x" | "y"`, `B = A "z"`) is seed-grown in both engines (`Rule::parse()`; a `parseA()` wrapper
