@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.4 (unreleased)
+## 0.1.4
 
 Fixes for four differences between the engines (found while writing the SQL tutorial), plus documentation
 and tests.
