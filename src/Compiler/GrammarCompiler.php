@@ -36,6 +36,8 @@ class GrammarCompiler
     private array $snippetMethods = []; // Collected snippet methods to generate
     private ?string $currentRuleName = null; // Track current rule for snippet naming
     private array $snippetCounters = []; // Per-rule snippet counters
+    /** @var array<string, string> Rule name to generated method name (without the `parse` prefix) */
+    private array $methodNames = [];
     private bool $hasCommit = false; // Whether any rule contains a commit (`@`)
     private bool $isTokenMode = false; // Whether we're compiling for token-mode parsing
 
@@ -73,6 +75,19 @@ class GrammarCompiler
             $this->hasCommit = $this->hasCommit || $this->containsCommit($rule->getClause());
         }
         $this->emitter = new CodeEmitter(1);
+
+        // PHP method names are case-insensitive, so rules that only differ in case (or in a character
+        // that becomes `_`) get a numeric suffix; the first rule keeps the plain name
+        $this->methodNames = [];
+        $taken = [];
+        foreach ($grammar as $ruleName => $rule) {
+            $name = ucfirst(preg_replace('/[^a-zA-Z0-9]/', '_', $ruleName));
+            for ($n = 2, $candidate = $name; isset($taken[strtolower($candidate)]); $n++) {
+                $candidate = $name . '__' . $n;
+            }
+            $taken[strtolower($candidate)] = true;
+            $this->methodNames[$ruleName] = $candidate;
+        }
 
         // Detect left-recursive rules
         $this->detectLeftRecursion();
@@ -171,7 +186,7 @@ PHP;
 
     private function toMethodName(string $ruleName): string
     {
-        return ucfirst(preg_replace('/[^a-zA-Z0-9]/', '_', $ruleName));
+        return $this->methodNames[$ruleName] ?? ucfirst(preg_replace('/[^a-zA-Z0-9]/', '_', $ruleName));
     }
 
     private function signalMiss(): string

@@ -2,7 +2,13 @@
 
 ## 0.1.4 (unreleased)
 
-Documentation and tests only; no behaviour changed.
+Fixes for four differences between the engines (found while writing the SQL tutorial), plus documentation
+and tests.
+
+Fixed
+- Compiled parsers: rules whose names differ only in case (`Select` / `SELECT`) no longer fail with
+  "Cannot redeclare parseSELECT"; the later rule's method gets a `__2` suffix (`parseSELECT__2`). Grammars
+  without such a pair generate exactly the same method names as before. Rows in `charm-tests/0042`.
 
 - New: `docs/tutorial-sql.md`, a step-by-step SQL `SELECT` parser (literals to joins, `@prec` expressions,
   keywords, parameters and `$state`, comments, errors and `@`, `$MISS`, compiling, walking the tree), and
@@ -23,8 +29,7 @@ Documentation and tests only; no behaviour changed.
   the engines, `CommittedError` in the error chapter, the checked-in `src/Library` parsers' provenance,
   token-mode chapter's "only compiled parsers use `@prec`", `.` wildcard and `/regex/i` samples in the old
   `REFERENCE.md`/`README.md`, and a snippet's `false` return, which is a value and not a failure.
-- Found while writing (documented, not changed): two rules differing only in case collide when compiled;
-  `...name:Rule` does not bind `$name` in compiled parsers; indirect left recursion crashes the interpreter
+- Found while writing (documented, not changed): `...name:Rule` does not bind `$name` in compiled parsers; indirect left recursion crashes the interpreter
   or hangs the compiled parser; a regex with an inline `(?i:...)` group is opaque to the compiler's analysis.
 
 ## 0.1.3

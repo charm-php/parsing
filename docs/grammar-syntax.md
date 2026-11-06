@@ -31,7 +31,8 @@ Other ::= clause | clause
 Rule names are PHP-style identifiers, and a rule body may not be empty: `X = ;` raises
 `Rules must contain clauses on :location` (write `X = \nothing` for a rule that matches nothing). Compiled
 parsers turn each rule into a PHP method, and PHP method names are not case-sensitive, so two rules whose
-names differ only in case (`Select` and `SELECT`) cannot be compiled together.
+names differ only in case (`Select` and `SELECT`) get distinct methods anyway (the later one is suffixed `__2`,
+`__3`, ...), so they compile together; a grammar without such a pair keeps the plain `parseName` methods.
 
 ## Terminals
 

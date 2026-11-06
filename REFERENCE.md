@@ -39,8 +39,8 @@ constant of a `Charm\Parser` subclass).
 | `@lexer Class`, `@prec { ... }` | directives, before the first rule ([below](#pragmas-and-directives)) |
 
 Rule names are PHP-style identifiers, case-sensitive in the grammar, but the compiler turns each into a
-method (`parseName`) and PHP method names are not case-sensitive: **two rules whose names differ only in case
-(`Select` and `SELECT`) collide when compiled** (a fatal "cannot redeclare"). A rule declared twice, an empty
+method (`parseName`); PHP method names are not case-sensitive, so rules whose names differ only in case
+(`Select` and `SELECT`) are given distinct methods (`parseSelect`, `parseSELECT__2`). A rule declared twice, an empty
 rule body, a reference to a rule that does not exist and an unknown pragma are errors when the grammar is read.
 
 ---
