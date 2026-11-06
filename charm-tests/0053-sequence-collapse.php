@@ -73,6 +73,25 @@ _ = " "* %silent', 'ab '], both(['a', 'b']) ],
 A = /[a-z]/
 _ = " "* %silent', 'a '], both(['a']) ],
 
+    // spreading a repetition of a collapsing group or rule flattens the repetition only, so array values
+    // keep their shape (the value is no longer wrapped in a one-element list that the spread removed)
+    [ ['S = Item ...(COMMA Item)*
+Item = /[a-z]/ <? return ["k" => $_0]; ?>
+COMMA = "," %silent', 'a,b,c'], both([['k' => 'a'], ['k' => 'b'], ['k' => 'c']]) ],
+    [ ['S = Item ...Rest*
+Rest = COMMA Item
+Item = /[a-z]/ <? return ["k" => $_0]; ?>
+COMMA = "," %silent', 'a,b'], both([['k' => 'a'], ['k' => 'b']]) ],
+    [ ['S = "x" ...(COMMA Item)?
+Item = /[a-z]/ <? return ["k" => $_0]; ?>
+COMMA = "," %silent', 'x,b'], both(['x', 'b']) ],
+    [ ['S = "x" ...(COMMA Item)*
+Item = /[a-z]/
+COMMA = "," %silent', 'x,b,c'], both(['x', 'b', 'c']) ],
+    // a repeated group that does not collapse is still flattened two levels
+    [ ['S = "x" ...("," Item)*
+Item = /[a-z]/', 'x,b,c'], both(['x', ',', 'b', ',', 'c']) ],
+
     // a named capture makes the result an array: never collapses
     [ ['S = n:A _
 A = "a"

@@ -54,13 +54,13 @@ JoinKind = INNER? JOIN       <? return 'INNER'; ?>
 
 # --- The other clauses
 
-WhereClause = WHERE @ cond:Expr  <? return $cond; ?>
+WhereClause = WHERE @ Expr
 
-GroupByClause = GROUP BY @ list:ExprList  <? return $list; ?>
+GroupByClause = GROUP BY @ ExprList
 
-HavingClause = HAVING @ cond:Expr  <? return $cond; ?>
+HavingClause = HAVING @ Expr
 
-OrderByClause = ORDER BY @ items:OrderItems  <? return $items; ?>
+OrderByClause = ORDER BY @ OrderItems
 
 OrderItems = OrderItem ...(COMMA OrderItem)*
 
@@ -71,7 +71,7 @@ Direction = ASC   <? return 'ASC'; ?>
 
 LimitClause = LIMIT @ count:Integer offset:OffsetClause?  <? return ['count' => $count, 'offset' => $offset]; ?>
 
-OffsetClause = OFFSET n:Integer  <? return $n; ?>
+OffsetClause = OFFSET Integer
 
 # --- Expressions: logic, then predicates, then arithmetic (see @prec above)
 
@@ -96,7 +96,7 @@ PredicateTail = IS not:NOT? NULL                          <? return ['type' => '
               | not:NOT? LIKE pattern:Sum                 <? return ['type' => 'like', 'negated' => $not !== null, 'pattern' => $pattern]; ?>
               | op:CompareOp right:Sum                    <? return ['type' => 'binary', 'op' => $op, 'right' => $right]; ?>
 
-CompareOp = /<=|>=|<>|!=|=|<|>/ _  <? return $_0; ?>
+CompareOp = /<=|>=|<>|!=|=|<|>/ _
 
 ExprList = Expr ...(COMMA Expr)*
 
@@ -148,7 +148,7 @@ TrueLiteral = TRUE   <? return ['type' => 'literal', 'value' => true]; ?>
 
 FalseLiteral = FALSE <? return ['type' => 'literal', 'value' => false]; ?>
 
-Identifier "identifier" = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
+Identifier "identifier" = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _
                         | /"(?:[^"]|"")*"/ _                    <? return str_replace('""', '"', substr($_0, 1, -1)); ?>
 
 Integer "integer" = /[0-9]+/ _  <? return strlen($_0) > 18 ? $MISS : (int) $_0; ?>

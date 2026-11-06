@@ -111,7 +111,7 @@ Expr = (Number | String | Identifier) $
 42
 ```
 ```json
-["42"]
+"42"
 ```
 
 ```sql
@@ -121,19 +121,19 @@ Expr = (Number | String | Identifier) $
 Parse error at line 1, column 3: expected end of input, found 'a'
 ```
 
-Two things changed. `42abc` is now an error, and the result of `42` is an array. A sequence (two
-or more things in a row) returns an array holding the value of each part that has one; `$` has no
-value, so the array holds one entry. A rule that is a single thing (`Number | String | Identifier`)
-returns that thing's value as it is.
+Two things changed. `42abc` is now an error, and the rule is a *sequence* (two things in a row:
+the choice, then `$`). A sequence returns the values of its parts as an array, but only parts that
+have a value count, and `$` has none. When exactly one part has a value, the sequence returns that
+value itself instead of an array holding one entry, so the result of `42` is still `"42"`. This is
+decided from the grammar and never from the input: predicates (`&`, `!`), `^`, `$`, `\nothing`,
+`@`, snippets and references to `%silent` rules (step 2) have no value, everything else may have
+one. A sequence with two or more parts that may have a value returns an array of their values.
 
 Raw text is not what a program wants. A *snippet*, PHP between `<?` and `?>` at the end of a
 sequence, computes the value instead. `$_0` is the value of the first part. A `name:` in front of a
-part gives it a name, and a snippet reads it as a variable of that name.
+part gives it a name, and a snippet reads it as a variable of that name (step 2 uses this).
 
 ```cpeg
-# entry
-Expr = value:(Number | String | Identifier) $  <? return $value; ?>
-
 Number = /[0-9]+(\.[0-9]+)?/
   <? return ['type' => 'literal', 'value' => str_contains($_0, '.') ? (float) $_0 : (int) $_0]; ?>
 
@@ -162,8 +162,8 @@ String = /'(?:[^']|'')*'/
 {"type":"literal","value":"it's"}
 ```
 
-*Learned.* Rules, `|`, regexes, `$`. Terminals return text, a sequence returns an array, a snippet
-returns whatever you build. From here on the grammar builds the tree directly; the node shape
+*Learned.* Rules, `|`, regexes, `$`. Terminals return text, a sequence returns an array of its values
+(or the value itself when only one part has one), a snippet returns whatever you build. From here on the grammar builds the tree directly; the node shape
 `['type' => ..., ...]` is our own choice, not something the library imposes.
 
 Step 2: whitespace and the select list
@@ -195,7 +195,7 @@ SelectItem = Star
 
 Star = "*" _  <? return ['type' => 'star', 'table' => null]; ?>
 
-Alias = AS name:Identifier  <? return $name; ?>
+Alias = AS Identifier
 
 Expr = Number | String | Column
 
@@ -207,7 +207,7 @@ Number = /[0-9]+(\.[0-9]+)?/ _
 String = /'(?:[^']|'')*'/ _
   <? return ['type' => 'literal', 'value' => str_replace("''", "'", substr($_0, 1, -1))]; ?>
 
-Identifier = /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
+Identifier = /[A-Za-z_][A-Za-z0-9_]*/ _
 
 SELECT = "SELECT" _ %silent
 AS = "AS" _ %silent
@@ -250,10 +250,10 @@ SELECT 1;
 {"type":"select","columns":[{"expr":{"type":"literal","value":1},"alias":null}]}
 ```
 
-Each token ends with `_`, so `Number`, `String` and `Identifier` need it too; the snippet
-`return $_0` is only there to unwrap the one-element array that `/.../ _` produces (a sequence of
-two parts returns an array, even though `_` contributes no value). Keywords are plain literals
-for now, so lower case fails:
+Each token ends with `_`, so `Number`, `String` and `Identifier` need it too. `Identifier` is
+`/.../ _` with no snippet at all: `_` is silent, so the regex is the only part with a value and the
+sequence returns it as it is. `Alias = AS Identifier` works the same way, because `AS` is silent too.
+Keywords are plain literals for now, so lower case fails:
 
 ```sql
 select 1
@@ -419,7 +419,7 @@ A string literal followed directly by `i` is case-insensitive: `"select"i` match
 of the same thing.)
 
 ```cpeg
-Identifier = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
+Identifier = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _
 
 Keyword = /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/
 
@@ -515,7 +515,7 @@ This step also adds `WHERE`, whose condition is an `Expr`.
 Query = SELECT columns:SelectList from:FromClause? where:WhereClause?
   <? return ['type' => 'select', 'columns' => $columns, 'from' => $from, 'where' => $where]; ?>
 
-WhereClause = WHERE cond:Expr  <? return $cond; ?>
+WhereClause = WHERE Expr
 
 Expr = Predicate
 
@@ -527,7 +527,7 @@ Predicate = subject:Sum tail:PredicateTail?
 
 PredicateTail = op:CompareOp right:Sum  <? return ['op' => $op, 'right' => $right]; ?>
 
-CompareOp = /<=|>=|<>|!=|=|<|>/ _  <? return $_0; ?>
+CompareOp = /<=|>=|<>|!=|=|<|>/ _
 
 Sum = Sum "+" _ Sum  <? return ['type' => 'binary', 'op' => '+', 'left' => $_0, 'right' => $_2]; ?>
     | Sum "-" _ Sum  <? return ['type' => 'binary', 'op' => '-', 'left' => $_0, 'right' => $_2]; ?>
@@ -934,11 +934,11 @@ Query = SELECT distinct:DISTINCT? columns:SelectList from:FromClause? where:Wher
        'orderBy' => $orderBy ?? [], 'limit' => $limit,
      ]; ?>
 
-GroupByClause = GROUP BY list:ExprList  <? return $list; ?>
+GroupByClause = GROUP BY ExprList
 
-HavingClause = HAVING cond:Expr  <? return $cond; ?>
+HavingClause = HAVING Expr
 
-OrderByClause = ORDER BY items:OrderItems  <? return $items; ?>
+OrderByClause = ORDER BY OrderItems
 
 OrderItems = OrderItem ...(COMMA OrderItem)*
 
@@ -949,7 +949,7 @@ Direction = ASC   <? return 'ASC'; ?>
 
 LimitClause = LIMIT count:Integer offset:OffsetClause?  <? return ['count' => $count, 'offset' => $offset]; ?>
 
-OffsetClause = OFFSET n:Integer  <? return $n; ?>
+OffsetClause = OFFSET Integer
 
 Integer = /[0-9]+/ _  <? return (int) $_0; ?>
 
@@ -1008,8 +1008,9 @@ SELECT dept, COUNT(*) AS n FROM emp GROUP BY dept HAVING COUNT(*) > 5
 }
 ```
 
-*Learned.* A rule can be a single keyword plus one thing, with the snippet only there to unwrap
-(`$list`, `$cond`); the final AST is assembled in one place, `Query`.
+*Learned.* A rule can be a single keyword plus one thing (`GROUP BY ExprList`) and needs no snippet,
+because the keyword is silent and the sequence collapses to the one value; the final AST is
+assembled in one place, `Query`.
 
 Step 10: subqueries
 -------------------
@@ -1318,7 +1319,7 @@ the `=`, which is used in place of the name. Add descriptions where the name mea
 TableRef "table name" = "(" _ query:Query ")" _ alias:Alias  <? return ['type' => 'subquery', 'query' => $query, 'alias' => $alias]; ?>
          | name:Identifier alias:Alias?         <? return ['type' => 'table', 'name' => $name, 'alias' => $alias]; ?>
 
-Identifier "identifier" = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
+Identifier "identifier" = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _
                         | /"(?:[^"]|"")*"/ _                    <? return str_replace('""', '"', substr($_0, 1, -1)); ?>
 
 Integer "integer" = /[0-9]+/ _  <? return (int) $_0; ?>
@@ -1352,13 +1353,13 @@ FromClause "FROM clause" = FROM @ source:TableRef joins:JoinClause*  <? return [
 JoinClause = kind:JoinKind @ source:TableRef ON @ on:Expr
   <? return ['type' => 'join', 'kind' => $kind, 'source' => $source, 'on' => $on]; ?>
 
-WhereClause = WHERE @ cond:Expr  <? return $cond; ?>
+WhereClause = WHERE @ Expr
 
-GroupByClause = GROUP BY @ list:ExprList  <? return $list; ?>
+GroupByClause = GROUP BY @ ExprList
 
-HavingClause = HAVING @ cond:Expr  <? return $cond; ?>
+HavingClause = HAVING @ Expr
 
-OrderByClause = ORDER BY @ items:OrderItems  <? return $items; ?>
+OrderByClause = ORDER BY @ OrderItems
 
 LimitClause = LIMIT @ count:Integer offset:OffsetClause?  <? return ['count' => $count, 'offset' => $offset]; ?>
 ```

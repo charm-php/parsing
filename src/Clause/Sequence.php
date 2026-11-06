@@ -64,6 +64,52 @@ class Sequence extends NonTerminal {
         return $producers === 1;
     }
 
+    /**
+     * Spread `$match` into `$result`: null is skipped, an array is flattened. A repetition of lists
+     * (`...(A B)*`) is flattened two levels, one for the repetition and one for each list; with
+     * $depth 1 only the outer array is (see spreadDepth()).
+     */
+    public static function spreadInto(array &$result, mixed $match, int $depth = 2): void {
+        if ($match === null) {
+            return;
+        }
+        if (!is_array($match)) {
+            $result[] = $match;
+            return;
+        }
+        foreach ($match as $item) {
+            if ($depth > 1 && is_array($item)) {
+                foreach ($item as $subItem) {
+                    $result[] = $subItem;
+                }
+            } else {
+                $result[] = $item;
+            }
+        }
+    }
+
+    /**
+     * How many levels does a spread of this element flatten? Two, because the value of a repetition
+     * of a group or rule is a list of lists. But when what is repeated collapses (see collapses()) its
+     * value is not wrapped in a list, so only the repetition itself is flattened and the values keep
+     * their shape (`...(COMMA Item)*` yields the items, even if they are arrays). Decided from the
+     * grammar, like collapses().
+     */
+    public static function spreadDepth(Clause $element, array $seen = []): int {
+        if ($element instanceof Identifier) {
+            $target = $element->getTargetClause();
+            if ($target === null || in_array($target, $seen, true)) {
+                return 2;
+            }
+            $seen[] = $target;
+            return self::spreadDepth($target, $seen);
+        }
+        if ($element instanceof Sequence) {
+            return $element->collapses() ? 1 : 2;
+        }
+        return 2;
+    }
+
     public function interpret(State $state, array $context) {
         $offset = $state->offset;
         $committed = null;
@@ -119,21 +165,7 @@ class Sequence extends NonTerminal {
 
                 if ($subClause->hasSpread()) {
                     // Spread arrays into the result, skip null
-                    if ($match === null) {
-                        continue;
-                    } elseif (is_array($match)) {
-                        foreach ($match as $item) {
-                            if (is_array($item)) {
-                                foreach ($item as $subItem) {
-                                    $result[] = $subItem;
-                                }
-                            } else {
-                                $result[] = $item;
-                            }
-                        }
-                    } else {
-                        $result[] = $match;
-                    }
+                    self::spreadInto($result, $match, self::spreadDepth($subClause));
                 } elseif ($subClause->getName() === null) {
                     // No spread, no name - add as positional
                     // Check if this is a reference to a %silent rule

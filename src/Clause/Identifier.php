@@ -3,6 +3,7 @@ namespace Charm\Parsing\Clause;
 
 use Charm\Parsing\State;
 use Charm\Parsing\Error;
+use Charm\Parsing\Clause;
 use Charm\Parsing\{
     ClauseInterface,
     GrammarInterface,
@@ -75,6 +76,11 @@ class Identifier extends NonTerminal {
         } else {
             throw new Error\InternalError("Clause has neither parent nor rule associated");
         }
+    }
+
+    /** The clause of the rule this refers to (null before the grammar is prepared). */
+    public function getTargetClause(): ?Clause {
+        return $this->targetClause;
     }
 
     public function getIdentifier(): string {

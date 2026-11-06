@@ -127,26 +127,6 @@ class OrderedChoice extends NonTerminal {
         return $start;
     }
 
-    /** Spread `$match` into `$result` the way Sequence does: skip null, flatten two levels. */
-    private static function spreadInto(array &$result, mixed $match): void {
-        if ($match === null) {
-            return;
-        }
-        if (!is_array($match)) {
-            $result[] = $match;
-            return;
-        }
-        foreach ($match as $item) {
-            if (is_array($item)) {
-                foreach ($item as $subItem) {
-                    $result[] = $subItem;
-                }
-            } else {
-                $result[] = $item;
-            }
-        }
-    }
-
     private function parsePreparedClause(State $state, PreparedClause $prep, ?Result $start): ?Result {
         $prefix = function() use ($state) {
             return substr($state->source, 0, $state->offset)."¤".substr($state->source, $state->offset).str_repeat("  ", count(debug_backtrace())-8)." ";
@@ -171,7 +151,7 @@ class OrderedChoice extends NonTerminal {
                 $result[$name] = $start->value;
             }
             if ($first->hasSpread()) {
-                self::spreadInto($result, $start->value);
+                Sequence::spreadInto($result, $start->value, Sequence::spreadDepth($first));
             } elseif ($name === null) {
                 $result[] = $start->value;
             }
@@ -215,7 +195,7 @@ class OrderedChoice extends NonTerminal {
                         $result[$name] = $match;
                     }
                     if ($subClause->hasSpread()) {
-                        self::spreadInto($result, $match);
+                        Sequence::spreadInto($result, $match, Sequence::spreadDepth($subClause));
                     } elseif ($name === null) {
                         // Check if this is a reference to a %silent rule
                         $isSilent = ($subClause instanceof Identifier && $subClause->isSilent());

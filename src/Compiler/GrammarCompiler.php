@@ -1153,13 +1153,17 @@ PHP;
             $this->emitter->indent();
             $this->emitter->line("foreach ($itemVar as \$_spreadItem) {");
             $this->emitter->indent();
-            $this->emitter->line("if (is_array(\$_spreadItem)) {");
-            $this->emitter->indent();
-            $this->emitter->line("foreach (\$_spreadItem as \$_subItem) { {$resultVar}[] = \$_subItem; }");
-            $this->emitter->dedent()->line("} else {");
-            $this->emitter->indent();
-            $this->emitter->line("{$resultVar}[] = \$_spreadItem;");
-            $this->emitter->closeBlock();
+            if (Sequence::spreadDepth($subClause) > 1) {
+                $this->emitter->line("if (is_array(\$_spreadItem)) {");
+                $this->emitter->indent();
+                $this->emitter->line("foreach (\$_spreadItem as \$_subItem) { {$resultVar}[] = \$_subItem; }");
+                $this->emitter->dedent()->line("} else {");
+                $this->emitter->indent();
+                $this->emitter->line("{$resultVar}[] = \$_spreadItem;");
+                $this->emitter->closeBlock();
+            } else {
+                $this->emitter->line("{$resultVar}[] = \$_spreadItem;");
+            }
             $this->emitter->closeBlock();
             $this->emitter->dedent()->line("} else {");
             $this->emitter->indent();

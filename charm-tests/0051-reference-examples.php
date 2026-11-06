@@ -33,15 +33,15 @@ return [
     // nocase
     [ ['S = /(?i:select)\\b/', 'SeLeCt x'], both(ref_json('"SeLeCt"')) ],
     // sof
-    [ ['S = ^ "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = ^ "a"', 'a'], both(ref_json('"a"')) ],
     // eof
-    [ ['S = "a" $', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = "a" $', 'a'], both(ref_json('"a"')) ],
     // eof-fail
     [ ['S = "a" $', 'ab'], both('ERROR@1:2') ],
     // nothing
     [ ['S = "a" \\nothing "b"', 'ab'], both(ref_json('["a","b"]')) ],
     // epsilon
-    [ ['S = "a" ε', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = "a" ε', 'a'], both(ref_json('"a"')) ],
     // ref
     [ ["S = Digit Digit\nDigit = /[0-9]/", '12'], both(ref_json('["1","2"]')) ],
     // seq
@@ -67,9 +67,9 @@ return [
     // group-angle
     [ ['S = <"a" | "b"> "c"', 'bc'], both(ref_json('["b","c"]')) ],
     // and
-    [ ['S = &"a" "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = &"a" "a"', 'a'], both(ref_json('"a"')) ],
     // not
-    [ ['S = !"b" "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = !"b" "a"', 'a'], both(ref_json('"a"')) ],
     // not-fail
     [ ['S = !"a" "a"', 'a'], both('ERROR@1:1') ],
     // named
@@ -95,9 +95,9 @@ return [
     // single-seq
     [ ['S = ("a")', 'a'], both(ref_json('"a"')) ],
     // one-value-seq
-    [ ['S = !"b" "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = !"b" "a"', 'a'], both(ref_json('"a"')) ],
     // silent-seq
-    [ ["S = \"a\" _ %silent\n_ = /\\s*/ %silent", 'a  '], both(ref_json('["a"]')) ],
+    [ ["S = \"a\" _ %silent\n_ = /\\s*/ %silent", 'a  '], both(ref_json('"a"')) ],
     // silent-two
     [ ["S = \"a\" _ \"b\"\n_ = /\\s*/ %silent", 'a b'], both(ref_json('["a","b"]')) ],
     // hit-top
@@ -129,11 +129,11 @@ return [
     // pred-noslot
     [ ['S = &"a" "a" !"b" /[a-z]/ <? return [$_0, $_1]; ?>', 'ac'], both(ref_json('["a","c"]')) ],
     // pred-quant
-    [ ['S = &"a"* "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = &"a"* "a"', 'a'], both(ref_json('"a"')) ],
     // pred-stack
-    [ ['S = !!"a" "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = !!"a" "a"', 'a'], both(ref_json('"a"')) ],
     // pred-nested
-    [ ['S = &!"b" "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = &!"b" "a"', 'a'], both(ref_json('"a"')) ],
     // commit-basic
     [ ['S = "a" @ "b" | "a" "c"', 'ac'], both('ERROR@1:2') ],
     // commit-ok
@@ -147,7 +147,7 @@ return [
     // commit-opt
     [ ['S = ("a" @ "b")? "a"', 'a'], both('ERROR@1:2') ],
     // commit-pred
-    [ ['S = !("a" @ "b") "a"', 'a'], both(ref_json('["a"]')) ],
+    [ ['S = !("a" @ "b") "a"', 'a'], both(ref_json('"a"')) ],
     // snip-basic
     [ ['S = /[0-9]+/ <? return (int) $_0; ?>', '42'], both(ref_json('42')) ],
     // snip-named
