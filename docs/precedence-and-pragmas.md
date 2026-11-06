@@ -189,8 +189,8 @@ Expr = Expr OR Expr   %prec=OR
      | Expr AND Expr  %prec=AND
      | Expr "+" Expr
      | Number
-OR = /(?i:or)\b/ %silent
-AND = /(?i:and)\b/ %silent
+OR = "or"i /\b/ %silent
+AND = "and"i /\b/ %silent
 Number = /[0-9]+/
 ```
 

@@ -112,8 +112,10 @@ class OrderedChoice extends NonTerminal {
                 }
                 //echo $prefix()." - missed\n";
             }
-            if ($newStart === null) {
-                //echo $prefix()." - no more parses succeeded\n";
+            // no alternative matched, or one matched without consuming anything (`E = E A? | ...`): that
+            // would repeat forever, so it ends the loop and is not taken, like an empty iteration of `*`
+            if ($newStart === null || $state->offset === $rightOffset) {
+                $state->offset = $rightOffset;
                 break;
             }
             // since we've consumed another, update the offset

@@ -511,12 +511,19 @@ PHP;
         $this->emitter->indent();
         $this->emitter->line('$_offset = $this->offset;');
         $this->emitter->line('$_matched = false;');
+        $this->emitter->line('$_prevLeft = $_left;');
         $this->emitter->line();
 
         foreach ($operatorAlts as $i => $alt) {
             $this->generatePrattOperatorCase($alt, $ruleName, $i === 0);
-            // After each operator check, if we matched, skip remaining operators
-            $this->emitter->line('if ($_matched) continue;');
+            // After each operator check, if we matched, skip remaining operators. An alternative that
+            // consumed nothing (`E = E A? | ...`) would repeat forever: it ends the loop and is not taken
+            $this->emitter->line('if ($_matched) {');
+            $this->emitter->indent();
+            $this->emitter->line('if ($this->offset > $_offset) continue;');
+            $this->emitter->line('$_left = $_prevLeft;');
+            $this->emitter->line('break;');
+            $this->emitter->closeBlock();
             $this->emitter->line();
         }
 

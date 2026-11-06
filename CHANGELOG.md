@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- New: indirect left recursion. A rule that reaches itself in left position through other rules
+  (`A = B "x" | "y"`, `B = A "z"`) is seed-grown in both engines (`Rule::parse()`; a `parseA()` wrapper
+  around `growA()` in compiled parsers): `yzxzx` gives `[[[["y","z"],"x"],"z"],"x"]`. The interpreter used to
+  return the non-recursive prefix (or crash with two recursive alternatives) and compiled parsers could hang.
+  Only direct recursion uses the precedence loop, so `%prec`/`@prec` have no effect inside such a cycle
+  (REFERENCE.md, docs/precedence-and-pragmas.md). Rows in `charm-tests/0049`.
+- A left-recursive alternative whose part after the rule can match nothing (`E = E A? | "x"`) looped
+  forever in both engines; an operator alternative that consumes nothing now ends the precedence loop and
+  is not taken, like an empty iteration of `*`. Rows in `charm-tests/0052`.
 - Compiled parsers: `$context` in a snippet is the sequence's collected array (names and numbers), as when
   interpreted; it used to be undefined. Rows in `charm-tests/0046`.
 - Spread (`...A`, `...name:A`) in the operator alternatives of a left-recursive rule (`Expr = Expr "+" ...Args`)
