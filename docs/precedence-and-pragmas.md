@@ -53,10 +53,15 @@ offset - `$pragma[0]` - and the object stringifies to `%name(arg)`.
 ## Left recursion, the short version
 
 A rule is left-recursive when an alternative starts with a reference to the
-rule itself, directly or through other rules. Both engines detect this
-(`OrderedChoice::prepare()` in the interpreted engine,
-`GrammarCompiler::isLeftRecursive()` when compiling) and parse those rules with
-a precedence loop instead of recursing into the first alternative forever.
+rule itself. Both engines detect this (`OrderedChoice::prepare()` in the
+interpreted engine, `GrammarCompiler::isLeftRecursive()` when compiling) and
+parse those rules with a precedence loop instead of recursing into the first
+alternative forever.
+
+Only **direct** left recursion is grown. An indirect cycle (`A = B "x" | "y"`, `B = A "z"`) is not: on
+`yzx` both engines return just `y`, and with a second alternative in `B` the interpreter stops with
+`Call to a member function getName() on null` while a compiled parser can hang. Rewrite such a grammar so
+that the rule starts with itself.
 
 Each alternative gets a precedence number. In both engines the default is
 positional, and **the first alternative gets the highest number**, so it binds
@@ -139,7 +144,8 @@ operator's precedence, or one lower for `%assoc=right`
 Both engines resolve the precedence of an alternative in this order:
 
 1. `%prec=N`, used as-is. `%prec=NAME` looks `NAME` up in the `@prec` table and
-   takes both its level and its associativity.
+   takes both its level and its associativity; a `NAME` that is not in the table
+   changes nothing and resolution goes on with the next step.
 2. If the grammar has a `@prec` table, the operator of the alternative is
    extracted - the first literal, string or token that is not a recursive
    reference or a snippet - and looked up in the table.
@@ -160,9 +166,27 @@ Expr =  Expr "+"  Expr %prec=2
       | Number
 ```
 
-`%prec=T_NAME` resolves the name through the `@prec` table and therefore does
-nothing unless the grammar also declares `@prec`; the alternative then falls
-back to its position. Both engines honour `%prec`.
+`%prec=NAME` resolves the name through the `@prec` table and therefore does
+nothing unless the grammar also declares `@prec` and lists `NAME`; the alternative then
+falls through to the operator lookup and, failing that, to its position. Both engines
+honour `%prec`. The name need not be a token: the table accepts any identifier, which is how a
+grammar gives keyword operators a level (`OR`, `AND`), since a keyword written as a rule or a
+regex is never found by the operator lookup:
+
+```
+@prec {
+  left OR
+  left AND
+  left "+" "-"
+}
+Expr = Expr OR Expr   %prec=OR
+     | Expr AND Expr  %prec=AND
+     | Expr "+" Expr
+     | Number
+OR = /(?i:or)\b/ %silent
+AND = /(?i:and)\b/ %silent
+Number = /[0-9]+/
+```
 
 ## @prec
 
@@ -177,15 +201,15 @@ followed by the operators on that level:
   right T_POW
   none  "<" ">"
 }
-Expr = Expr "+" Expr | Expr "*" Expr | ...
+Expr = Expr "+" Expr | Expr "*" Expr | Expr "<" Expr | Expr "**" Expr | Number
 ```
 
 * Levels are numbered from 1 in the order the lines appear, and each line binds
   tighter than the one before it. The example above gives `+` level 1 and `T_POW`
   level 3.
-* Operators are written as strings (`"+", which matches a `"+"` clause) or as
-  identifiers (`T_POW`, which matches a `T_POW` token clause in
-  [token mode](token-mode.md)).
+* Operators are written as strings (`"+"`, which matches a `"+"` clause) or as
+  identifiers: `T_POW` matches a `T_POW` token clause in [token mode](token-mode.md), and in a string
+  grammar an identifier is a name for `%prec=NAME` (see above).
 * The associativity keyword must be `left`, `right` or `none`; lines are
   separated by the keyword, so a level's operators stop at the next keyword or
   at the closing brace.

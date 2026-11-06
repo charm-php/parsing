@@ -497,7 +497,9 @@ Comparison is a separate rule on top of the arithmetic one (`Predicate`, which u
 SQL comparisons do not chain, `1 < 2 < 3` is an error, not `(1 < 2) < 3`, and operators that
 follow the subject like `IS NULL` and `BETWEEN` (step 7) need to hang off one operand. The
 rule `PredicateTail` returns the *rest* of the comparison, and `Predicate` joins it to the
-subject. Unary minus has the same literal `"-"` as subtraction, which the table would rank at
+subject. (Writing one alternative per form, each starting with `Sum`, would parse the subject
+over and again, and nested parentheses multiply that cost; the reference's performance section has
+numbers.) Unary minus has the same literal `"-"` as subtraction, which the table would rank at
 the `+`/`-` level; `%prec=NEG` picks the `NEG` line instead, so `-a * b` is `(-a) * b`.
 
 This step also adds `WHERE`, whose condition is an `Expr`.

@@ -253,7 +253,8 @@ $grammar->getPrecedence('T_POW'); // ['level' => 3, 'assoc' => 'right']
 ```
 
 See [Precedence and pragmas](precedence-and-pragmas.md) for how those levels
-are used and why they only apply to compiled parsers.
+are used; the interpreter and the compiler resolve them the same way (the interpreter
+cannot run a token-mode grammar, but the same table drives string-mode grammars).
 
 ## See also
 

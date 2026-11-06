@@ -205,6 +205,12 @@ public function parse(
 The interpreted engine assigns `$state->globals = $initialState` at the start of
 every `parse()` call, so globals never leak between two calls.
 
+A snippet runs as soon as the sequence it ends has matched, even when an enclosing alternative fails
+afterwards and the parser backtracks, and `$state` is not rolled back. A counter in a rule that can be
+retried counts the attempt twice (`S = A "x" | A "y"` with a counting `A` on `ay` gives the second count).
+Seed every key a snippet reads: reading a key that is not there throws `SnippetError` in the interpreter
+and yields `null` in a compiled parser.
+
 `State::$extra` is a second scratch array on the same object, but it is not
 exposed to snippets - `Clause\OrderedChoice` uses it internally for left
 recursive parsing.
@@ -234,6 +240,7 @@ The differences that matter when a grammar has to run both ways:
 | `$HIT`, `$MISS` | Available | Available |
 | `$context` | Available | Not defined |
 | `$_offset` | Not defined | Rule start offset |
+| Reading an undefined variable (`$_5`, `$typo`) | `SnippetError` ("Undefined variable") | `null` |
 | `$initialState` | Replaces globals on each parse | `array_merge` into the parser's `$globals` property, so values persist across `parse()` calls on one instance |
 
 Compiled parsers are also free of the closure's namespace: the code lands in the

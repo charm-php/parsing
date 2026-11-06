@@ -97,7 +97,7 @@ enum {{CLASS_NAME}}Signal { case HIT; case MISS; }
 
 Notes on that shape:
 
-- Every rule method returns either a value, `true` (matched, no value) or
+- Every rule method returns either a value, `ExprParserSignal::HIT` (matched, no value) or
   `ExprParserSignal::MISS`. The enum is generated per class and named after it,
   so several generated parsers can live in one namespace.
 - `parse()` does **not** check that the whole input was consumed. If you need
@@ -409,6 +409,14 @@ count through `getMergeCount()`. It implements
 `Optimizer\GrammarOptimizerInterface::optimize(Grammar $grammar): Grammar`, and
 replaces rule clauses in place.
 
+## Choosing the engine
+
+Compile when parse time matters or when you ship a parser without the library; develop with the
+interpreter. On a realistic grammar (the [SQL tutorial's](tutorial-sql.md#step-15-compiling-the-grammar))
+compiled parsing takes about a sixth of the time. What changes the speed of a compiled parser - regexes
+the compiler cannot analyse, `@`, parsing an operand twice - is listed in the
+[reference](../REFERENCE.md#performance).
+
 ## Benchmarks
 
 `php benchmarks/run.php [grammar|json|expression|expr-eval|all]` runs the suite;
@@ -438,9 +446,9 @@ compiled parser. The last run in
 
 `src/Library/JsonParser.php` and `src/Library/JsExpressionParser.php` are
 compiler output kept in the repository (namespace `Charm\Parsing\Library`). They
-were produced by an earlier compiler build - their `parse()` returns `null`
-where the current template returns `true` for a valueless match, and their
-header comment lacks the output-exception line - so treat the templates in
+were produced by an earlier compiler build - they throw a plain `\RuntimeException`
+instead of a generated `{Class}ParseError`, predate the commit and precedence fixes of 0.1.2,
+and their header comment lacks the output-exception line - so treat the templates in
 `src/Compiler/` as the reference and regenerate before relying on them.
 
 ## See also

@@ -28,8 +28,10 @@ Other ::= clause | clause
   `Rule 'X' is already declared in this grammar. Use the Choice operator `/` to
   add multiple rules to a grammar`.
 
-Rule names are PHP-style identifiers. A rule body may be empty only if the rule
-is never referenced; `X = ;` raises `Rules must contain clauses on :location`.
+Rule names are PHP-style identifiers, and a rule body may not be empty: `X = ;` raises
+`Rules must contain clauses on :location` (write `X = \nothing` for a rule that matches nothing). Compiled
+parsers turn each rule into a PHP method, and PHP method names are not case-sensitive, so two rules whose
+names differ only in case (`Select` and `SELECT`) cannot be compiled together.
 
 ## Terminals
 
@@ -114,6 +116,13 @@ Skip = Name _ Name                 # _ refers to a %silent rule, so 2 values
   added to the array.
 * A sequence that collected nothing is itself value-less (like a lone predicate): its
   parent does not collect it, and at the top level the parser returns `null`.
+* A sequence of **one** clause is that clause's value (`("a")` is `"a"`); a sequence of **two or more** is
+  always a list, even when only one of them has a value (`!"b" "a"` is `["a"]`). So `/[a-z]+/ _` with a
+  silent `_` is a one-element list, and a snippet (`return $_0;`) unwraps it.
+* Spread flattens two levels: the list `...A` yields, and any list among its items. It only has an effect
+  inside a sequence of two or more clauses. Over items that are themselves lists or associative arrays it
+  spills their elements into the parent; a repeated group (`Item ...(COMMA Item)*` with a silent `COMMA`)
+  keeps the items intact. The [reference](../REFERENCE.md#values) has the complete table.
 
 Labels must be plain identifiers. `"key":Clause` fails with
 `Expected identifier on :location`.

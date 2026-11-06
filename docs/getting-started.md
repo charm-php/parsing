@@ -142,15 +142,19 @@ Compiled parsers take a different signature and a different failure mode:
 public function parse(string $source, array $initialState = []): mixed
 ```
 
-They throw `\RuntimeException("Parse error at line N, column C: expected ...,
-found ...")`. See [compiled parsers and the CLI](compiled-parsers-and-cli.md).
+A failure throws the parser's own `{ClassName}ParseError`, a `\RuntimeException` generated into the same
+file, with the message `Parse error at line N, column C: expected ..., found ...` and readonly
+`sourceLine`, `sourceColumn`, `offset`, `expected`, `found` and `committed`. See
+[compiled parsers and the CLI](compiled-parsers-and-cli.md).
 
 ## Next steps
 
+* [Tutorial: parsing SQL](tutorial-sql.md) - a grammar built step by step, with every output shown.
 * [Grammar syntax](grammar-syntax.md) - rules, terminals, operators, captures.
 * [Snippets and state](snippets-and-state.md) - running PHP from a grammar.
 * [Precedence and pragmas](precedence-and-pragmas.md) - operator grammars.
 * [Errors and debugging](errors-and-debugging.md) - what to catch and why.
+* [Reference](../REFERENCE.md) - every operator, pragma and flag in one table.
 * [Documentation index](index.md) - the two engines side by side.
 
 ## The test suite

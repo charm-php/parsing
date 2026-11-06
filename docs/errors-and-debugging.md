@@ -9,6 +9,7 @@ information out of a failing parse.
 |---|---|---|
 | `Charm\Parsing\Error\ParseError` | `AbstractParseError` → `\RuntimeException` | The interpreted parser (`CPEGParser::parse()`) when the goal rule misses; `Lexer::tokenize()` on an unmatched character or a broken combined pattern |
 | `Charm\Parsing\Error\State\ParseError` | `AbstractParseError` | `GrammarParser` - errors in grammar text (`@prec` blocks, missing `;`, bad directives) |
+| `Charm\Parsing\Error\State\CommittedError` | `State\ParseError` | The interpreter, for a failure after a commit (`@`): `Expected X in Rule on file:line:col, found Y` |
 | `Charm\Parsing\Error\SnippetError` | `\RuntimeException` | `Clause\Snippet::interpret()` - any `\Throwable` that escapes inline grammar code |
 | `Charm\Parsing\Error\CustomError` | `\Exception` | Grammar construction and snippet validation: duplicate rule name, unknown rule reference, invalid regex, snippet not last in a sequence |
 | `{ClassName}ParseError` (generated, per parser) | `\RuntimeException` | Compiled parsers, from the generated `fail()` method; has `committed`, `sourceLine`, `sourceColumn`, `offset`, `expected`, `found` |
@@ -107,6 +108,10 @@ character. A typical failure:
 ```
 Failed parsing "a number" on config.json:3:11, unexpected "x"
 ```
+
+After a commit (`@`) the message is different: a `CommittedError` reading `Expected
+TableRef in FromClause on parsed source:1:13, found end of file` names the clause that was
+being matched and what it was waiting for.
 
 Because the reported node is the outermost one that got furthest, the message
 names the *rule* that gave up rather than the terminal that failed. Prefix your
@@ -269,7 +274,8 @@ private function fail(string $expected): never
   message, `$e->committed === true`. It is not caught by choices or repetitions (a
   predicate treats it as "did not match").
 
-Failure positions are the same in both engines. Two details follow from how the
+Failure positions are the same in both engines (the furthest offset at which a terminal failed, where
+that terminal started: `"ab" | "ac"` on `ax` fails at 1:1). Two details follow from how the
 interpreter's trace works: a predicate on a plain terminal (`&"b"`, `!"c"`) and the
 attempt that ends a repetition of a plain terminal (`"a"*`) are not failure
 positions - the position is where the enclosing sequence started, or where the next
