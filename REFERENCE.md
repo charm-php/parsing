@@ -138,7 +138,7 @@ Keyword = "elseif" | "else" | "if"
 | Syntax | Name | Description |
 |--------|------|-------------|
 | `A?` | Optional | Match zero or one time, returns match or `null` |
-| `A*` | Zero or more | Match zero or more times, returns array |
+| `A*` | Zero or more | Match zero or more times, returns array (value-less iterations such as `ε` are not collected) |
 | `A+` | One or more | Match one or more times, returns array (fails if zero) |
 
 ```

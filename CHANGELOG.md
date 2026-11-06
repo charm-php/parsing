@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Repetition: `*` and `+` no longer collect value-less iterations. `ε*`, `ε+` and a predicate-only
+  group under `*` give `[]` (the interpreter pushed its internal `Signal::HIT`; compiled parsers pushed
+  their private enum). Conformance rows in `charm-tests/0040`.
+
 ## 0.1.2
 
 Conformance suite `charm-tests/0030`-`0039`: the interpreter and the compiled parser now agree on

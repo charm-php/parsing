@@ -80,6 +80,10 @@ never end: `("a"*)*` on `aaa` is `[["a", "a", "a"]]`, `("a"?)*` is `["a", "a",
 "a"]`, and `\nothing*` is `[]`. The empty iteration is not collected, except that
 the first iteration of `+` still counts as the one match `+` requires.
 
+An iteration that matches without producing a value (`ε`, `$`, a predicate) advances
+the loop but contributes nothing, as in a sequence: `ε*` and `ε+` are `[]`, and
+`("a" | ε)*` on `aab` is `["a", "a"]`.
+
 Predicates may be stacked: `!!A` is `&A`, and `&!A` is `!A`, written out as nested
 groups. A quantifier on a predicate (`&A*`) is ignored; the predicate looks for one
 match of `A`.

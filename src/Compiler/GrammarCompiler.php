@@ -1299,7 +1299,8 @@ class GrammarCompiler
 
     /**
      * `+` and `*`. An iteration that consumes nothing ends the repetition (it would repeat forever);
-     * it is not collected, except that the first one still counts as the match `+` requires.
+     * it is not collected, except that the first one still counts as the match `+` requires. A value-less
+     * iteration (HIT) advances the loop but contributes nothing to the result.
      */
     private function generateRepetitionCode(Clause $clause, string $resultVar, bool $atLeastOne): void
     {
@@ -1317,7 +1318,9 @@ class GrammarCompiler
         if ($quiet) {
             $this->emitter->line("{$itemVar}Max = \$this->maxOffset; {$itemVar}Exp = \$this->expected;");
         }
-        $this->emitter->line("$resultVar = [];");
+        $countVar = $itemVar . 'Count';
+        $hit = $this->signalHit();
+        $this->emitter->line("$resultVar = []; $countVar = 0;");
         $this->emitter->line('do {');
         $this->emitter->indent();
         $this->emitter->line("$startVar = \$this->offset;");
@@ -1328,20 +1331,22 @@ class GrammarCompiler
         $this->emitter->line("if (\$this->offset === $startVar) {");
         $this->emitter->indent();
         if ($atLeastOne) {
-            $this->emitter->line("if ($resultVar === []) { {$resultVar}[] = $itemVar; }");
+            $this->emitter->line("if ($countVar === 0) { $countVar++; if ($itemVar !== $hit) { {$resultVar}[] = $itemVar; } }");
         }
         $this->emitter->line('break;');
         $this->emitter->closeBlock();
-        $this->emitter->line("{$resultVar}[] = $itemVar;");
+        // a value-less iteration (HIT) advances the loop but is not collected
+        $this->emitter->line("$countVar++;");
+        $this->emitter->line("if ($itemVar !== $hit) { {$resultVar}[] = $itemVar; }");
         $this->emitter->closeBlock();
 
         $this->emitter->dedent()->line("} while ($itemVar !== " . $this->signalMiss() . ");");
         if ($quiet) {
             $restore = "\$this->maxOffset = {$itemVar}Max; \$this->expected = {$itemVar}Exp;";
-            $this->emitter->line($atLeastOne ? "if ($resultVar !== []) { $restore }" : $restore);
+            $this->emitter->line($atLeastOne ? "if ($countVar !== 0) { $restore }" : $restore);
         }
         if ($atLeastOne) {
-            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalMiss() . "; }");
+            $this->emitter->line("if ($countVar === 0) { $resultVar = " . $this->signalMiss() . "; }");
         }
     }
 

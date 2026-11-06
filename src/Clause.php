@@ -214,7 +214,10 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
                     $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
                     if ($partial !== Signal::MISS && $parser->offset !== $loopOffset) {
-                        $result[] = $partial;
+                        // a value-less iteration (Signal::HIT) advances the loop but is not collected
+                        if ($partial !== Signal::HIT) {
+                            $result[] = $partial;
+                        }
                     } else {
                         // a miss, or an iteration that consumed nothing (which would repeat forever), ends it
                         if ($doTrace) $parser->traceEnd($this, $result);
@@ -224,19 +227,27 @@ abstract class Clause implements ClauseInterface, JSONSerializable {
             } elseif ($isRepeating) {
                 // + - one or more
                 $result = [];
+                $matches = 0;
                 do {
                     $loopOffset = $parser->offset;
                     $partial = $this->interpret($parser, $context);
                     if ($partial !== Signal::MISS && $parser->offset !== $loopOffset) {
-                        $result[] = $partial;
+                        $matches++;
+                        // a value-less iteration (Signal::HIT) advances the loop but is not collected
+                        if ($partial !== Signal::HIT) {
+                            $result[] = $partial;
+                        }
                     } else {
                         // An iteration that consumed nothing ends the repetition (it would repeat forever),
                         // but the first one still counts as the one match that + requires
-                        if ($partial !== Signal::MISS && $result === []) {
-                            $result[] = $partial;
+                        if ($partial !== Signal::MISS && $matches === 0) {
+                            $matches++;
+                            if ($partial !== Signal::HIT) {
+                                $result[] = $partial;
+                            }
                         }
                         // Return Signal::MISS if no matches, otherwise return the array
-                        if ($result === []) {
+                        if ($matches === 0) {
                             $result = Signal::MISS;
                         }
                         if ($doTrace) $parser->traceEnd($this, $result);
