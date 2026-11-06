@@ -8,6 +8,9 @@
 - Compiled parsers throw `{ClassName}ParseError extends \RuntimeException` (emitted into every generated
   file, like the `Signal` enum) with readonly `committed`, `sourceLine`, `sourceColumn`, `offset`,
   `expected`, `found`, instead of a `\RuntimeException` with code 0/1. `catch (\RuntimeException)` keeps working. Rows in `charm-tests/0041`.
+- A sequence/group that collects nothing (`(&"a")`, `(!"a" $)`) is value-less (`Signal::HIT`) in both
+  engines instead of `null`, so its parent does not collect it: `(&"a")+` is `[]` (was `[null]`),
+  `(&"a") "a"` is `['a']` (was `[null, 'a']`). Top-level result is still `null`. Rows in `0039`.
 
 ## 0.1.2
 

@@ -577,7 +577,7 @@ PHP;
         }
 
         if (!$hasInlineSnippet) {
-            $this->emitter->line("if ($resultVar === []) { $resultVar = null; }");
+            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }");
         }
 
         $this->emitter->line("_seqEnd{$seqId}:");
@@ -1154,9 +1154,9 @@ PHP;
             $this->emitSequenceItem($subClause, $itemVar, $resultVar, $context, $contextNames);
         }
 
-        // If result array is empty, return null
+        // If nothing was collected the sequence is value-less (HIT)
         if (!$hasInlineSnippet) {
-            $this->emitter->line("if ($resultVar === []) { $resultVar = null; }");
+            $this->emitter->line("if ($resultVar === []) { $resultVar = " . $this->signalHit() . "; }");
         }
 
         if (!$isTopLevel) {

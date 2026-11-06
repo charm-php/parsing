@@ -112,7 +112,8 @@ Skip = Name _ Name                 # _ refers to a %silent rule, so 2 values
   no value at all.
 * Clauses that return `Signal::HIT` (`^`, `$`, `\nothing`, predicates) are not
   added to the array.
-* A sequence whose collected array is empty returns `null`.
+* A sequence that collected nothing is itself value-less (like a lone predicate): its
+  parent does not collect it, and at the top level the parser returns `null`.
 
 Labels must be plain identifiers. `"key":Clause` fails with
 `Expected identifier on :location`.

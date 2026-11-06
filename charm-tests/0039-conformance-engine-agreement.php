@@ -49,7 +49,14 @@ T = "x" <? return $MISS; ?>', 'xa'], both('xa') ],
     [ ['S = "a" "b" %prec=+', 'ab'], both('GRAMMAR_ERROR') ],
 
     // groups of one valueless clause
-    [ ['S = (&"a") "a"', 'a'], both([null, 'a']) ],
+    [ ['S = (&"a") "a"', 'a'], both(['a']) ],
+    [ ['S = "x" (&"a") "a"', 'xa'], both(['x', 'a']) ],
+    [ ['S = (&"a")+', 'a'], both([]) ],
+    [ ['S = (&"a")*', 'a'], both([]) ],
+    [ ['S = (&"a" "a")*', 'aa'], both([['a'], ['a']]) ],
+    [ ['S = ("a" &"b")+', 'ab'], both([['a']]) ],
+    [ ['S = &"a" &"a"', 'a'], both(null) ],
+    [ ['S = (&"a" !"b")', 'a'], both(null) ],
     [ ['S = ($) ', ''], both(null) ],
     [ ['S = !(&"a") "b"', 'b'], both(['b']) ],
 

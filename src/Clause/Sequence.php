@@ -112,7 +112,8 @@ class Sequence extends NonTerminal {
                 }
             }
             if ($result === []) {
-                $result = null;
+                // nothing collected: the sequence is value-less, like a lone predicate
+                $result = Signal::HIT;
             }
         } catch (ExceptionInterface $e) {
             $state->offset = $offset;
