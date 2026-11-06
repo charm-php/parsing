@@ -4,6 +4,9 @@
 
 - Compiled parsers: `$context` in a snippet is the sequence's collected array (names and numbers), as when
   interpreted; it used to be undefined. Rows in `charm-tests/0046`.
+- Spread (`...A`, `...name:A`) in the operator alternatives of a left-recursive rule (`Expr = Expr "+" ...Args`)
+  now flattens in both engines; both used to ignore it there (only the non-left-recursive alternatives
+  honoured it) and keep the list as one element. Rows in `charm-tests/0047`.
 
 ## 0.1.4
 

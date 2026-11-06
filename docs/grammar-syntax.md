@@ -124,6 +124,8 @@ Skip = Name _ Name                 # _ refers to a %silent rule, so 2 values
   inside a sequence of two or more clauses. Over items that are themselves lists or associative arrays it
   spills their elements into the parent; a repeated group (`Item ...(COMMA Item)*` with a silent `COMMA`)
   keeps the items intact. The [reference](../REFERENCE.md#values) has the complete table.
+* Spread works the same in the alternatives of a left-recursive rule, operator alternatives included
+  (`Expr = Expr "," ...Args | Atom`); `...Expr` on the left operand spreads the value parsed so far.
 
 Labels must be plain identifiers. `"key":Clause` fails with
 `Expected identifier on :location`.

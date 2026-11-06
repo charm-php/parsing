@@ -125,6 +125,26 @@ class OrderedChoice extends NonTerminal {
         return $start;
     }
 
+    /** Spread `$match` into `$result` the way Sequence does: skip null, flatten two levels. */
+    private static function spreadInto(array &$result, mixed $match): void {
+        if ($match === null) {
+            return;
+        }
+        if (!is_array($match)) {
+            $result[] = $match;
+            return;
+        }
+        foreach ($match as $item) {
+            if (is_array($item)) {
+                foreach ($item as $subItem) {
+                    $result[] = $subItem;
+                }
+            } else {
+                $result[] = $item;
+            }
+        }
+    }
+
     private function parsePreparedClause(State $state, PreparedClause $prep, ?Result $start): ?Result {
         $prefix = function() use ($state) {
             return substr($state->source, 0, $state->offset)."¤".substr($state->source, $state->offset).str_repeat("  ", count(debug_backtrace())-8)." ";
@@ -143,9 +163,16 @@ class OrderedChoice extends NonTerminal {
             return new Result($result, $prep->clause, $offset, $prep->precedence);
         } elseif ($start !== null) {
             //echo $prefix()." - trying to wrap `$start` with clause `{$prep->clause}`(pr={$prep->precedence})\n";
-            $result = [
-                ($prep->clause[0]->getName() ?? 0) => $start->value,
-            ];
+            $first = $prep->clause[0];
+            $result = [];
+            if (null !== ($name = $first->getName())) {
+                $result[$name] = $start->value;
+            }
+            if ($first->hasSpread()) {
+                self::spreadInto($result, $start->value);
+            } elseif ($name === null) {
+                $result[] = $start->value;
+            }
             $length = count($prep->clause);
             for ($i = 1; $i < $length; $i++) {
                 $subClause = $prep->clause[$i];
@@ -184,7 +211,10 @@ class OrderedChoice extends NonTerminal {
                     if (null !== ($name = $subClause->getName())) {
                         // Named elements always get captured
                         $result[$name] = $match;
-                    } else {
+                    }
+                    if ($subClause->hasSpread()) {
+                        self::spreadInto($result, $match);
+                    } elseif ($name === null) {
                         // Check if this is a reference to a %silent rule
                         $isSilent = ($subClause instanceof Identifier && $subClause->isSilent());
                         if (!$isSilent) {

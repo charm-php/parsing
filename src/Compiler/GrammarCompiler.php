@@ -645,11 +645,22 @@ PHP;
             return;
         }
 
+        // With a spread (`...A`) anywhere in the alternative the value is built one element at a time,
+        // like a plain sequence does; without one it is a single array literal
+        $spread = false;
+        foreach ($parts as $p) {
+            if (!$p instanceof Snippet && !$p instanceof Commit && $p->hasSpread()) {
+                $spread = true;
+            }
+        }
+
         // Skip first element (already have $_left)
         $context = ['$_left'];
         $contextNames = [];
         $items = []; // the value of the alternative when it has no snippet
-        if ($name = $parts[0]->getName()) {
+        if ($spread) {
+            $context = [];
+        } elseif ($name = $parts[0]->getName()) {
             $contextNames[$name] = '$_left';
             $items[] = var_export($name, true) . ' => $_left';
         } else {
@@ -660,6 +671,10 @@ PHP;
 
         $this->emitter->line('do {');
         $this->emitter->indent();
+        if ($spread) {
+            $this->emitter->line('$_pr = [];');
+            $this->emitSequenceItem($parts[0], '$_left', '$_pr', $context, $contextNames);
+        }
 
         // Parse middle elements (operators, etc.)
         $hasSnippet = false;
@@ -690,17 +705,21 @@ PHP;
                 $this->emitter->indent();
                 $miss();
                 $this->emitter->closeBlock();
-                $context[] = $varName;
-                if ($name = $part->getName()) {
-                    $contextNames[$name] = $varName;
-                    $items[] = var_export($name, true) . " => $varName";
+                if ($spread) {
+                    $this->emitSequenceItem($part, $varName, '$_pr', $context, $contextNames);
                 } else {
-                    $items[] = $varName;
+                    $context[] = $varName;
+                    if ($name = $part->getName()) {
+                        $contextNames[$name] = $varName;
+                        $items[] = var_export($name, true) . " => $varName";
+                    } else {
+                        $items[] = $varName;
+                    }
                 }
             } elseif ($part instanceof Snippet) {
                 // Execute snippet code - assign result to $_left
                 $snVar = '$_sn' . $i;
-                if ($this->generateSnippetCode($part, $context, $contextNames, $snVar, '[' . implode(', ', $items) . ']')) {
+                if ($this->generateSnippetCode($part, $context, $contextNames, $snVar, $spread ? '$_pr' : '[' . implode(', ', $items) . ']')) {
                     $hasSnippet = true;
                     $this->emitter->line("if ($snVar instanceof \\UnitEnum && {$snVar}->name === 'MISS') {");
                     $this->emitter->indent();
@@ -719,7 +738,9 @@ PHP;
                 $this->emitter->closeBlock();
                 // Predicates and valueless terminals produce no value, %silent references are skipped,
                 // and a named element is always captured
-                if ($name = $part->getName()) {
+                if ($spread) {
+                    $this->emitSequenceItem($part, $varName, '$_pr', $context, $contextNames);
+                } elseif ($name = $part->getName()) {
                     $contextNames[$name] = $varName;
                     $items[] = var_export($name, true) . " => $varName";
                 } elseif ($this->takesPositionalSlot($part)) {
@@ -731,7 +752,7 @@ PHP;
 
         // Success - update $_left (only if no snippet already set it)
         if (!$hasSnippet) {
-            $this->emitter->line('$_left = [' . implode(', ', $items) . '];');
+            $this->emitter->line('$_left = ' . ($spread ? '$_pr' : '[' . implode(', ', $items) . ']') . ';');
         }
         $this->emitter->line('$_matched = true;');
         $this->emitter->line('continue;');
