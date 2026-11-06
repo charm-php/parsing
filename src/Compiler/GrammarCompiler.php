@@ -146,6 +146,7 @@ PHP;
             '{{CLASS_DECLARATION}}' => $classDeclaration,
             '{{PROPERTIES}}' => $properties,
             '{{INIT_CODE}}' => $initCode,
+            '{{GLOBALS}}' => empty($this->options['globals']) ? '[]' : var_export($this->options['globals'], true),
             '{{GOAL_RULE}}' => $goalRule,
             '{{GOAL_DESCRIPTION}}' => $goalDescription,
             '{{PARSE_METHODS}}' => $parseMethods,

@@ -1224,8 +1224,8 @@ Two cautions about `$state`:
 
 * The counter must exist. This grammar reads `$state['params']`, so the caller seeds it:
   `['params' => 0]`, as every example here does. (Without it, the interpreter reports
-  `Undefined variable $params`; a compiled parser keeps its state between `parse()` calls
-  on one object, and seeding resets it.)
+  `Undefined variable $params`.) Every `parse()` starts from the state you pass, in both engines, so reusing one
+  compiled object is safe.
 * A snippet runs as soon as *its* sequence matches, even if the alternative that contains it fails
   later and the parser backtracks. `$state` is not rolled back. Here that cannot happen,
   because a `Param` is never re-parsed, but a counter in a place that can be retried counts the
@@ -1523,9 +1523,8 @@ result and on where an error is, you can develop against `cpeg_parse()` and ship
 What differs between the two:
 
 * `$context` exists only in the interpreter. Do not use it in a grammar you will compile.
-* The interpreter replaces `$state` with the initial state on every call; a compiled parser merges
-  the initial state into what is left from the previous `parse()` on the same object. Pass the state
-  you need on every call, as above.
+* `$state` starts from the initial state on every call in both engines, so one compiled object can parse
+  any number of queries. Pass the state you need on every call, as above.
 * Interpreter errors are `Charm\Parsing\Error\ParseError` (and `State\CommittedError`) with the column
   counted from 0.
 

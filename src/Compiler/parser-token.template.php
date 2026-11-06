@@ -36,7 +36,7 @@
         $this->length = \count($this->tokens);
         $this->maxOffset = 0;
         $this->expected = null;
-        $this->globals = array_merge($this->globals, $initialState);
+        $this->globals = array_merge({{GLOBALS}}, $initialState);
 {{INIT_CODE}}
         $result = $this->parse{{GOAL_RULE}}();
 

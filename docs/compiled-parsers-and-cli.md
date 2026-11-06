@@ -35,7 +35,7 @@ the target directory, the CLI does that.
 | `implements` | `[]` | `implements A, B` on the class declaration. |
 | `baseClass` | `null` | `extends {value}` on the class declaration. |
 | `template` | `null` | Path to a template file, replacing the built-in one. |
-| `globals` | `[]` | Seed for the generated `private array $globals` property (`var_export`ed). |
+| `globals` | `[]` | Initial `$state` of every `parse()` (`var_export`ed into the generated class; `$initialState` is merged over it). |
 
 The goal rule is the **first rule in the grammar**: `getGoalRuleInfo()` takes the
 first entry of the grammar, builds the method name from it, and uses
@@ -74,7 +74,7 @@ A grammar with no rules throws `\RuntimeException("Grammar has no rules")`.
         $this->length = \strlen($source);
         $this->maxOffset = 0;
         $this->expected = null;
-        $this->globals = array_merge($this->globals, $initialState);
+        $this->globals = array_merge({{GLOBALS}}, $initialState);
 
         $result = $this->parse{{GOAL_RULE}}();
 
@@ -102,9 +102,9 @@ Notes on that shape:
   so several generated parsers can live in one namespace.
 - `parse()` does **not** check that the whole input was consumed. If you need
   that, end your goal rule with `$`, for example `Calc = ^ _ Expr _ $`.
-- `array_merge($this->globals, $initialState)` means keys you set in a snippet
-  survive to the next `parse()` call on the same instance unless `$initialState`
-  overwrites them. The interpreted engine replaces its globals on every call.
+- Every `parse()` starts `$state` afresh: the `globals` compile option (`[]` by default, written into the
+  generated `parse()`) merged with `$initialState`. Keys a snippet set during an earlier `parse()` on the same
+  instance are gone, as in the interpreted engine. `$state` is still not rolled back on backtracking.
 - The header text is part of the template: generated files are covered by the
   project's output exception, not by GPL-3.0-only.
 

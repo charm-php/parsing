@@ -30,7 +30,7 @@ The same grammar text runs two ways.
 | Left recursion | `OrderedChoice::lrParse()` - same precedence rules as the compiler (alternative order, `%prec`, `@prec`, `%assoc`) | Generated Pratt pair `parseRule(int $_minPrec)` / `parseRulePrimary()` |
 | Token mode (`@lexer`) | No - a `Clause\Token` throws `\LogicException` | Yes |
 | Commit (`@`) | Yes - `Sequence` throws `Error\State\CommittedError` | Yes - the sequence throws the parser's `{Class}ParseError` with `committed === true` |
-| Global state | Replaced by `$initialState` on every `parse()` | `array_merge`d into the parser's `$globals`, so values persist per instance |
+| Global state | Replaced by `$initialState` on every `parse()` | Reset on every `parse()` to the `globals` option merged with `$initialState` |
 
 Grammar template rules (`List<T,S>`) are a third axis: they are expanded by
 `GrammarPreprocessor`, which only `cpeg_parse()` and `cpeg_create()` run. A
