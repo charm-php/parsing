@@ -43,11 +43,11 @@ function conformance_outcome(callable $run, bool $position): mixed {
     }
 }
 
-function conformance_run(array $args, bool $position = false): array {
+function conformance_run(array $args, bool $position = false, array $state = []): array {
     static $compiled = [];
     [$grammar, $input] = $args;
-    $interpreted = conformance_outcome(fn() => \Charm\cpeg_parse($grammar, $input), $position);
-    $compiledResult = conformance_outcome(function () use (&$compiled, $grammar, $input) {
+    $interpreted = conformance_outcome(fn() => \Charm\cpeg_parse($grammar, $input, $state), $position);
+    $compiledResult = conformance_outcome(function () use (&$compiled, $grammar, $input, $state) {
         if (!isset($compiled[$grammar])) {
             $className = 'ConformanceParser_' . count($compiled) . '_' . substr(md5($grammar), 0, 8);
             $g = (new GrammarParser())->parse((new GrammarPreprocessor())->process($grammar), 'test');
@@ -55,7 +55,7 @@ function conformance_run(array $args, bool $position = false): array {
             $compiled[$grammar] = $className;
         }
         $parser = new $compiled[$grammar]();
-        $result = $parser->parse($input);
+        $result = $parser->parse($input, $state);
         return $result === \Charm\Parsing\Signal::HIT ? null : $result;
     }, $position);
     return [$interpreted, $compiledResult];

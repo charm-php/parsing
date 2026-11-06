@@ -1,0 +1,222 @@
+# SQL SELECT subset: the grammar built in docs/tutorial-sql.md, step by step.
+#
+# Parses one SELECT statement into nested PHP arrays (every node has a 'type'). Keywords are
+# case-insensitive, `--` and `/* */` comments are whitespace. `?` parameters are numbered through
+# $state, so seed it: cpeg_parse($grammar, $sql, ['params' => 0]) or $parser->parse($sql, ['params' => 0]).
+# charm-tests/0050-sql-tutorial.php checks that this file has exactly the rules the tutorial ends with.
+
+@prec {
+  left OR
+  left AND
+  left NOT
+  left "+" "-"
+  left "*" "/" "%"
+  left NEG
+}
+
+# --- Statement and query
+
+Statement = _ query:Query (";" _)? $  <? return $query; ?>
+
+Query = SELECT distinct:DISTINCT? columns:SelectList from:FromClause? where:WhereClause?
+        groupBy:GroupByClause? having:HavingClause? orderBy:OrderByClause? limit:LimitClause?
+  <? return [
+       'type' => 'select', 'distinct' => $distinct !== null, 'columns' => $columns, 'from' => $from,
+       'where' => $where, 'groupBy' => $groupBy ?? [], 'having' => $having,
+       'orderBy' => $orderBy ?? [], 'limit' => $limit,
+     ]; ?>
+
+SelectList = SelectItem ...(COMMA SelectItem)*
+
+SelectItem = QualifiedStar
+           | Star
+           | expr:Expr alias:Alias?  <? return ['expr' => $expr, 'alias' => $alias]; ?>
+
+QualifiedStar = table:Identifier "." _ "*" _  <? return ['type' => 'star', 'table' => $table]; ?>
+
+Star = "*" _  <? return ['type' => 'star', 'table' => null]; ?>
+
+Alias = AS? name:Identifier  <? return $name; ?>
+
+# --- FROM, tables and joins
+
+FromClause "FROM clause" = FROM @ source:TableRef joins:JoinClause*  <? return ['source' => $source, 'joins' => $joins]; ?>
+
+TableRef "table name" = "(" _ query:Query ")" _ alias:Alias  <? return ['type' => 'subquery', 'query' => $query, 'alias' => $alias]; ?>
+         | name:Identifier alias:Alias?         <? return ['type' => 'table', 'name' => $name, 'alias' => $alias]; ?>
+
+JoinClause = kind:JoinKind @ source:TableRef ON @ on:Expr
+  <? return ['type' => 'join', 'kind' => $kind, 'source' => $source, 'on' => $on]; ?>
+
+JoinKind = INNER? JOIN       <? return 'INNER'; ?>
+         | LEFT OUTER? JOIN  <? return 'LEFT'; ?>
+         | RIGHT OUTER? JOIN <? return 'RIGHT'; ?>
+
+# --- The other clauses
+
+WhereClause = WHERE @ cond:Expr  <? return $cond; ?>
+
+GroupByClause = GROUP BY @ list:ExprList  <? return $list; ?>
+
+HavingClause = HAVING @ cond:Expr  <? return $cond; ?>
+
+OrderByClause = ORDER BY @ items:OrderItems  <? return $items; ?>
+
+OrderItems = OrderItem ...(COMMA OrderItem)*
+
+OrderItem = expr:Expr dir:Direction?  <? return ['expr' => $expr, 'dir' => $dir ?? 'ASC']; ?>
+
+Direction = ASC   <? return 'ASC'; ?>
+          | DESC  <? return 'DESC'; ?>
+
+LimitClause = LIMIT @ count:Integer offset:OffsetClause?  <? return ['count' => $count, 'offset' => $offset]; ?>
+
+OffsetClause = OFFSET n:Integer  <? return $n; ?>
+
+# --- Expressions: logic, then predicates, then arithmetic (see @prec above)
+
+Expr = Expr OR Expr   %prec=OR   <? return ['type' => 'binary', 'op' => 'OR', 'left' => $_0, 'right' => $_1]; ?>
+     | Expr AND Expr  %prec=AND  <? return ['type' => 'binary', 'op' => 'AND', 'left' => $_0, 'right' => $_1]; ?>
+     | NOT Expr       %prec=NOT  <? return ['type' => 'unary', 'op' => 'NOT', 'expr' => $_0]; ?>
+     | Predicate
+
+Predicate = subject:Sum tail:PredicateTail?
+  <?
+    if ($tail === null) return $subject;
+    if ($tail['type'] === 'binary') {
+        return ['type' => 'binary', 'op' => $tail['op'], 'left' => $subject, 'right' => $tail['right']];
+    }
+    return ['type' => $tail['type'], 'expr' => $subject] + $tail;
+  ?>
+
+PredicateTail = IS not:NOT? NULL                          <? return ['type' => 'is_null', 'negated' => $not !== null]; ?>
+              | not:NOT? IN "(" _ query:Query ")" _       <? return ['type' => 'in_subquery', 'negated' => $not !== null, 'query' => $query]; ?>
+              | not:NOT? IN "(" _ values:ExprList ")" _   <? return ['type' => 'in_list', 'negated' => $not !== null, 'values' => $values]; ?>
+              | not:NOT? BETWEEN low:Sum AND high:Sum     <? return ['type' => 'between', 'negated' => $not !== null, 'low' => $low, 'high' => $high]; ?>
+              | not:NOT? LIKE pattern:Sum                 <? return ['type' => 'like', 'negated' => $not !== null, 'pattern' => $pattern]; ?>
+              | op:CompareOp right:Sum                    <? return ['type' => 'binary', 'op' => $op, 'right' => $right]; ?>
+
+CompareOp = /<=|>=|<>|!=|=|<|>/ _  <? return $_0; ?>
+
+ExprList = Expr ...(COMMA Expr)*
+
+Sum = Sum "+" _ Sum  <? return ['type' => 'binary', 'op' => '+', 'left' => $_0, 'right' => $_2]; ?>
+    | Sum "-" _ Sum  <? return ['type' => 'binary', 'op' => '-', 'left' => $_0, 'right' => $_2]; ?>
+    | Sum "*" _ Sum  <? return ['type' => 'binary', 'op' => '*', 'left' => $_0, 'right' => $_2]; ?>
+    | Sum "/" _ Sum  <? return ['type' => 'binary', 'op' => '/', 'left' => $_0, 'right' => $_2]; ?>
+    | Sum "%" _ Sum  <? return ['type' => 'binary', 'op' => '%', 'left' => $_0, 'right' => $_2]; ?>
+    | "-" _ Sum      %prec=NEG  <? return ['type' => 'unary', 'op' => '-', 'expr' => $_1]; ?>
+    | Primary
+
+Primary = Number
+        | String
+        | NullLiteral
+        | TrueLiteral
+        | FalseLiteral
+        | Param
+        | Call
+        | Column
+        | "(" _ query:Query ")" _  <? return ['type' => 'subquery', 'query' => $query]; ?>
+        | "(" _ Expr ")" _         <? return $_1; ?>
+
+Call = name:Identifier "(" _ distinct:DISTINCT? args:CallArgs? ")" _
+  <? return ['type' => 'call', 'name' => strtoupper($name), 'distinct' => $distinct !== null, 'args' => $args ?? []]; ?>
+
+CallArgs = Star  <? return [$_0]; ?>
+         | ExprList
+
+Param = "?" _                          <? return ['type' => 'param', 'name' => null, 'index' => $state['params']++]; ?>
+      | /:[A-Za-z_][A-Za-z0-9_]*/ _    <? return ['type' => 'param', 'name' => substr($_0, 1), 'index' => null]; ?>
+
+Column = first:Identifier rest:Dotted?
+  <? return $rest === null ? ['type' => 'column', 'table' => null, 'name' => $first]
+                           : ['type' => 'column', 'table' => $first, 'name' => $rest]; ?>
+
+Dotted = "." _ name:Identifier  <? return $name; ?>
+
+# --- Literals, identifiers, integers
+
+Number = /[0-9]+(\.[0-9]+)?/ _
+  <? return ['type' => 'literal', 'value' => str_contains($_0, '.') ? (float) $_0 : (int) $_0]; ?>
+
+String = /'(?:[^']|'')*'/ _
+  <? return ['type' => 'literal', 'value' => str_replace("''", "'", substr($_0, 1, -1))]; ?>
+
+NullLiteral = NULL   <? return ['type' => 'literal', 'value' => null]; ?>
+
+TrueLiteral = TRUE   <? return ['type' => 'literal', 'value' => true]; ?>
+
+FalseLiteral = FALSE <? return ['type' => 'literal', 'value' => false]; ?>
+
+Identifier "identifier" = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
+                        | /"(?:[^"]|"")*"/ _                    <? return str_replace('""', '"', substr($_0, 1, -1)); ?>
+
+Integer "integer" = /[0-9]+/ _  <? return strlen($_0) > 18 ? $MISS : (int) $_0; ?>
+
+# --- Keywords: each rule eats the whitespace after it; Keyword lists all reserved words
+
+Keyword = /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/
+
+SELECT = /(?i:select)\b/ _ %silent
+
+DISTINCT = /(?i:distinct)\b/ _ %silent
+
+FROM = /(?i:from)\b/ _ %silent
+
+WHERE = /(?i:where)\b/ _ %silent
+
+GROUP = /(?i:group)\b/ _ %silent
+
+BY = /(?i:by)\b/ _ %silent
+
+HAVING = /(?i:having)\b/ _ %silent
+
+ORDER = /(?i:order)\b/ _ %silent
+
+LIMIT = /(?i:limit)\b/ _ %silent
+
+OFFSET = /(?i:offset)\b/ _ %silent
+
+JOIN = /(?i:join)\b/ _ %silent
+
+INNER = /(?i:inner)\b/ _ %silent
+
+LEFT = /(?i:left)\b/ _ %silent
+
+RIGHT = /(?i:right)\b/ _ %silent
+
+OUTER = /(?i:outer)\b/ _ %silent
+
+ON = /(?i:on)\b/ _ %silent
+
+AS = /(?i:as)\b/ _ %silent
+
+AND = /(?i:and)\b/ _ %silent
+
+OR = /(?i:or)\b/ _ %silent
+
+NOT = /(?i:not)\b/ _ %silent
+
+IN = /(?i:in)\b/ _ %silent
+
+IS = /(?i:is)\b/ _ %silent
+
+NULL = /(?i:null)\b/ _ %silent
+
+TRUE = /(?i:true)\b/ _ %silent
+
+FALSE = /(?i:false)\b/ _ %silent
+
+BETWEEN = /(?i:between)\b/ _ %silent
+
+LIKE = /(?i:like)\b/ _ %silent
+
+ASC = /(?i:asc)\b/ _ %silent
+
+DESC = /(?i:desc)\b/ _ %silent
+
+# --- Punctuation and whitespace
+
+COMMA = "," _ %silent
+
+_ = /(?:\s+|--[^\n]*|\/\*(?s:.*?)\*\/)*/ %silent
