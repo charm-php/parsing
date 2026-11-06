@@ -81,11 +81,11 @@ Listed from loosest to tightest binding.
 | Syntax | Name | Example | Value |
 |---|---|---|---|
 | `A \| B`, `A / B` | ordered choice | `S = "a" \| "b"` on `b` | `"b"` |
-| `A B` | sequence | `S = "a" "b" "c"` on `abc` | `["a","b","c"]` |
+| `A B` | sequence | `S = "a" "b" "c"` on `abc` | `["a","b","c"]` (one value-producing element: that value, see [Value of a sequence](#value-of-a-sequence)) |
 | `name:A` | named capture | `S = x:"a" y:"b"` on `ab` | `{"x":"a","y":"b"}` |
 | `...A` | spread | `S = ...A "z"`, `A = "a" "b"` on `abz` | `["a","b","z"]` |
-| `&A` | and-predicate: A must match; consumes nothing, no value | `S = &"a" "a"` on `a` | `["a"]` |
-| `!A` | not-predicate: A must fail; consumes nothing, no value | `S = !"b" "a"` on `a` | `["a"]` |
+| `&A` | and-predicate: A must match; consumes nothing, no value | `S = &"a" "a"` on `a` | `"a"` |
+| `!A` | not-predicate: A must fail; consumes nothing, no value | `S = !"b" "a"` on `a` | `"a"` |
 | `A?` | optional | `S = "a"?` on `a` / on the empty string | `"a"` / `null` |
 | `A*` | zero or more | `S = "a"*` on `aaa` / on the empty string | `["a","a","a"]` / `[]` |
 | `A+` | one or more | `S = "a"+` on `aaa` / on the empty string | `["a","a","a"]` / `ERROR@1:1` |
@@ -94,7 +94,7 @@ Listed from loosest to tightest binding.
 | `<? php ?>` | snippet | `S = /[0-9]+/ <? return (int) $_0; ?>` on `42` | `42` |
 
 * A group may be written with `( )`, `< >` or `{ }`; `[ ]` is always a character class.
-* A quantifier on a predicate is ignored: `S = &"a"* "a"` on `a` yields `["a"]`. Predicates stack: `!!A` is
+* A quantifier on a predicate is ignored: `S = &"a"* "a"` on `a` yields `"a"`. Predicates stack: `!!A` is
   `&A`, and `&!A` is `!A`.
 * A snippet must be the last clause of its sequence ([Snippets](#snippets)).
 * `name:` and `...` combine as `...name:A` (spread first); `name:...A` is a grammar error.
@@ -114,13 +114,14 @@ What a clause yields, in full. "Value-less" clauses produce no value at all (int
 | `A?` | A's value, or `null` when A did not match |
 | `A*`, `A+` | list of the values of the iterations that produced one |
 | sequence of **one clause** (`("a")`) | that clause's value, unchanged |
-| sequence of **two or more clauses** | a list of the values of the clauses that have one (so `!"b" "a"` is `["a"]`, not `"a"`) |
-| sequence whose clauses all lack a value | value-less |
+| sequence in which **exactly one element can produce a value** | that value itself (`!"b" "a"` is `"a"`, `"a" $` is `"a"`) |
+| sequence with **two or more elements that can produce a value** | a list of their values |
+| sequence with no element that can produce a value | value-less |
 | sequence ending in a snippet | the snippet's return value |
 
 ```text
 S = ("a")                 "a"     =>  "a"
-S = !"b" "a"              "a"     =>  ["a"]
+S = !"b" "a"              "a"     =>  "a"             one element can produce a value: it collapses
 S = "a"? "b"              "b"     =>  [null,"b"]
 S = "a" _ "b"             "a b"   =>  ["a","b"]        with  _ = /\s*/ %silent
 S = &"a"                  "a"     =>  null             value-less at the top level
@@ -128,6 +129,52 @@ S = "x" (&"a") "a"        "xa"    =>  ["x","a"]        the group collected nothi
 S = (&"a")+               "a"     =>  []
 S = ("a" | ε)*            "aab"   =>  ["a","a"]
 ```
+
+### Value of a sequence
+
+A sequence (a rule body or a parenthesised group) whose elements include **exactly one element that can
+produce a value** returns that element's value itself, not a one-element list. This is decided from the
+grammar, never from the input, so the shape of a rule's result is the same for every input.
+
+An element **cannot** produce a value if it is one of:
+
+* a predicate (`&A`, `!A`)
+* `^` or `$`
+* `\nothing` (`ε`)
+* `@`
+* a snippet
+* a reference to a `%silent` rule
+
+Every other element can: a terminal, a rule reference, a group, `A?` (a miss is `null`, which is a value),
+`A*`, `A+`. Consequently:
+
+* zero elements that can produce a value: the sequence is value-less (`Signal::HIT`, `null` at the top level);
+* two or more: a list of their values, as before (`"a" "b"?` is `["a", null]`);
+* a spread element (`...A`) can produce several values, and a named capture (`n:A`) makes the result an
+  array (`{"n": ...}`), so a sequence containing either never collapses;
+* a reference to a rule that only *sometimes* returns a value (its snippet returns `SequenceIgnore`) counts
+  as an element that can produce one; when it did not, the list simply lacks its entry;
+* a sequence ending in a snippet is not collapsed: the snippet's return value is the value, and its
+  `$_0`, `$_1`, ... are numbered as before (value-less elements take no slot, collapse or not);
+* the alternatives of a left-recursive (Pratt) rule that start with the rule itself (the operator
+  alternatives, `E = E "+" E`) are not collapsed: they return the list `[left, "+", right]`. Their other
+  alternatives are ordinary sequences.
+
+```text
+S = "a" $                    "a"     =>  "a"               $ has no value
+S = Letter+ _                "ab "   =>  ["a","b"]         with _ = /\s*/ %silent; one element can produce a value
+S = ("a" _) "b"              "a b"   =>  ["a","b"]         the group collapses to "a"; the outer sequence has two
+S = _ A _                    " a "   =>  the value of A    with _ = /\s*/ %silent
+S = "a" "b"?                 "a"     =>  ["a",null]
+S = n:A _                    "a"     =>  {"n":"a"}
+S = &"a"                     "a"     =>  null              no element can produce a value
+```
+
+To get a one-element list back, add a second element that can produce a value (a group never helps: it
+collapses too) or end the sequence in a snippet: `S = "a" $ <? return [$_0]; ?>`.
+
+A spread of a repetition of something that collapses flattens one level, because the iterations are not
+wrapped in lists any more (see Spread below).
 
 **Positions in a sequence.** Only clauses that have a value take a slot (`$_0`, `$_1`, ...). Value-less
 clauses, silent references, predicates and named captures do not:
@@ -142,7 +189,8 @@ A one-clause sequence with a name (`S = x:"a"`) yields `"a"`, not `{"x":"a"}`. W
 an array whose string keys are the names and whose integer keys count the unnamed values.
 
 **Spread** (`...A`) replaces A's value by its items inside the parent sequence. A list value contributes each
-of its items, and an item that is itself a list is replaced by its own items (two levels, no deeper); `null`
+of its items, and an item that is itself a list is replaced by its own items (two levels, no deeper; one
+level when what is spread is a group or rule that collapses, see [Value of a sequence](#value-of-a-sequence)); `null`
 adds nothing; a non-list value is added as it is. Spread matters only in a sequence of two or more clauses:
 `S = ...A*` alone returns what `A*` returns.
 
@@ -156,8 +204,8 @@ S = A ...("," A)*   A = /[a-z]/   "a,b,c"  =>  ["a",",","b",",","c"]
 
 Because spread flattens the items of the list, `...Item*` over items that are lists or associative arrays
 spills their elements into the parent. The list idiom that keeps the items intact is a repeated *group*, whose
-iteration is a one-element list: `Item ...(COMMA Item)*` with `COMMA = "," %silent` yields
-`[item, item, ...]`. `...name:A*` binds `$name` to the original value and also flattens it, so the elements are
+iteration is the item itself because the group collapses: `Item ...(COMMA Item)*` with `COMMA = "," %silent`
+yields `[item, item, ...]`. `...name:A*` binds `$name` to the original value and also flattens it, so the elements are
 `$_0`, `$_1`, ... (`S = ...p:A* <? return [$p, $_0, $_1]; ?>` with `A = "a"` on `aa` gives `[["a","a"],"a","a"]`
 in both engines).
 

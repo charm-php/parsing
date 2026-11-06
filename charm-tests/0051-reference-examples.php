@@ -13,9 +13,9 @@ return [
     'conformance_position',
 
     // readme-calc
-    [ ["Calc = _ expr:Expr \$  <? return \$expr; ?>\n\nExpr = Expr \"*\" _ Expr   <? return \$_0 * \$_2; ?>\n     | Expr \"+\" _ Expr   <? return \$_0 + \$_2; ?>\n     | \"(\" _ Expr \")\" _  <? return \$_1; ?>\n     | Number\n\nNumber = /[0-9]+/ _      <? return (int) \$_0; ?>\n\n_ = /\\s*/ %silent", '2 + 3 * (4 + 1)'], both(ref_json('17')) ],
+    [ ["Calc = _ Expr \$\n\nExpr = Expr \"*\" _ Expr   <? return \$_0 * \$_2; ?>\n     | Expr \"+\" _ Expr   <? return \$_0 + \$_2; ?>\n     | \"(\" _ Expr \")\" _  <? return \$_1; ?>\n     | Number\n\nNumber = /[0-9]+/ _      <? return (int) \$_0; ?>\n\n_ = /\\s*/ %silent", '2 + 3 * (4 + 1)'], both(ref_json('17')) ],
     // readme-calc-error
-    [ ["Calc = _ expr:Expr \$  <? return \$expr; ?>\n\nExpr = Expr \"*\" _ Expr   <? return \$_0 * \$_2; ?>\n     | Expr \"+\" _ Expr   <? return \$_0 + \$_2; ?>\n     | \"(\" _ Expr \")\" _  <? return \$_1; ?>\n     | Number\n\nNumber = /[0-9]+/ _      <? return (int) \$_0; ?>\n\n_ = /\\s*/ %silent", '2 + * 3'], both('ERROR@1:5') ],
+    [ ["Calc = _ Expr \$\n\nExpr = Expr \"*\" _ Expr   <? return \$_0 * \$_2; ?>\n     | Expr \"+\" _ Expr   <? return \$_0 + \$_2; ?>\n     | \"(\" _ Expr \")\" _  <? return \$_1; ?>\n     | Number\n\nNumber = /[0-9]+/ _      <? return (int) \$_0; ?>\n\n_ = /\\s*/ %silent", '2 + * 3'], both('ERROR@1:5') ],
     // readme-tree
     [ ['Expr = Expr "+" Expr | /[0-9]+/', '1+2+3'], both(ref_json('[["1","+","2"],"+","3"]')) ],
     // text

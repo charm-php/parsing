@@ -65,7 +65,7 @@ and does not become a clause. Match any character with a regex such as `/[\s\S]/
 
 | Syntax | Meaning | Result |
 |--------|---------|--------|
-| `A B` | sequence: match A, then B | array of the values produced |
+| `A B` | sequence: match A, then B | array of the values produced; the value itself when only one element can produce one |
 | `A / B`, `A \| B` | ordered choice, tried left to right | first successful value |
 | `A?` | zero or one | A's value, or `null` |
 | `A*` | zero or more | array, empty when nothing matched |
@@ -120,13 +120,19 @@ Skip = Name _ Name                 # _ refers to a %silent rule, so 2 values
   added to the array.
 * A sequence that collected nothing is itself value-less (like a lone predicate): its
   parent does not collect it, and at the top level the parser returns `null`.
-* A sequence of **one** clause is that clause's value (`("a")` is `"a"`); a sequence of **two or more** is
-  always a list, even when only one of them has a value (`!"b" "a"` is `["a"]`). So `/[a-z]+/ _` with a
-  silent `_` is a one-element list, and a snippet (`return $_0;`) unwraps it.
+* **A sequence in which exactly one element can produce a value returns that value itself**, not a
+  one-element list: `"a" $` is `"a"`, `!"b" "a"` is `"a"`, and `/[a-z]+/ _` with a silent `_` is the
+  regex's text, so a rule rarely needs a snippet only to unwrap. This is decided from the grammar, never
+  from the input. Elements that cannot produce a value: predicates, `^`, `$`, `\nothing`, `@`, snippets and
+  references to `%silent` rules. An optional element (`B?`) can (a miss is `null`), so `A B?` stays a list,
+  and a sequence with a spread or a named capture never collapses. A group collapses on its own: in
+  `("a" _) "b"` the group is `"a"` and the outer sequence is `["a","b"]`. To get a one-element list, add a
+  second element that can produce a value or return one from a snippet. The
+  [reference](../REFERENCE.md#value-of-a-sequence) has the full rule.
 * Spread flattens two levels: the list `...A` yields, and any list among its items. It only has an effect
   inside a sequence of two or more clauses. Over items that are themselves lists or associative arrays it
-  spills their elements into the parent; a repeated group (`Item ...(COMMA Item)*` with a silent `COMMA`)
-  keeps the items intact. The [reference](../REFERENCE.md#values) has the complete table.
+  spills their elements into the parent; a repeated group that collapses (`Item ...(COMMA Item)*` with a
+  silent `COMMA`) keeps the items intact. The [reference](../REFERENCE.md#values) has the complete table.
 * Spread works the same in the alternatives of a left-recursive rule, operator alternatives included
   (`Expr = Expr "," ...Args | Atom`); `...Expr` on the left operand spreads the value parsed so far.
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.0
+
+- **Breaking: single-value sequences collapse.** A sequence (a rule body or a parenthesised group, in both
+  engines) in which exactly one element can produce a value now returns that value itself instead of a
+  one-element list. `S = "a" $` gives `"a"` (was `["a"]`), `Name = Letter+ _` with a silent `_` gives the
+  letters (was `[["a","b"]]`), and `S = &"x" "a"` gives `"a"`. Most rules no longer need `<? return $_0; ?>`
+  only to unwrap.
+  The rule is decided from the grammar, never the input. Elements that cannot produce a value: predicates
+  (`&`, `!`), `^`, `$`, `\nothing`, `@`, snippets and references to `%silent` rules. Everything else can,
+  including `B?` (a miss is `null`), so `A B?` is still a list. A spread (`...A`) or a named capture
+  (`n:A`) in the sequence keeps the list/array. A reference to a rule that only sometimes returns a value
+  (a snippet returning `SequenceIgnore`) counts as able to produce one. A sequence that ends in a snippet is
+  unchanged, and so is the `$_0`, `$_1`, ... numbering in snippets. Zero such elements is still value-less,
+  two or more still a list. Left-recursive operator alternatives (`E = E "+" E`) are not sequences in this
+  sense and still return `[left, "+", right]`. Interpreter and compiler share `Sequence::collapses()`;
+  rows in `charm-tests/0053`.
+  *Migrating.* A grammar that unwrapped with a snippet keeps working (the snippet now receives the value as
+  `$_0` all the same). A grammar or consumer that expected `[x]` where one element had a value gets `x`; to
+  get the one-element list back add a second element that can produce a value, or end the rule in
+  `<? return [$_0]; ?>` (a group does not help: it collapses too). Check enclosing snippets that read a
+  sub-rule's value as `$_0[0]` or similar.
+- Spread over a repeated group or rule that collapses flattens one level instead of two
+  (`Item ...(COMMA Item)*` still yields the items, even when they are arrays; the old two levels would have
+  spilled the items' elements into the parent now that an iteration is the item and not a one-element
+  list). Spread over anything that does not collapse flattens as before (`Sequence::spreadDepth()`).
+- Fixed: a rule that is itself optional (`_ = " "*`) was given a first-byte guard by the compiler and failed
+  at the end of input (or before a non-matching byte) where the interpreter matched empty.
+- The SQL tutorial and `sql.cpeg` use the rule: the unwrap-only snippets are gone.
+
 ## 0.1.5
 
 - New: indirect left recursion. A rule that reaches itself in left position through other rules

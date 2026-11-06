@@ -17,7 +17,7 @@ PHP 8.1 or newer.
 `calc.cpeg`:
 
 ```
-Calc = _ expr:Expr $  <? return $expr; ?>
+Calc = _ Expr $
 
 Expr = Expr "*" _ Expr   <? return $_0 * $_2; ?>
      | Expr "+" _ Expr   <? return $_0 + $_2; ?>
@@ -31,7 +31,8 @@ _ = /\s*/ %silent
 
 The first rule is where parsing starts. `Expr` starts with itself, which a PEG parser normally cannot do;
 here the alternatives listed first bind tighter (`*` before `+`). `_` is whitespace and `%silent` keeps it out
-of `$_0`, `$_1`, ... in snippets. Interpreted:
+of `$_0`, `$_1`, ... in snippets. `Calc` has no snippet: `_` and `$` have no value, so `Expr` is the only element that
+can produce one and the sequence returns it as it is. Interpreted:
 
 ```php
 require 'vendor/autoload.php';
@@ -94,7 +95,7 @@ Develop with the interpreter, compile when parse time matters or when you ship a
 * Rules, `|` ordered choice, `?` `*` `+`, groups, `&` / `!` lookahead, regexes, case-insensitive keywords
   through `"select"i` (or `(?i:...)` in a regex)
 * **Left recursion** with precedence and associativity: alternative order, `%prec`, `%assoc`, an `@prec` table
-* **Values you control**: sequences return lists, `name:` captures, `...` spread, `%silent` rules, inline PHP
+* **Values you control**: sequences return lists (or the value itself when only one element has one), `name:` captures, `...` spread, `%silent` rules, inline PHP
   snippets with `$_0`, `$name`, `$state`, `$MISS`
 * **Commit `@`** for errors that say what was expected where
 * Template rules (`List<T, Sep>`), a token mode that parses a lexer's token stream

@@ -171,8 +171,9 @@ but a bare `.` in a grammar lexes as `T_TOKEN` and is never accepted as a clause
 
 Sequences save the offset, use `goto` to the end label, keep
 named captures as keys (`$result['name']`), drop references to `%silent` rules,
-flatten `spread:` results, and collapse an empty result to `null` when the
-sequence has no snippet.
+flatten `spread:` results, and, when the sequence has no snippet, collapse an empty
+result to `null` and, where `Sequence::collapses()` says exactly one element can produce a value, return
+`$result[0]` instead of the one-element list (the same method the interpreter calls).
 
 Ordered choices are compiled in one of three ways, tried in this order:
 

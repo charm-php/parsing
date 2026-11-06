@@ -91,6 +91,11 @@ The extra entries are merged with `$context + [...]`, so a named capture called
 `state`, `context`, `HIT` or `MISS` shadows the built-in entry. Avoid those
 names for captures.
 
+The numbering is not affected by [single-value collapse](../REFERENCE.md#value-of-a-sequence): a sequence that
+ends in a snippet never collapses, and the snippet sees the same `$_0`, `$_1`, ... as before. (A sequence
+*without* a snippet that has one element able to produce a value returns that value instead of a list, so a
+snippet in the parent that receives it sees the value itself, not a one-element list.)
+
 Only clauses that contribute a value take a positional slot. Named captures,
 `Signal::HIT` results (`^`, `$`, `\nothing`, predicates) and references to
 [`%silent`](precedence-and-pragmas.md) rules do not, so indices depend on what
