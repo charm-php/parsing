@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.4 (unreleased)
+
+Documentation and tests only; no behaviour changed.
+
+- New: `docs/tutorial-sql.md`, a step-by-step SQL `SELECT` parser (literals to joins, `@prec` expressions,
+  keywords, parameters and `$state`, comments, errors and `@`, `$MISS`, compiling, walking the tree), and
+  its finished grammar `example-grammars/sql.cpeg`.
+- New tests: `charm-tests/0050-sql-tutorial.php` reads the tutorial itself (grammar steps, inputs with their
+  AST in both engines, error messages, PHP examples; `sql.cpeg` must hold exactly the tutorial's rules; the
+  compiled class must run with nothing loaded) via `charm-tests/support/tutorial.php`;
+  `0051-reference-examples.php` runs the examples of `REFERENCE.md` and the README through both engines.
+  `conformance_run()` takes an optional initial `$state`.
+- `README.md` is now the front door (two sentences, install, a 60-second interpreted and compiled example,
+  which engine, features, links, licence in plain words); the grammar reference it duplicated lives only in
+  `REFERENCE.md`, rewritten as one exhaustive table with a verified example and value for every operator,
+  pragma, snippet variable, API call and CLI flag. `docs/index.md` is the map.
+- Corrections: compiled parsers throw `{Class}ParseError` (index, getting started), the compiled `Signal::HIT`
+  return (compiled chapter), an empty rule body is never allowed, indirect left recursion is not supported
+  (it was documented as supported), `@prec` names for keyword operators and the fall-through of an unknown
+  `%prec=NAME`, a snippet's `$state` writes survive backtracking, undefined snippet variables differ between
+  the engines, `CommittedError` in the error chapter, the checked-in `src/Library` parsers' provenance,
+  token-mode chapter's "only compiled parsers use `@prec`", `.` wildcard and `/regex/i` samples in the old
+  `REFERENCE.md`/`README.md`, and a snippet's `false` return, which is a value and not a failure.
+- Found while writing (documented, not changed): two rules differing only in case collide when compiled;
+  `...name:Rule` does not bind `$name` in compiled parsers; indirect left recursion crashes the interpreter
+  or hangs the compiled parser; a regex with an inline `(?i:...)` group is opaque to the compiler's analysis.
+
 ## 0.1.3
 
 - Repetition: `*` and `+` no longer collect value-less iterations. `ε*`, `ε+` and a predicate-only
