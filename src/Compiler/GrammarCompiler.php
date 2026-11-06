@@ -386,10 +386,13 @@ PHP;
                 $this->emitter->line('$HIT = ' . $this->signalHit() . ';');
             }
             // Like the interpreter, report anything thrown by a snippet as a SnippetError
+            if ($method['available'] !== null) {
+                $this->emitter->line($this->undefinedVariableHandler($method['available']));
+            }
             $this->emitter->line('try {');
             $this->emitter->indent();
             $this->emitter->line($method['code']);
-            $this->emitSnippetCatch();
+            $this->emitSnippetCatch($method['available'] !== null);
             $this->emitter->closeBlock();
             $this->emitter->line();
         }
@@ -1068,6 +1071,10 @@ PHP;
         $this->emitter->line("if ($itemVar !== " . $this->signalHit() . ") {");
         $this->emitter->indent();
         if ($subClause->hasSpread()) {
+            // A named spread (`...name:A*`) captures the whole value and flattens it too
+            if ($name = $subClause->getName()) {
+                $this->emitter->line("{$resultVar}[" . var_export($name, true) . "] = $itemVar;");
+            }
             // Spread: skip null, flatten arrays into result
             $this->emitter->line("if ($itemVar !== null) {");
             $this->emitter->indent();
@@ -1088,8 +1095,9 @@ PHP;
             $this->emitter->line("{$resultVar}[] = $itemVar;");
             $this->emitter->closeBlock();
             $this->emitter->closeBlock();
-            // Spread clauses still need to be in snippet context
-            $context[] = $itemVar;
+            // A spread makes the number of positional values depend on the input, so a snippet after it
+            // gets the sequence's result array itself ($_0, $_1 ... are its elements, as when interpreted)
+            $contextNames['*'] = $resultVar;
         } elseif ($name = $subClause->getName()) {
             $this->emitter->line("{$resultVar}[" . var_export($name, true) . "] = $itemVar;");
             $contextNames[$name] = $itemVar;
@@ -1435,12 +1443,35 @@ PHP;
      * Close a `try {` around snippet code: like the interpreter, report anything the snippet throws as a
      * SnippetError (when the library is around; a standalone parser rethrows the original).
      */
-    private function emitSnippetCatch(): void
+    private function emitSnippetCatch(bool $restoreHandler = false): void
     {
         $this->emitter->dedent()->line('} catch (\\Throwable $_e) {');
         $this->emitter->indent();
         $this->emitter->line("throw \\class_exists('Charm\\Parsing\\Error\\SnippetError') ? new \\Charm\\Parsing\\Error\\SnippetError('Error in snippet: ' . \$_e->getMessage(), '', \$_e) : \$_e;");
+        if ($restoreHandler) {
+            $this->emitter->dedent()->line('} finally {');
+            $this->emitter->indent();
+            $this->emitter->line('\\restore_error_handler();');
+        }
         $this->emitter->closeBlock();
+    }
+
+    /**
+     * The statement that turns the PHP warning for an undefined variable into an exception (for the
+     * snippet's SnippetError). $available is the PHP source of the "Available variables" list, or
+     * 'null' when it has to be built from the `$_ctx` array of a snippet that follows a spread.
+     */
+    private function undefinedVariableHandler(string $available): string
+    {
+        if ($available === 'null') {
+            return '\set_error_handler(static function (int $_n, string $_m) use (&$_ctx): bool { '
+                . 'if (\preg_match(\'/^Undefined array key (?:"(.*)"|(\d+))$/\', $_m, $_k)) { '
+                . '$_v = []; '
+                . 'foreach ($_ctx as $_i => $_x) { $_v[] = \'$\' . (\is_int($_i) ? \'_\' : \'\') . $_i; } '
+                . '$_m = \'Undefined variable $\' . (isset($_k[2]) ? \'_\' . $_k[2] : $_k[1]) . \'. Available variables are \' . \implode(\', \', \array_merge($_v, [\'$context\', \'$state\', \'$HIT\', \'$MISS\'])) . \'.\'; } '
+                . 'throw new \ErrorException($_m); }, \E_WARNING);';
+        }
+        return '\\set_error_handler(static fn(int $_n, string $_m): bool => throw new \\ErrorException(\\str_starts_with($_m, \'Undefined variable\') ? $_m . \'. Available variables are \' . ' . $available . ' . \'.\' : $_m), \\E_WARNING);';
     }
 
     /**
@@ -1467,6 +1498,15 @@ PHP;
         $paramNames = [];
         $paramIndex = 0;
 
+        // After a spread the snippet is handed the sequence's result array (see emitSequenceItem)
+        $dynamic = isset($contextNames['*']);
+        $dynamicArray = $contextNames['*'] ?? null;
+        unset($contextNames['*']);
+        if ($dynamic) {
+            $context = [];
+            $contextNames = [];
+        }
+
         foreach ($context as $i => $var) {
             $paramName = '$_p' . $paramIndex++;
             $code = str_replace("\$_context[$i]", $paramName, $code);
@@ -1485,9 +1525,30 @@ PHP;
         // Replace $state reference - $state is available as reference to $this->globals in snippet methods
         $code = str_replace("\$_context['state']", '$state', $code);
 
-        // Transform remaining $_context['name'] references (user-defined variables) to local vars
-        $code = preg_replace('/\$_context\[\'([a-zA-Z_][a-zA-Z0-9_]*)\'\]/', '\$$1', $code);
-        $code = preg_replace('/\$_context\["([a-zA-Z_][a-zA-Z0-9_]*)"\]/', '\$$1', $code);
+        // Transform remaining $_context['name'] references (user-defined variables) to local vars. What
+        // is left of them is read from a variable that nothing defines, unless the snippet assigns it
+        $undefined = [];
+        if ($dynamic) {
+            $code = str_replace(["\$_context['HIT']", "\$_context['MISS']", "\$_context['context']", '$_context['], ['$HIT', '$MISS', '$_ctx', '$_ctx['], $code);
+        } else {
+            $code = preg_replace_callback('/\$_context\[(?:\'([a-zA-Z_][a-zA-Z0-9_]*)\'|"([a-zA-Z_][a-zA-Z0-9_]*)")\]/', function ($m) use (&$undefined) {
+                $name = $m[1] !== '' ? $m[1] : $m[2];
+                if (!in_array($name, ['HIT', 'MISS'], true)) {
+                    $undefined[$name] = '$' . $name;
+                }
+                return '$' . $name;
+            }, $code);
+            $code = preg_replace_callback('/\$_context\[(\d+)\]/', function ($m) use (&$undefined) {
+                return $undefined['_' . $m[1]] = '$_' . $m[1];
+            }, $code);
+            // a variable the snippet assigns is a local one, not an undefined one
+            foreach ($undefined as $name => $var) {
+                $v = preg_quote($var, '/');
+                if (preg_match('/' . $v . '(?![a-zA-Z0-9_])\s*(\[[^\]]*\]\s*)*(=(?![=>])|[-+.*\/%|&^?]=|\?\?=|\+\+|--)|(\+\+|--)' . $v . '(?![a-zA-Z0-9_])|\bas\s+(' . $v . '|\$\w+\s*=>\s*' . $v . ')(?![a-zA-Z0-9_])/', $code)) {
+                    unset($undefined[$name]);
+                }
+            }
+        }
 
         // Handle the return value
         if (strpos($code, 'return') !== false) {
@@ -1509,16 +1570,34 @@ PHP;
             // Add $_offset as first parameter (provides start position of matched rule)
             $paramList = array_values($paramNames);
             array_unshift($paramList, '$_offset');
-            $params = implode(', ', $paramList);
-
             $argList = array_keys($paramNames);
             array_unshift($argList, '$_offset');
+            if ($dynamic) {
+                $paramList[] = '$_ctx';
+                $argList[] = $dynamicArray;
+            }
+            $params = implode(', ', $paramList);
             $args = implode(', ', $argList);
+
+            // Like the interpreter, reading a variable that does not exist is a SnippetError, not a null.
+            // Only a snippet that can do so pays for an error handler.
+            $available = null;
+            if ($dynamic) {
+                $available = 'null';
+            } elseif ($undefined) {
+                $names = array_merge(
+                    array_map(fn($i) => '$_' . $i, array_keys($context)),
+                    array_map(fn($n) => '$' . $n, array_keys($contextNames)),
+                    ['$context', '$state', '$HIT', '$MISS']
+                );
+                $available = var_export(implode(', ', $names), true);
+            }
 
             $this->snippetMethods[] = [
                 'name' => $methodName,
                 'params' => $params,
                 'code' => $code,
+                'available' => $available,
             ];
 
             if ($resultVar) {

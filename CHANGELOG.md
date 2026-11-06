@@ -9,6 +9,17 @@ Fixed
 - Compiled parsers: rules whose names differ only in case (`Select` / `SELECT`) no longer fail with
   "Cannot redeclare parseSELECT"; the later rule's method gets a `__2` suffix (`parseSELECT__2`). Grammars
   without such a pair generate exactly the same method names as before. Rows in `charm-tests/0042`.
+- Compiled parsers: `...name:Clause` binds `$name` to the whole value, and in a snippet after any spread
+  `$_0`, `$_1` ... are the spread elements, as when interpreted (a compiled snippet used to get `$name`
+  undefined and the whole list as `$_0`). Rows in `charm-tests/0043`.
+- Compiled parsers: reading an undefined variable in a snippet (`$_5`, a typo, `$_0` after only named
+  captures) raises `Error\SnippetError` with the interpreter's message instead of reading `null`. Only
+  snippets that read such a variable get an error handler; the interpreter's message now says `$_5`, not
+  `$5`. Rows in `charm-tests/0044`.
+- Compiled parsers: `parse($input, $initialState)` starts `$state` from the `globals` compile option merged
+  with `$initialState`; it used to merge into what the previous `parse()` on the same object left. The
+  generated `parse()` therefore differs in one line from 0.1.3's. Rows in `charm-tests/0045`.
+- Confirmed in both engines (row in `0045`): `$state` is not rolled back when the parser backtracks.
 
 - New: `docs/tutorial-sql.md`, a step-by-step SQL `SELECT` parser (literals to joins, `@prec` expressions,
   keywords, parameters and `$state`, comments, errors and `@`, `$MISS`, compiling, walking the tree), and
@@ -29,7 +40,7 @@ Fixed
   the engines, `CommittedError` in the error chapter, the checked-in `src/Library` parsers' provenance,
   token-mode chapter's "only compiled parsers use `@prec`", `.` wildcard and `/regex/i` samples in the old
   `REFERENCE.md`/`README.md`, and a snippet's `false` return, which is a value and not a failure.
-- Found while writing (documented, not changed): `...name:Rule` does not bind `$name` in compiled parsers; indirect left recursion crashes the interpreter
+- Found while writing (documented, not changed): indirect left recursion crashes the interpreter
   or hangs the compiled parser; a regex with an inline `(?i:...)` group is opaque to the compiler's analysis.
 
 ## 0.1.3

@@ -152,9 +152,9 @@ S = A ...("," A)*   A = /[a-z]/   "a,b,c"  =>  ["a",",","b",",","c"]
 Because spread flattens the items of the list, `...Item*` over items that are lists or associative arrays
 spills their elements into the parent. The list idiom that keeps the items intact is a repeated *group*, whose
 iteration is a one-element list: `Item ...(COMMA Item)*` with `COMMA = "," %silent` yields
-`[item, item, ...]`. `...name:A*` binds `$name` to the original value and also flattens it. **Known gap:** the
-compiled parser does not bind the name in that combination (`S = ...p:A* <? return $p; ?>` with `A = "a"` on
-`aa` yields `["a","a"]` interpreted and `null` compiled).
+`[item, item, ...]`. `...name:A*` binds `$name` to the original value and also flattens it, so the elements are
+`$_0`, `$_1`, ... (`S = ...p:A* <? return [$p, $_0, $_1]; ?>` with `A = "a"` on `aa` gives `[["a","a"],"a","a"]`
+in both engines).
 
 **Top level.** `cpeg_parse()` and a compiled `parse()` return `null` when the entry rule yields no value
 (`S = ^ $` on the empty string). A parse does not have to consume all input; end the entry rule with `$` to
@@ -300,8 +300,8 @@ global ones.
 | `$HIT`, `$MISS` | `Signal::HIT`, `Signal::MISS` | yes | yes |
 | `$_offset` | byte offset where the rule started | no | yes |
 
-Reading a variable that does not exist: the interpreter throws `SnippetError` ("Undefined variable $n"); a
-compiled parser reads `null`.
+Reading a variable that does not exist throws `SnippetError` ("Undefined variable $n. Available variables are
+...") in both engines; use `$_5 ?? null` or `isset($_5)` to probe. Named captures take no `$_N` slot.
 
 **What a snippet returns.**
 

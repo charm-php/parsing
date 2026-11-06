@@ -236,12 +236,13 @@ The differences that matter when a grammar has to run both ways:
 |---|---|---|
 | `$MISS` return fails the sequence | Yes | Yes - any enum case named `MISS` counts, so `\Charm\Parsing\Signal::MISS` works too |
 | `SequenceIgnore` / `SequenceResume` | Honoured | Honoured (a class check on `\Charm\Parsing\SequenceIgnore`/`SequenceResume`; the class need not be loaded) |
-| Exceptions | Wrapped in `Error\SnippetError` | Wrapped in `Error\SnippetError` when that class exists, rethrown as-is in a standalone parser; PHP warnings are not converted |
+| Exceptions | Wrapped in `Error\SnippetError` | Wrapped in `Error\SnippetError` when that class exists, rethrown as-is in a standalone parser |
 | `$HIT`, `$MISS` | Available | Available |
 | `$context` | Available | Not defined |
 | `$_offset` | Not defined | Rule start offset |
-| Reading an undefined variable (`$_5`, `$typo`) | `SnippetError` ("Undefined variable") | `null` |
-| `$initialState` | Replaces globals on each parse | `array_merge` into the parser's `$globals` property, so values persist across `parse()` calls on one instance |
+| Reading an undefined variable (`$_5`, `$typo`) | `SnippetError` ("Undefined variable ...") | The same `SnippetError`, with the same message (only a snippet that reads such a variable gets an error handler, so other snippets pay nothing) |
+| `$initialState` | Starts every parse | Starts every parse: `parse()` resets `$state` to the `globals` compile option merged with `$initialState` |
+| After a spread (`...A*`) | `$_0`, `$_1` ... are the elements | The same: the snippet is handed the sequence's collected array |
 
 Compiled parsers are also free of the closure's namespace: the code lands in the
 generated class's namespace, and `--namespace` changes where unqualified names

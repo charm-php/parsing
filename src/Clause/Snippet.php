@@ -499,6 +499,9 @@ class Context implements \ArrayAccess {
             }
             return '$'.$v;
         }, array_keys($this->data)));
+        if (is_numeric($variable)) {
+            $variable = '_' . $variable;
+        }
         throw new CustomError("Undefined variable \$$variable. Available variables are $vars.");
     }
 }
