@@ -39,6 +39,7 @@ names differ only in case (`Select` and `SELECT`) get distinct methods anyway (t
 | Syntax | Class | Matches | Returns |
 |--------|-------|---------|---------|
 | `"text"`, `'text'` | `Clause\Text` | that exact substring | the matched text |
+| `"text"i`, `'text'i` | `Clause\Text` | that substring in any letter case | the matched text, as typed in the input |
 | `/regex/` | `Clause\Regex` | PCRE at the current offset | the matched text |
 | `[0-9a-f]` | `Clause\Regex` | shorthand for `/[0-9a-f]/` | the matched text |
 | `^` | `Clause\SOF` | start of input, zero width | `Signal::HIT` |
@@ -49,7 +50,9 @@ names differ only in case (`Select` and `SELECT`) get distinct methods anyway (t
 Regexes are matched with the `u` and `A` modifiers added by the engine, so they
 are anchored at the current offset and are UTF-8 aware. Do not append flags:
 `/foo/i` is parsed as the regex `/foo/` followed by the rule name `i`. Use an
-inline group instead - `/(?i:foo)/`.
+inline group instead - `/(?i:foo)/` - or, for plain text, the case-insensitive literal `"foo"i` (string mode
+only). The `i` must follow the closing quote directly and not continue into a longer name: `"foo"i+` and
+`k:"foo"i` are fine, `"foo"id` is `"foo"` followed by the rule `id`.
 
 String literals understand `\n`, `\r`, `\t`, `\0`, `\\` and an escaped copy of
 the surrounding quote. The `[...]` form is always read as a character class,

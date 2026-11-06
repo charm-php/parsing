@@ -52,6 +52,7 @@ A terminal matches text at the current position and yields the text it matched, 
 | Syntax | Matches | Example | Value |
 |---|---|---|---|
 | `"text"`, `'text'` | exactly that text | `S = "ab"` on `ab` | `"ab"` |
+| `"text"i`, `'text'i` | that text in any letter case (the `i` follows the quote directly) | `S = "ab"i` on `aB` | `"aB"` |
 | `/regex/` | PCRE at the current position (anchored, `u` mode) | `S = /[a-z]+/` on `abc1` | `"abc"` |
 | `[a-c]` | character class, shorthand for `/[a-c]/` | `S = [a-c]+` on `abcd` | `["a","b","c"]` |
 | `^` | start of input; zero width, no value | `S = ^ "a"` on `a` | `["a"]` |
@@ -61,8 +62,12 @@ A terminal matches text at the current position and yields the text it matched, 
 
 * **String escapes:** `\\`, `\"`, `\'` (the surrounding quote), `\n`, `\r`, `\t`, `\0`.
 * **Regexes have no flags.** `/abc/i` is the regex `/abc/` followed by a reference to a rule called `i`
-  (usually an "Unknown identifier" error). Use an inline group: `/(?i:abc)/`. The text matched is returned as
-  typed: `S = /(?i:select)\b/` on `SeLeCt x` yields `"SeLeCt"`. A literal `/` inside a regex is written `\/`.
+  (usually an "Unknown identifier" error). For case-insensitive text use the literal `"abc"i`, or an inline
+  group in a regex: `/(?i:abc)/`. The text matched is returned as typed: `S = "select"i /\b/` and
+  `S = /(?i:select)\b/` both give `"SeLeCt"` on `SeLeCt x`. `"abc"i` folds ASCII letters only for an ASCII
+  literal and uses Unicode case folding (`"é"i` matches `É`) otherwise; it works in string mode only, not
+  in token mode. The flag composes like any literal (`k:"and"i+`, `!"x"i`); it is printed back as `"abc"i`
+  in messages and by `toGrammarString()`. `"a"id` is still `"a"` followed by the rule `id`. A literal `/` inside a regex is written `\/`.
   Regexes are anchored by the engine; do not write `^`.
 * **There is no `.` wildcard in the grammar text**, only inside a regex (`/./`, `/[\s\S]/`).
 * A failing terminal fails at the offset where it started: `S = "ab"` on `ax` fails at 1:1, not 1:2.
@@ -456,8 +461,9 @@ It does not expand template rules and has no flag for the `globals` option.
 * For each ordered choice the compiler uses one combined regex (alternatives that differ in one terminal), a
   `switch` on the first byte, or sequential tries, and it guards rule calls by first byte. That depends on the
   compiler **understanding your regexes**: it reads ECMAScript-style syntax, and an inline `(?i:...)` group
-  makes it give up on that regex (minimum length 0, first bytes unknown). Keywords spelled `[Ss][Ee][Ll]...`
-  are analysable; in the tutorial grammar that is 24 percent faster compiled.
+  makes it give up on that regex (minimum length 0, first bytes unknown). Keywords spelled `"select"i` or
+  `[Ss][Ee][Ll]...` are analysable (a case-insensitive literal counts as both cases of its first byte, or as
+  unknown if it is not ASCII); in the tutorial grammar that is around 20 percent faster compiled.
 * The first-byte `switch` and the single-regex optimization are **off for a grammar that contains `@`**,
   because an alternative they skip might have been a committed error. Measure before dropping commits for
   speed; in the tutorial grammar the difference is below the noise.

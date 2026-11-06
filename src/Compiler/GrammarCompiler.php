@@ -890,7 +890,7 @@ PHP;
         }
         $this->emitter->dedent()->line('} else {');
         $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, json_encode($textValue));
+        $this->emitTerminalMiss($resultVar, json_encode($textValue) . ($isCaseInsensitive ? 'i' : ''));
         $this->emitter->closeBlock();
     }
 
@@ -1345,7 +1345,7 @@ PHP;
     {
         // Clone with no modifier for the inner match
         $inner = clone $clause;
-        $inner->setModifier(Clause::NONE);
+        $inner->setModifier($clause->getModifier() & Clause::CASE_INSENSITIVE);
 
         $innerVar = '$_opt' . (++$this->tempVarCounter);
         $this->generateDirectClauseCode($inner, $innerVar);
@@ -1371,7 +1371,7 @@ PHP;
     private function generateRepetitionCode(Clause $clause, string $resultVar, bool $atLeastOne): void
     {
         $inner = clone $clause;
-        $inner->setModifier(Clause::NONE);
+        $inner->setModifier($clause->getModifier() & Clause::CASE_INSENSITIVE);
 
         $loopVar = (++$this->tempVarCounter);
         $itemVar = '$_rep' . $loopVar;

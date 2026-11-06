@@ -413,24 +413,25 @@ list then wanted a `COMMA` and found `t`. A PEG never reconsiders: once `Alias?`
 choice is made. The fix is to say that an identifier is *not a keyword*. The predicate `!X`
 succeeds when `X` does not match at this point, and consumes nothing.
 
-The grammar has no case-insensitivity flag, so `/select/i` does not work (it is the regex
-`/select/` followed by a reference to a rule called `i`). Use an inline group instead:
-`/(?i:select)\b/`. The `\b` stops `select` from matching the start of `selection`.
+A string literal followed directly by `i` is case-insensitive: `"select"i` matches `select`, `SELECT` and
+`SeLeCt`, and returns the text as typed. The `\b` after it stops `select` from matching the start of
+`selection`. (A regex has no flags, so `/select/i` does not work; `/(?i:select)\b/` is the regex spelling
+of the same thing.)
 
 ```cpeg
 Identifier = !Keyword /[A-Za-z_][A-Za-z0-9_]*/ _  <? return $_0; ?>
 
 Keyword = /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/
 
-SELECT = /(?i:select)\b/ _ %silent
-AS = /(?i:as)\b/ _ %silent
-FROM = /(?i:from)\b/ _ %silent
-JOIN = /(?i:join)\b/ _ %silent
-INNER = /(?i:inner)\b/ _ %silent
-LEFT = /(?i:left)\b/ _ %silent
-RIGHT = /(?i:right)\b/ _ %silent
-OUTER = /(?i:outer)\b/ _ %silent
-ON = /(?i:on)\b/ _ %silent
+SELECT = "select"i /\b/ _ %silent
+AS = "as"i /\b/ _ %silent
+FROM = "from"i /\b/ _ %silent
+JOIN = "join"i /\b/ _ %silent
+INNER = "inner"i /\b/ _ %silent
+LEFT = "left"i /\b/ _ %silent
+RIGHT = "right"i /\b/ _ %silent
+OUTER = "outer"i /\b/ _ %silent
+ON = "on"i /\b/ _ %silent
 ```
 
 The `Keyword` list names every keyword the finished grammar uses; the rules for the others arrive
@@ -476,7 +477,7 @@ select selection from t
 `selection` is a column although it starts with `select`: the keyword regex needs a word boundary
 after `select`, and there is none.
 
-*Learned.* The keyword idiom (`/(?i:...)\b/` plus `!Keyword`), and that a PEG commits to the first
+*Learned.* The keyword idiom (`"..."i /\b/` plus `!Keyword`), and that a PEG commits to the first
 alternative that succeeds. Order alternatives, and add predicates, so the right one is chosen.
 
 Step 5: expressions and precedence
@@ -541,7 +542,7 @@ Primary = Number
         | Column
         | "(" _ Expr ")" _  <? return $_1; ?>
 
-WHERE = /(?i:where)\b/ _ %silent
+WHERE = "where"i /\b/ _ %silent
 ```
 
 In the `Sum` snippets `$_0` is the left operand, `$_1` the operator text and `$_2` the right operand: the
@@ -669,9 +670,9 @@ Expr = Expr OR Expr   %prec=OR   <? return ['type' => 'binary', 'op' => 'OR', 'l
      | NOT Expr       %prec=NOT  <? return ['type' => 'unary', 'op' => 'NOT', 'expr' => $_0]; ?>
      | Predicate
 
-OR = /(?i:or)\b/ _ %silent
-AND = /(?i:and)\b/ _ %silent
-NOT = /(?i:not)\b/ _ %silent
+OR = "or"i /\b/ _ %silent
+AND = "and"i /\b/ _ %silent
+NOT = "not"i /\b/ _ %silent
 ```
 
 These keywords are `%silent`, so `Expr AND Expr` has just two values, `$_0` and `$_1`.
@@ -785,13 +786,13 @@ NullLiteral = NULL   <? return ['type' => 'literal', 'value' => null]; ?>
 TrueLiteral = TRUE   <? return ['type' => 'literal', 'value' => true]; ?>
 FalseLiteral = FALSE <? return ['type' => 'literal', 'value' => false]; ?>
 
-IS = /(?i:is)\b/ _ %silent
-IN = /(?i:in)\b/ _ %silent
-NULL = /(?i:null)\b/ _ %silent
-TRUE = /(?i:true)\b/ _ %silent
-FALSE = /(?i:false)\b/ _ %silent
-BETWEEN = /(?i:between)\b/ _ %silent
-LIKE = /(?i:like)\b/ _ %silent
+IS = "is"i /\b/ _ %silent
+IN = "in"i /\b/ _ %silent
+NULL = "null"i /\b/ _ %silent
+TRUE = "true"i /\b/ _ %silent
+FALSE = "false"i /\b/ _ %silent
+BETWEEN = "between"i /\b/ _ %silent
+LIKE = "like"i /\b/ _ %silent
 ```
 
 The spread-based `ExprList` is the select-list idiom again.
@@ -886,7 +887,7 @@ Call = name:Identifier "(" _ distinct:DISTINCT? args:CallArgs? ")" _
 CallArgs = Star  <? return [$_0]; ?>
          | ExprList
 
-DISTINCT = /(?i:distinct)\b/ _ %silent
+DISTINCT = "distinct"i /\b/ _ %silent
 ```
 
 ```sql
@@ -952,14 +953,14 @@ OffsetClause = OFFSET n:Integer  <? return $n; ?>
 
 Integer = /[0-9]+/ _  <? return (int) $_0; ?>
 
-GROUP = /(?i:group)\b/ _ %silent
-BY = /(?i:by)\b/ _ %silent
-HAVING = /(?i:having)\b/ _ %silent
-ORDER = /(?i:order)\b/ _ %silent
-LIMIT = /(?i:limit)\b/ _ %silent
-OFFSET = /(?i:offset)\b/ _ %silent
-ASC = /(?i:asc)\b/ _ %silent
-DESC = /(?i:desc)\b/ _ %silent
+GROUP = "group"i /\b/ _ %silent
+BY = "by"i /\b/ _ %silent
+HAVING = "having"i /\b/ _ %silent
+ORDER = "order"i /\b/ _ %silent
+LIMIT = "limit"i /\b/ _ %silent
+OFFSET = "offset"i /\b/ _ %silent
+ASC = "asc"i /\b/ _ %silent
+DESC = "desc"i /\b/ _ %silent
 ```
 
 ```sql
@@ -1370,7 +1371,7 @@ SELECT a FROM t
 WHERE a = 1 AND
 ```
 ```error
-Parse error at line 2, column 16: expected /(?i:not)\b/, found end of input
+Parse error at line 2, column 16: expected NOT, found end of input
 ```
 
 ```php
@@ -1399,11 +1400,11 @@ Charm\Parsing\Error\ParseError
 The interpreter names the rule that gave up and, after a commit, the rule it was waiting for. Both its
 messages and the generated parser's carry the position.
 
-Compiled messages quote the first terminal tried at the failing position, so a keyword rule with no
-description appears as its regex source (`/(?i:not)\b/` above). That regex is also why: the compiler
-reads a regex to learn which characters it can start with and how short it can be, and it
-does not understand an inline `(?i:...)` group, so it knows nothing about these rules and cannot
-use them to skip alternatives early. Step 15 puts a number on it.
+Compiled messages quote the first terminal tried at the failing position; here the compiler knew from
+`"not"i` that `NOT` cannot start with anything else, so the rule's name is what is left to report.
+(A keyword written as the regex `/(?i:not)\b/` would be quoted as that regex, and the compiler does not
+understand an inline `(?i:...)` group, so it cannot use such a rule to skip alternatives early. Step 15
+puts a number on it.)
 
 *Learned.* Rule descriptions, `@`, `committed`, and what "furthest failure" means.
 
@@ -1452,7 +1453,7 @@ Other things a snippet can do or see:
 |---|---|
 | `$_0`, `$_1`, ... | the values of the parts that have one, in order; silent rules, predicates, `$`, `^` and named parts do not take a number |
 | `$name` | a named part (`name:Thing`); `null` for an optional part that did not match |
-| `$context` | the whole collected array, names and numbers (interpreter only) |
+| `$context` | the whole collected array, names and numbers |
 | `$state` | the array shared by all snippets of one parse |
 | `$MISS`, `$HIT` | return `$MISS` to fail; `$HIT` is the "no value" marker |
 | `new \Charm\Parsing\SequenceIgnore` | succeed with no value |
@@ -1512,7 +1513,7 @@ try {
 ```
 ```text
 {"type":"binary","op":"=","left":{"type":"column","table":null,"name":"a"},"right":{"type":"param","name":null,"index":0}}
-1:22 expected /(?i:not)\b/, found end of input (committed: true)
+1:22 expected NOT, found end of input (committed: true)
 ```
 
 The error class is generated into the same file, next to the parser. It extends `\RuntimeException`
@@ -1522,25 +1523,25 @@ result and on where an error is, you can develop against `cpeg_parse()` and ship
 
 What differs between the two:
 
-* `$context` exists only in the interpreter. Do not use it in a grammar you will compile.
 * `$state` starts from the initial state on every call in both engines, so one compiled object can parse
   any number of queries. Pass the state you need on every call, as above.
 * Interpreter errors are `Charm\Parsing\Error\ParseError` (and `State\CommittedError`) with the column
   counted from 0.
 
 *Speed.* One 221-byte query with joins, a `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY` and `LIMIT`,
-parsed repeatedly on PHP 8.5.12 (CLI, no opcache), best of five rounds:
+parsed repeatedly on PHP 8.5.12 (CLI, no opcache), best of five rounds (a 202-byte query here):
 
 | | per parse |
 |---|---|
-| `cpeg_parse()`, interpreted | 1.65 ms |
-| compiled `SqlParser` | 0.29 ms |
-| compiled, keywords spelled `[Ss][Ee][Ll][Ee][Cc][Tt]\b` instead of `(?i:select)\b` | 0.22 ms |
+| `cpeg_parse()`, interpreted | 1.75 ms |
+| compiled `SqlParser` | 0.23 ms |
+| compiled, keywords spelled `/(?i:select)\b/` instead of `"select"i /\b/` | 0.28 ms |
+| compiled, keywords spelled `/[Ss][Ee][Ll][Ee][Cc][Tt]\b/` | 0.22 ms |
 
-Compiling is a factor of about six here. The last row is the cost of `(?i:...)` that step 13
-mentioned: written as character classes the same keywords are understood by the compiler's
-analysis, which lets it skip alternatives by their first character, and the parser takes 24 percent
-less time. `@` made no measurable difference in this grammar (a grammar containing `@` loses some of
+Compiling is a factor of about seven here. The third row is the cost of the regex spelling `(?i:...)`
+that step 13 mentioned: the compiler cannot read that group, but it understands `"select"i` and
+character classes, which lets it skip alternatives by their first character, and the parser takes
+around 20 percent less time. `@` made no measurable difference in this grammar (a grammar containing `@` loses some of
 the compiler's optimizations, so measure yours). The interpreter pays the same either way.
 Compile when parse time matters; otherwise the interpreter is easier to debug.
 

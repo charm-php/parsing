@@ -9,13 +9,22 @@ class Text extends Terminal {
 
     private $text;
     private $length;
+    /** For a non-ASCII case-insensitive literal: the regex that matches it, anchored with \G */
+    private ?string $unicodePattern = null;
 
     public function __construct(string $text, int $modifier, ?string $name) {
         parent::__construct($modifier, $name);
         $this->text = $text;
         $this->length = strlen($text);
         if ($this->isCaseInsensitive()) {
-            $this->text = mb_strtolower($this->text);
+            // ASCII literals fold ASCII letters only; others use PCRE's Unicode folding (as compiled parsers do)
+            if (preg_match('/^[\x00-\x7F]*$/', $text)) {
+                $this->text = strtolower($text);
+            } else {
+                $this->text = mb_strtolower($text);
+                $this->unicodePattern = '/\G' . preg_quote($this->text, '/') . '/iu';
+                $this->length = mb_strlen($this->text); // fewest bytes it can match
+            }
         }
     }
 
@@ -24,19 +33,27 @@ class Text extends Terminal {
     }
 
     public function asString(): string {
+        $i = $this->isCaseInsensitive() ? 'i' : '';
         if (strpos($this->text, '"') === false) {
-            return '"'.$this->text.'"';
+            return '"'.$this->text.'"'.$i;
         } elseif (strpos($this->text, "'") === false) {
-            return "'".$this->text."'";
+            return "'".$this->text."'".$i;
         } else {
-            return '"'.strtr($this->text, ['"' => '""']).'"';
+            return '"'.strtr($this->text, ['"' => '""']).'"'.$i;
         }
     }
 
     public function interpret(State $state, array $context) {
+        if ($this->unicodePattern !== null) {
+            if (!preg_match($this->unicodePattern, $state->source, $m, 0, $state->offset)) {
+                return Signal::MISS;
+            }
+            $state->offset += strlen($m[0]);
+            return $m[0];
+        }
         $source = substr($state->source, $state->offset, $this->length);
         if ($this->isCaseInsensitive()) {
-            if (mb_strtolower($source) !== $this->text) {
+            if (strtolower($source) !== $this->text) {
                 return Signal::MISS;
             }
         } elseif ($source !== $this->text) {
@@ -53,6 +70,9 @@ class Text extends Terminal {
     public function getFirstBytes(): ?string {
         if ($this->length === 0) {
             return null;
+        }
+        if ($this->unicodePattern !== null) {
+            return null; // upper and lower case may start with different bytes
         }
         $char = $this->text[0];
         if ($this->isCaseInsensitive()) {

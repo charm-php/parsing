@@ -157,63 +157,63 @@ Integer "integer" = /[0-9]+/ _  <? return strlen($_0) > 18 ? $MISS : (int) $_0; 
 
 Keyword = /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/
 
-SELECT = /(?i:select)\b/ _ %silent
+SELECT = "select"i /\b/ _ %silent
 
-DISTINCT = /(?i:distinct)\b/ _ %silent
+DISTINCT = "distinct"i /\b/ _ %silent
 
-FROM = /(?i:from)\b/ _ %silent
+FROM = "from"i /\b/ _ %silent
 
-WHERE = /(?i:where)\b/ _ %silent
+WHERE = "where"i /\b/ _ %silent
 
-GROUP = /(?i:group)\b/ _ %silent
+GROUP = "group"i /\b/ _ %silent
 
-BY = /(?i:by)\b/ _ %silent
+BY = "by"i /\b/ _ %silent
 
-HAVING = /(?i:having)\b/ _ %silent
+HAVING = "having"i /\b/ _ %silent
 
-ORDER = /(?i:order)\b/ _ %silent
+ORDER = "order"i /\b/ _ %silent
 
-LIMIT = /(?i:limit)\b/ _ %silent
+LIMIT = "limit"i /\b/ _ %silent
 
-OFFSET = /(?i:offset)\b/ _ %silent
+OFFSET = "offset"i /\b/ _ %silent
 
-JOIN = /(?i:join)\b/ _ %silent
+JOIN = "join"i /\b/ _ %silent
 
-INNER = /(?i:inner)\b/ _ %silent
+INNER = "inner"i /\b/ _ %silent
 
-LEFT = /(?i:left)\b/ _ %silent
+LEFT = "left"i /\b/ _ %silent
 
-RIGHT = /(?i:right)\b/ _ %silent
+RIGHT = "right"i /\b/ _ %silent
 
-OUTER = /(?i:outer)\b/ _ %silent
+OUTER = "outer"i /\b/ _ %silent
 
-ON = /(?i:on)\b/ _ %silent
+ON = "on"i /\b/ _ %silent
 
-AS = /(?i:as)\b/ _ %silent
+AS = "as"i /\b/ _ %silent
 
-AND = /(?i:and)\b/ _ %silent
+AND = "and"i /\b/ _ %silent
 
-OR = /(?i:or)\b/ _ %silent
+OR = "or"i /\b/ _ %silent
 
-NOT = /(?i:not)\b/ _ %silent
+NOT = "not"i /\b/ _ %silent
 
-IN = /(?i:in)\b/ _ %silent
+IN = "in"i /\b/ _ %silent
 
-IS = /(?i:is)\b/ _ %silent
+IS = "is"i /\b/ _ %silent
 
-NULL = /(?i:null)\b/ _ %silent
+NULL = "null"i /\b/ _ %silent
 
-TRUE = /(?i:true)\b/ _ %silent
+TRUE = "true"i /\b/ _ %silent
 
-FALSE = /(?i:false)\b/ _ %silent
+FALSE = "false"i /\b/ _ %silent
 
-BETWEEN = /(?i:between)\b/ _ %silent
+BETWEEN = "between"i /\b/ _ %silent
 
-LIKE = /(?i:like)\b/ _ %silent
+LIKE = "like"i /\b/ _ %silent
 
-ASC = /(?i:asc)\b/ _ %silent
+ASC = "asc"i /\b/ _ %silent
 
-DESC = /(?i:desc)\b/ _ %silent
+DESC = "desc"i /\b/ _ %silent
 
 # --- Punctuation and whitespace
 

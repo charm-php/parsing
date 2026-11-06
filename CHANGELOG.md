@@ -7,6 +7,11 @@
 - Spread (`...A`, `...name:A`) in the operator alternatives of a left-recursive rule (`Expr = Expr "+" ...Args`)
   now flattens in both engines; both used to ignore it there (only the non-left-recursive alternatives
   honoured it) and keep the list as one element. Rows in `charm-tests/0047`.
+- New: case-insensitive literals, `"select"i` and `'select'i` (the `i` directly after the closing quote),
+  in string mode; `"a"i` used to mean `"a"` followed by the rule `i`. A non-ASCII literal folds with Unicode
+  rules in both engines, an ASCII one folds ASCII letters. Compiled parsers keep the flag on `+`, `*` and `?`
+  (they used to drop it) and print `"select"i` in errors. The SQL tutorial and `sql.cpeg` use it for keywords.
+  Rows in `charm-tests/0048`.
 
 ## 0.1.4
 

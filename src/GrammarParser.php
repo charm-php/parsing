@@ -106,11 +106,12 @@ class GrammarParser extends RecursiveDescentParser {
             new LexerPattern(
                 self::T_STRING, 'T_STRING',
                 <<<'RE'
-                (?<STRING>"(\\[\\"]|[^"\\]+|[^"])*+"|'(\\[\\']|[^'\\]+|[^'])*+')
+                (?<STRING>(?:"(\\[\\"]|[^"\\]+|[^"])*+"|'(\\[\\']|[^'\\]+|[^'])*+')(?:i(?![a-zA-Z0-9_\x7f-\xff]))?)
                 RE,
                 function($match): string {
                     $q = $match->text[0];
-                    $str = substr($match->text, 1, -1);
+                    // a trailing `i` (`"select"i`) marks the literal case-insensitive; it is not part of the value
+                    $str = substr($match->text, 1, $match->text[-1] === 'i' ? -2 : -1);
                     // Handle common escape sequences
                     return strtr($str, [
                         "\\n" => "\n",
@@ -569,7 +570,7 @@ class GrammarParser extends RecursiveDescentParser {
             $clause = $this->_Clause();
             if ($clause !== null) {
                 foreach (array_reverse($inner) as $p) {
-                    $clause->setModifier($p->text === '&' ? Clause::AND : Clause::NOT);
+                    $clause->setModifier(($p->text === '&' ? Clause::AND : Clause::NOT) | ($clause->getModifier() & Clause::CASE_INSENSITIVE));
                     $group = new Sequence(Clause::NONE, null);
                     $group[] = $clause;
                     $clause = $group;
@@ -609,7 +610,7 @@ class GrammarParser extends RecursiveDescentParser {
                     throw new ParseError($this, "Illegal operator '{$operator->text}' on :location");
             }
         }
-        $clause->setModifier($modifier);
+        $clause->setModifier($modifier | ($clause->getModifier() & Clause::CASE_INSENSITIVE));
         if ($label !== null) {
             switch ($label->type) {
                 case self::T_IDENT: $label = $label->text; break;
@@ -683,10 +684,14 @@ class GrammarParser extends RecursiveDescentParser {
 
                 case self::T_STRING:
                     // In token mode, strings match literal tokens; in string mode, they match substrings
+                    $caseInsensitive = $clause->text[-1] === 'i';
                     if ($isTokenMode) {
+                        if ($caseInsensitive) {
+                            throw new ParseError($this, "Case-insensitive literals (\"...\"i) are not supported in token mode on :location");
+                        }
                         return new Literal($clause->getValue(), Clause::NONE, null);
                     }
-                    return new Text($clause->getValue(), Clause::NONE, null);
+                    return new Text($clause->getValue(), $caseInsensitive ? Clause::CASE_INSENSITIVE : Clause::NONE, null);
 
                 case self::T_SNIPPET:
                     return new Snippet($clause->getValue(), Clause::NONE, null, $this->options->base_namespace);

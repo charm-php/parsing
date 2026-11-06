@@ -92,7 +92,7 @@ Develop with the interpreter, compile when parse time matters or when you ship a
 ## What it does
 
 * Rules, `|` ordered choice, `?` `*` `+`, groups, `&` / `!` lookahead, regexes, case-insensitive keywords
-  through `(?i:...)`
+  through `"select"i` (or `(?i:...)` in a regex)
 * **Left recursion** with precedence and associativity: alternative order, `%prec`, `%assoc`, an `@prec` table
 * **Values you control**: sequences return lists, `name:` captures, `...` spread, `%silent` rules, inline PHP
   snippets with `$_0`, `$name`, `$state`, `$MISS`
