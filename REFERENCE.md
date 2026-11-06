@@ -295,7 +295,7 @@ global ones.
 |---|---|---|---|
 | `$_0`, `$_1`, ... | values of the sequence by position (value-less clauses, silent references, predicates and named captures take no slot) | yes | yes |
 | `$name` | named capture; `null` when an optional part did not match | yes | yes |
-| `$context` | the whole collected array, names and numbers | yes | no |
+| `$context` | the whole collected array, names and numbers | yes | yes |
 | `$state` | array shared by all snippets of one parse | yes | yes |
 | `$HIT`, `$MISS` | `Signal::HIT`, `Signal::MISS` | yes | yes |
 | `$_offset` | byte offset where the rule started | no | yes |

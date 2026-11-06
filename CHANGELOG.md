@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Compiled parsers: `$context` in a snippet is the sequence's collected array (names and numbers), as when
+  interpreted; it used to be undefined. Rows in `charm-tests/0046`.
+
 ## 0.1.4
 
 Fixes for four differences between the engines (found while writing the SQL tutorial), plus documentation

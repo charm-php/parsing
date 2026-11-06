@@ -700,7 +700,7 @@ PHP;
             } elseif ($part instanceof Snippet) {
                 // Execute snippet code - assign result to $_left
                 $snVar = '$_sn' . $i;
-                if ($this->generateSnippetCode($part, $context, $contextNames, $snVar)) {
+                if ($this->generateSnippetCode($part, $context, $contextNames, $snVar, '[' . implode(', ', $items) . ']')) {
                     $hasSnippet = true;
                     $this->emitter->line("if ($snVar instanceof \\UnitEnum && {$snVar}->name === 'MISS') {");
                     $this->emitter->indent();
@@ -1121,7 +1121,7 @@ PHP;
     private function generateSequenceSnippet(Snippet $snippet, array $context, array $contextNames, string $resultVar, string $tempOffset, int $seqId, int $index, bool $committed, bool $isTopLevel, bool $hasPredicate = false): bool
     {
         $snVar = '$_sn' . $seqId . '_' . $index;
-        if (!$this->generateSnippetCode($snippet, $context, $contextNames, $snVar)) {
+        if (!$this->generateSnippetCode($snippet, $context, $contextNames, $snVar, $resultVar)) {
             return false;
         }
         $this->emitter->line("if ($snVar instanceof \\UnitEnum && {$snVar}->name === 'MISS') {");
@@ -1478,7 +1478,7 @@ PHP;
      * Emit a call of the snippet (or its inlined code). Returns true if the call's return value was
      * assigned to $resultVar, false if the snippet has no `return` and was inlined.
      */
-    private function generateSnippetCode(Snippet $snippet, array $context, array $contextNames, string $resultVar = null): bool
+    private function generateSnippetCode(Snippet $snippet, array $context, array $contextNames, string $resultVar = null, ?string $contextArray = null): bool
     {
         // Get the compiled source code from the snippet
         $compiledSource = $snippet->getCompiledSource();
@@ -1531,6 +1531,11 @@ PHP;
         if ($dynamic) {
             $code = str_replace(["\$_context['HIT']", "\$_context['MISS']", "\$_context['context']", '$_context['], ['$HIT', '$MISS', '$_ctx', '$_ctx['], $code);
         } else {
+            // `$context` is the sequence's collected array, handed over as one more argument
+            if ($contextArray !== null && preg_match('/\$_context\[([\'"])context\1\]/', $code)) {
+                $code = preg_replace('/\$_context\[([\'"])context\1\]/', '$_ctx', $code);
+                $dynamicArray = $contextArray;
+            }
             $code = preg_replace_callback('/\$_context\[(?:\'([a-zA-Z_][a-zA-Z0-9_]*)\'|"([a-zA-Z_][a-zA-Z0-9_]*)")\]/', function ($m) use (&$undefined) {
                 $name = $m[1] !== '' ? $m[1] : $m[2];
                 if (!in_array($name, ['HIT', 'MISS'], true)) {
@@ -1572,7 +1577,7 @@ PHP;
             array_unshift($paramList, '$_offset');
             $argList = array_keys($paramNames);
             array_unshift($argList, '$_offset');
-            if ($dynamic) {
+            if ($dynamicArray !== null) {
                 $paramList[] = '$_ctx';
                 $argList[] = $dynamicArray;
             }
@@ -1689,6 +1694,12 @@ PHP;
             } else {
                 // Single clause (terminal or identifier)
                 $clauses[] = $alt;
+            }
+
+            // A snippet that reads `$context` needs the sequence's whole collected array, which this
+            // shortcut does not build
+            if ($snippet !== null && preg_match('/\$_context\[([\'"])context\1\]/', $snippet->getCompiledSource())) {
+                return null;
             }
 
             // If this alternative has no terminal and no snippet, it might be a fallback

@@ -238,7 +238,7 @@ The differences that matter when a grammar has to run both ways:
 | `SequenceIgnore` / `SequenceResume` | Honoured | Honoured (a class check on `\Charm\Parsing\SequenceIgnore`/`SequenceResume`; the class need not be loaded) |
 | Exceptions | Wrapped in `Error\SnippetError` | Wrapped in `Error\SnippetError` when that class exists, rethrown as-is in a standalone parser |
 | `$HIT`, `$MISS` | Available | Available |
-| `$context` | Available | Not defined |
+| `$context` | Available | Available (the same array) |
 | `$_offset` | Not defined | Rule start offset |
 | Reading an undefined variable (`$_5`, `$typo`) | `SnippetError` ("Undefined variable ...") | The same `SnippetError`, with the same message (only a snippet that reads such a variable gets an error handler, so other snippets pay nothing) |
 | `$initialState` | Starts every parse | Starts every parse: `parse()` resets `$state` to the `globals` compile option merged with `$initialState` |

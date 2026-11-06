@@ -84,7 +84,7 @@ Without snippets the parse returns the parse tree: `Expr = Expr "+" Expr | /[0-9
 | Needs at run time | this library | nothing (string grammars) |
 | Errors | `Error\ParseError`, `Error\State\CommittedError` | a generated `{Class}ParseError` with `sourceLine`, `sourceColumn`, `expected`, `found`, `committed` |
 | Token mode (`@lexer`) | no | yes |
-| `$context` in snippets | yes | no |
+| `$context` in snippets | yes | yes |
 
 Develop with the interpreter, compile when parse time matters or when you ship a parser without the library.
 [REFERENCE.md](REFERENCE.md#performance) has the numbers and what slows a compiled parser down.
