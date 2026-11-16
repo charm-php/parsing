@@ -51,7 +51,7 @@ class StringTools {
         preg_match('/(?<whitespace>^\s+)|(?<string>^\w+)|(?<symbol>^.)/u', substr($this->s, $offset, 80), $matches);
         $key = array_search($matches[0], array_slice($matches, 1, null, true));
 
-        $loc = ' on line '.$this->getLineNumberAt($offset).' column '.$this->getColumnNumberAt($offset);
+        $loc = ' on line '.(1 + $this->getLineNumberAt($offset)).' column '.$this->getColumnNumberAt($offset);
 
         if ($key === 'whitespace') {
             return $key.$loc;

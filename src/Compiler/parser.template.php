@@ -13,8 +13,11 @@
     private string $source;
     private int $offset;
     private int $length;
-    private int $maxOffset = 0;
-    private ?string $expected = null;
+    private int $maxOffset = -1;
+    /** @var list<string> the distinct things expected at $maxOffset */
+    private array $expected = [];
+    /** Offset at which the innermost described rule was entered: its description stands for what its terminals expect there. */
+    private int $shield = -1;
 {{PROPERTIES}}
 
     /** @var array<string, string> Rule name to description mapping */
@@ -25,8 +28,9 @@
         $this->source = $source;
         $this->offset = 0;
         $this->length = \strlen($source);
-        $this->maxOffset = 0;
-        $this->expected = null;
+        $this->maxOffset = -1;
+        $this->expected = [];
+        $this->shield = -1;
         $this->globals = array_merge({{GLOBALS}}, $initialState);
 {{INIT_CODE}}
         $result = $this->parse{{GOAL_RULE}}();
@@ -51,7 +55,9 @@
         $lineStart = ($pos = \strrpos(\substr($this->source, 0, $offset), "\n")) === false ? 0 : $pos + 1;
         $col = $offset - $lineStart + 1;
 
-        $expected = $this->expected ?? $expected;
+        if ($this->expected !== [] && $this->maxOffset >= $this->offset) {
+            $expected = \implode(' or ', $this->expected);
+        }
         if ($offset >= $this->length) {
             $found = 'end of input';
         } else {
@@ -62,11 +68,44 @@
         throw new {{CLASS_NAME}}ParseError("Parse error at line {$line}, column {$col}: expected {$expected}, found {$found}", $committed, $line, $col, $offset, $expected, $found);
     }
 
+    /** Remember that `$what` was expected at `$offset` (only the furthest offset is kept). */
+    private function miss(int $offset, string $what): void
+    {
+        if ($offset === $this->shield) {
+            return;
+        }
+        if ($offset > $this->maxOffset) {
+            $this->maxOffset = $offset;
+            $this->expected = [$what];
+        } elseif ($offset === $this->maxOffset && !\in_array($what, $this->expected, true)) {
+            $this->expected[] = $what;
+        }
+    }
+
+    /** A failure position with nothing to expect (a failed predicate leaves no terminal failure behind). */
+    private function bump(int $offset): void
+    {
+        if ($offset > $this->maxOffset) {
+            $this->maxOffset = $offset;
+            $this->expected = [];
+        }
+    }
+
+    /** A rule was tried here and could not start (a first-byte guard): it expects its description, or its name. */
+    private function missRule(string $rule): void
+    {
+        $this->miss($this->offset, self::DESCRIPTIONS[$rule] ?? $rule);
+    }
+
+    /** Entering a described rule: its description is expected here, and stands for whatever its terminals expect here. */
     private function expect(string $rule): void
     {
+        $what = self::DESCRIPTIONS[$rule] ?? $rule;
         if ($this->offset > $this->maxOffset) {
             $this->maxOffset = $this->offset;
-            $this->expected = self::DESCRIPTIONS[$rule] ?? $rule;
+            $this->expected = [$what];
+        } elseif ($this->offset === $this->maxOffset && !\in_array($what, $this->expected, true)) {
+            $this->expected[] = $what;
         }
     }
 

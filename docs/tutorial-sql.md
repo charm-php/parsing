@@ -259,7 +259,7 @@ Keywords are plain literals for now, so lower case fails:
 select 1
 ```
 ```error
-Parse error at line 1, column 1: expected Statement, found 's'
+Parse error at line 1, column 1: expected "SELECT", found 's'
 ```
 
 *Learned.* The `_` convention, `%silent`, optional `?`, named captures, spread for lists, the
@@ -405,7 +405,7 @@ Alias = AS? name:Identifier  <? return $name; ?>
 SELECT a FROM t
 ```
 ```error
-Parse error at line 1, column 15: expected COMMA, found 't'
+Parse error at line 1, column 15: expected "," or "FROM" or ";" or end of input, found 't'
 ```
 
 `FROM` looks exactly like an identifier, so the parser took it as the alias of `a`; the select
@@ -640,7 +640,7 @@ SELECT a FROM t WHERE a >= 18
 SELECT 1 < 2 < 3
 ```
 ```error
-Parse error at line 1, column 14: expected "+", found '<'
+Parse error at line 1, column 14: expected "+" or "-" or "*" or "\/" or "%" or "as"i or /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/ or /[A-Za-z_][A-Za-z0-9_]*/ or "," or "from"i or "where"i or ";" or end of input, found '<'
 ```
 
 *Learned.* `@prec`, `left`, why each rule level exists, `%prec=NAME` for an alternative whose
@@ -1302,14 +1302,14 @@ column from 0. What it *expected* is the first thing that was tried at that posi
 SELECT a FROM
 ```
 ```error
-Parse error at line 1, column 14: expected TableRef, found end of input
+Parse error at line 1, column 14: expected "(" or /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/ or /[A-Za-z_][A-Za-z0-9_]*/, found end of input
 ```
 
 ```sql
 SELECT a FROM t LIMIT x
 ```
 ```error
-Parse error at line 1, column 23: expected Integer, found 'x'
+Parse error at line 1, column 23: expected /[0-9]+/, found 'x'
 ```
 
 `TableRef` and `Integer` are our rule names. A rule can carry a *description* between its name and
@@ -1372,7 +1372,7 @@ SELECT a FROM t
 WHERE a = 1 AND
 ```
 ```error
-Parse error at line 2, column 16: expected NOT, found end of input
+Parse error at line 2, column 16: expected "not"i or "-" or /[0-9]+(\.[0-9]+)?/ or /'(?:[^']|'')*'/ or "null"i or "true"i or "false"i or "?" or /:[A-Za-z_][A-Za-z0-9_]*/ or identifier or "(", found end of input
 ```
 
 ```php
@@ -1389,20 +1389,21 @@ foreach (['SELECT a FROM', 'SELECT a FROM t WHERE', 'SELECT a,, b', 'SELECT a FR
 ```
 ```output
 Charm\Parsing\Error\State\CommittedError
-    Expected TableRef in FromClause on parsed source:1:13, found end of file
+    Expected table name in FROM clause on parsed source:1:13, found end of file
 Charm\Parsing\Error\State\CommittedError
     Expected Expr in WhereClause on parsed source:1:21, found end of file
 Charm\Parsing\Error\ParseError
-    Failed parsing "SelectList" on parsed source:1:9, unexpected ","
+    Failed parsing "SelectList" on parsed source:1:9, unexpected ",", expected identifier or "*" or "not"i or "-" or /[0-9]+(\.[0-9]+)?/ or /'(?:[^']|'')*'/ or "null"i or "true"i or "false"i or "?" or /:[A-Za-z_][A-Za-z0-9_]*/ or "("
 Charm\Parsing\Error\ParseError
-    Failed parsing "Sum" on parsed source:1:28, unexpected "b"
+    Failed parsing "Sum" on parsed source:1:28, unexpected "b", expected "+" or "-" or "*" or "\/" or "%" or "or"i or "and"i or "group"i or "having"i or "order"i or "limit"i or ";" or end of input
 ```
 
 The interpreter names the rule that gave up and, after a commit, the rule it was waiting for. Both its
-messages and the generated parser's carry the position.
+messages and the generated parser's carry the position and say what was expected there.
 
-Compiled messages quote the first terminal tried at the failing position; here the compiler knew from
-`"not"i` that `NOT` cannot start with anything else, so the rule's name is what is left to report.
+The expectations are every terminal that failed at the failing position, joined with "or"; a rule that has a
+description (`"a table name"`) stands for the terminals inside it, so describing the rules users meet keeps
+the list short.
 (A keyword written as the regex `/(?i:not)\b/` would be quoted as that regex, and the compiler does not
 understand an inline `(?i:...)` group, so it cannot use such a rule to skip alternatives early. Step 15
 puts a number on it.)

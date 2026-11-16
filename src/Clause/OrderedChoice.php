@@ -10,6 +10,7 @@ use Charm\Parsing\{
     Grammar
 };
 use Charm\Parsing\Error\CustomError;
+use Charm\Parsing\Error\State\CommittedError;
 use Charm\Parsing\Clause\OrderedChoice\{
     PreparedClause,
     Result
@@ -156,8 +157,14 @@ class OrderedChoice extends NonTerminal {
                 $result[] = $start->value;
             }
             $length = count($prep->clause);
+            $committed = false; // passed an `@`: a later failure is a parse error, not a reason to try something else
             for ($i = 1; $i < $length; $i++) {
                 $subClause = $prep->clause[$i];
+
+                if ($subClause instanceof Commit) {
+                    $committed = true;
+                    continue;
+                }
 
                 if ($subClause->getModifier() === Clause::NONE && $subClause instanceof Identifier && $subClause->getIdentifier() === $this->ruleName) {
                     $match = $this->lrParse($state, $prep->precedence, $prep->rightAssoc);
@@ -167,6 +174,9 @@ class OrderedChoice extends NonTerminal {
                         $match = $match->value;
                     } else {
                         //echo $prefix()." - not a match\n";
+                        if ($committed) {
+                            throw new CommittedError($state, $prep->clause, $subClause);
+                        }
                         $result = null;
                         goto done;
                     }
@@ -183,6 +193,9 @@ class OrderedChoice extends NonTerminal {
 
                 if ($match === Signal::MISS) {
                     //echo $prefix()." - not a match\n";
+                    if ($committed) {
+                        throw new CommittedError($state, $prep->clause, $subClause);
+                    }
                     $result = null;
                     goto done;
                 } elseif ($match === Signal::HIT) {

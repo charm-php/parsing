@@ -284,9 +284,10 @@ private function fail(string $expected, bool $committed = false): never
 }
 ```
 
-Every terminal that fails records the offset it failed at (and what it expected)
-in `$maxOffset`, so the message points at the deepest failure rather than the goal
-rule, with the same line and column the interpreter reports. `$found` is the character in single
+Every terminal that fails records the offset it failed at and what it expected
+(`$maxOffset`, `$expected`: the distinct things expected at that offset, joined with " or "), so the message points at the deepest failure rather than the goal
+rule and lists every alternative that was possible there; the description of a described rule stands for the
+terminals inside it (`$shield`), with the same line and column the interpreter reports. `$found` is the character in single
 quotes, `\xNN` for non-printable bytes, or `end of input`. Line and column are
 recomputed from the source on failure. See
 [Errors and debugging](errors-and-debugging.md).
@@ -336,6 +337,7 @@ charm-compile - [options]              Read grammar from stdin
 | `-e` | `--extends <class>` | `baseClass` compile option. |
 | `-i` | `--implements <a,b>` | `implements` compile option, comma separated. |
 | `-t` | `--template <file>` | `template` compile option. |
+| `-T` | `--target <target>` | `php` (default), `c`, `js` or `python`. The other targets generate a standalone C99, Node.js (CommonJS) or Python 3 parser that returns the same tree, from a grammar without snippets or with [portable snippets](../REFERENCE.md#portable-snippets). `-c` is the C identifier prefix; `-o x.c` also writes `x.h`. Everything about them is in [Portable targets](../REFERENCE.md#portable-targets-c-javascript-python). |
 | `-q` | `--quiet` | Suppress the progress lines on stderr. |
 | `-h` | `--help` | Print usage and exit 0. |
 
@@ -394,6 +396,14 @@ set, the grammar is compiled and `eval('?>' . $code)`d as
 `CompiledParser_{n}_{hash}` instead of being interpreted. That is the quick way
 to check that a grammar compiles to the behaviour you expect. See
 [Getting started](getting-started.md).
+
+## Portable targets
+
+`charm-compile --target=c|js|python` does not use `GrammarCompiler`. `Charm\Parsing\Compiler\Portable\Program` lowers the grammar to
+integer tables (the decisions the PHP compiler makes from the grammar - collapse, spread depth, precedence, first bytes of a rule -
+are made once, there), `RegexCompiler` turns each regex into bytecode, and `CGenerator`, `JsGenerator` and `PythonGenerator` write the tables
+into a file that also contains the engine (`src/Compiler/Portable/runtime/`). The engine implements the semantics of the PHP compiled parser, and
+`charm-tests/support/targets.php` runs every conformance row through it. See [REFERENCE.md](../REFERENCE.md#portable-targets-c-javascript-python).
 
 ## Grammar optimizers
 

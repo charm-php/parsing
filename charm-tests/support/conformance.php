@@ -46,8 +46,9 @@ function conformance_outcome(callable $run, bool $position): mixed {
 function conformance_run(array $args, bool $position = false, array $state = []): array {
     static $compiled = [];
     [$grammar, $input] = $args;
+    $detail = null; // the compiled parser's outcome in full, for the portable targets
     $interpreted = conformance_outcome(fn() => \Charm\cpeg_parse($grammar, $input, $state), $position);
-    $compiledResult = conformance_outcome(function () use (&$compiled, $grammar, $input, $state) {
+    $compiledResult = conformance_outcome(function () use (&$compiled, $grammar, $input, $state, &$detail) {
         if (!isset($compiled[$grammar])) {
             $className = 'ConformanceParser_' . count($compiled) . '_' . substr(md5($grammar), 0, 8);
             $g = (new GrammarParser())->parse((new GrammarPreprocessor())->process($grammar), 'test');
@@ -55,9 +56,21 @@ function conformance_run(array $args, bool $position = false, array $state = [])
             $compiled[$grammar] = $className;
         }
         $parser = new $compiled[$grammar]();
-        $result = $parser->parse($input, $state);
-        return $result === \Charm\Parsing\Signal::HIT ? null : $result;
+        try {
+            $result = $parser->parse($input, $state);
+        } catch (\RuntimeException $e) {
+            if (isset($e->committed, $e->sourceLine)) {
+                $detail = ['err', $e->committed, $e->sourceLine, $e->sourceColumn, $e->offset, $e->found, $e->expected];
+            }
+            throw $e;
+        }
+        $result = $result === \Charm\Parsing\Signal::HIT ? null : $result;
+        $detail = ['ok', $result];
+        return $result;
     }, $position);
+    if ($detail !== null && $state === []) {
+        $compiledResult = conformance_targets($grammar, $input, $detail, $compiledResult);
+    }
     return [$interpreted, $compiledResult];
 }
 
@@ -74,4 +87,29 @@ function both(mixed $v): array {
 /** Like conformance_case, but a parse failure is reported as 'ERROR@line:column' (1-based, byte column). */
 function conformance_position(array $args): array {
     return conformance_run($args, true);
+}
+
+
+/**
+ * Run the row through the portable targets (C, JavaScript, Python). A difference from the PHP compiled parser
+ * is appended to the compiled outcome, so the row fails and shows it; rows with snippets are skipped.
+ */
+function conformance_targets(string $grammarText, string $input, array $php, mixed $compiledResult): mixed {
+    require_once __DIR__ . '/targets.php';
+    static $parsed = [];
+    $g = $parsed[$grammarText] ??= (new GrammarParser())->parse((new GrammarPreprocessor())->process($grammarText), 'test');
+    $problems = [];
+    foreach (targets_enabled() as $target) {
+        $t = targets_run($target, $grammarText, $g, $input);
+        if ($t[0] === 'skip') {
+            targets_log("$target skip");
+            continue;
+        }
+        $diff = targets_compare($target, $php, $t);
+        targets_log("$target " . ($diff === null ? 'pass' : 'FAIL ' . $diff));
+        if ($diff !== null) {
+            $problems[] = $diff;
+        }
+    }
+    return $problems ? [$compiledResult, 'TARGET MISMATCH', $problems] : $compiledResult;
 }

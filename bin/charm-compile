@@ -60,6 +60,7 @@ $options = [
     'template' => null,
     'help' => false,
     'quiet' => false,
+    'target' => 'php',
 ];
 
 $args = array_slice($argv, 1);
@@ -72,6 +73,10 @@ for ($i = 0; $i < count($args); $i++) {
         $options['help'] = true;
     } elseif ($arg === '-q' || $arg === '--quiet') {
         $options['quiet'] = true;
+    } elseif ($arg === '-T' || $arg === '--target') {
+        $options['target'] = $args[++$i] ?? '';
+    } elseif (str_starts_with($arg, '--target=')) {
+        $options['target'] = substr($arg, 9);
     } elseif ($arg === '-o' || $arg === '--output') {
         $options['output'] = $args[++$i] ?? null;
     } elseif ($arg === '-c' || $arg === '--class') {
@@ -110,6 +115,9 @@ Options:
   -e, --extends <class>   Base class to extend
   -i, --implements <if>   Interface(s) to implement (comma-separated)
   -t, --template <file>   Custom template file for code generation
+  -T, --target <target>   php (default), c, js or python: a standalone parser in that language. The
+                          non-PHP targets accept snippet-free grammars and portable snippets only; -c is the
+                          C identifier prefix / module name, -o the output file (C writes a .c and a .h)
   -q, --quiet             Suppress informational messages
   -h, --help              Show this help message
 
@@ -163,6 +171,7 @@ if ($options['input'] === '-') {
     $grammarText = file_get_contents($options['input']);
     $grammarName = basename($options['input'], '.peg');
     $grammarName = basename($grammarName, '.grammar');
+    $grammarName = basename($grammarName, '.cpeg');
 }
 
 // Determine class name
@@ -189,6 +198,52 @@ try {
 } catch (\Exception $e) {
     fwrite(STDERR, "Error parsing grammar: " . $e->getMessage() . "\n");
     exit(1);
+}
+
+// The portable targets: C, JavaScript, Python
+if ($options['target'] !== 'php') {
+    if (!in_array($options['target'], ['c', 'js', 'python'], true)) {
+        fwrite(STDERR, "Error: Unknown target '{$options['target']}' (php, c, js or python).\n");
+        exit(1);
+    }
+    $name = $options['class'] ?? (strtolower(preg_replace('/[^a-zA-Z0-9_]/', '_', $grammarName)) ?: 'parser');
+    if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $name)) {
+        fwrite(STDERR, "Error: Invalid name: $name\n");
+        exit(1);
+    }
+    try {
+        $program = \Charm\Parsing\Compiler\Portable\Program::fromGrammar($grammar);
+    } catch (\Charm\Parsing\Compiler\Portable\UnsupportedGrammar $e) {
+        fwrite(STDERR, "Error: this grammar cannot be compiled to the {$options['target']} target: " . $e->getMessage() . "\n");
+        exit(1);
+    }
+    if ($options['target'] === 'c') {
+        if (!$options['output'] || !preg_match('/\.c$/', $options['output'])) {
+            fwrite(STDERR, "Error: the c target writes two files; give the .c file with -o (the .h is written next to it).\n");
+            exit(1);
+        }
+        $files = (new \Charm\Parsing\Compiler\Portable\CGenerator())->generate($program, $name, basename($options['output'], '.c') . '.h');
+        $outputs = [$options['output'] => $files['c'], preg_replace('/\.c$/', '.h', $options['output']) => $files['h']];
+    } elseif ($options['target'] === 'js') {
+        $outputs = [$options['output'] ?? '-' => (new \Charm\Parsing\Compiler\Portable\JsGenerator())->generate($program, $name)];
+    } else {
+        $outputs = [$options['output'] ?? '-' => (new \Charm\Parsing\Compiler\Portable\PythonGenerator())->generate($program, $name)];
+    }
+    foreach ($outputs as $file => $code) {
+        if ($file === '-') {
+            echo $code;
+            continue;
+        }
+        if (!is_dir(dirname($file)) && !mkdir(dirname($file), 0755, true)) {
+            fwrite(STDERR, "Error: Could not create directory: " . dirname($file) . "\n");
+            exit(1);
+        }
+        file_put_contents($file, $code);
+        if (!$options['quiet']) {
+            fwrite(STDERR, "Written to: $file (" . strlen($code) . " bytes)\n");
+        }
+    }
+    exit(0);
 }
 
 // Compile

@@ -21,6 +21,7 @@ Contents: [Grammar file](#grammar-file) | [Terminals](#terminals) | [Operators](
 [Left recursion and precedence](#left-recursion-and-precedence) | [Snippets](#snippets) |
 [Pragmas and directives](#pragmas-and-directives) | [Token mode](#token-mode) |
 [Template rules](#template-rules) | [Errors](#errors) | [PHP API](#php-api) | [CLI](#cli) |
+[Portable targets: C, JavaScript, Python](#portable-targets-c-javascript-python) | [Portable snippets](#portable-snippets) |
 [Performance](#performance) | [Licence](#licence)
 
 ---
@@ -356,7 +357,8 @@ global ones.
 | `$context` | the whole collected array, names and numbers | yes | yes |
 | `$state` | array shared by all snippets of one parse | yes | yes |
 | `$HIT`, `$MISS` | `Signal::HIT`, `Signal::MISS` | yes | yes |
-| `$_offset` | byte offset where the rule started | no | yes |
+| `$_offset` | byte offset where the rule that contains the snippet started (for a left-recursive rule: where the whole expression started) | yes | yes |
+| `$_line`, `$_column` | 1-based line and column (bytes) of `$_offset` | yes | yes |
 
 Reading a variable that does not exist throws `SnippetError` ("Undefined variable $n. Available variables are
 ...") in both engines; use `$_5 ?? null` or `isset($_5)` to probe. Named captures take no `$_N` slot.
@@ -463,9 +465,12 @@ messages count the column from 0.
 | `Charm\Parsing\Error\State\ParseError` | the grammar text is wrong (message ends `on file:line:col`) |
 | `\LogicException` | unknown pragma; a token clause under the interpreter |
 
-`catch (\RuntimeException)` covers the first four. A compiled `expected` is the first terminal tried at the
-failing offset, or the description of a described rule that was entered there: describe the rules users will
-see, and know that a regex without a description is quoted as its source. See
+`catch (\RuntimeException)` covers the first four. A compiled `expected` lists **every** terminal that failed at the
+failing offset, joined with `" or "` (`expected "b" or "c"`), and the description of every described rule that
+was entered there; a described rule's description stands for the terminals inside it, so describing the rules
+users will see keeps the list short. A regex without a description is quoted as its source. The interpreter
+appends the same list to its message (`..., unexpected "x", expected "b" or "c"`); `CommittedError` names rules by
+their description and counts lines from 1. See
 [errors and debugging](docs/errors-and-debugging.md).
 
 ---
@@ -477,6 +482,8 @@ see, and know that a regex without a description is quoted as its source. See
 | `Charm\cpeg_parse(string $grammar, string $subject, array $initialState = []): mixed` | interpret `$grammar` (cached, 20 grammars) on `$subject`; templates expanded; with the environment variable `CHARM_COMPILED` set it compiles and `eval()`s instead |
 | `Charm\cpeg_create(string $grammar)` | the parser object behind it |
 | `class P extends Charm\Parser { const GRAMMAR = '...'; const GOAL = 'Rule'; const OPTIONS = [...]; }` | a reusable interpreted parser; `->parse($source, $filename, $lineOffset = 0, $columnOffset = 0, $initialState = [])`; no template expansion |
+| `new Charm\Parsing\CPEGParser(Grammar $grammar, ?string $goal = null, ?Options $options = null)` | an interpreter over a `Grammar` you built; `->parse($source, $filename, $lineOffset = 0, $columnOffset = 0, $initialState = [])`. `$filename` and the offsets are not used by the interpreter's messages |
+| `Charm\Parsing\Options` | `trace` (bool, false), `auto_tokenize` (bool, true), `base_namespace` (string, ''); see [errors and debugging](docs/errors-and-debugging.md#parser-options) |
 | `(new Charm\Parsing\GrammarParser())->parse($text, $filename): Grammar` | read a grammar yourself (no templates) |
 | `(new Charm\Parsing\Compiler\GrammarCompiler())->compile($grammar, $className, $options): string` | generate a class; options `namespace`, `implements` (array), `baseClass`, `template` (path), `globals` (seed array) |
 | `GrammarCompiler::compileToFile($grammar, $className, $path, $options)` | the same, written to a file |
@@ -498,6 +505,7 @@ the file name without `.peg` or `.grammar`, capitalised, plus `Parser`: `expr.pe
 | `-e`, `--extends <class>` | base class |
 | `-i`, `--implements <a,b>` | interfaces, comma separated |
 | `-t`, `--template <file>` | custom code-generation template, replacing the built-in one |
+| `-T`, `--target <t>` | `php` (default), `c`, `js` or `python`: see [Portable targets](#portable-targets-c-javascript-python) |
 | `-q`, `--quiet` | no progress messages |
 | `-h`, `--help` | usage, exit 0 (no arguments prints it and exits 1) |
 
@@ -520,12 +528,96 @@ It does not expand template rules and has no flag for the `globals` option.
 * The first-byte `switch` and the single-regex optimization are **off for a grammar that contains `@`**,
   because an alternative they skip might have been a committed error. Measure before dropping commits for
   speed; in the tutorial grammar the difference is below the noise.
+* Compiled parsers only guard a rule call on its first byte when the rule has a description (the description is
+  what is expected there); the old first-byte `switch` over alternatives is gone, so every alternative reports what it expected.
 * `Charm\Parsing\Optimizer\ConsecutiveTerminalsOptimizer` (opt-in, through `OptimizerPipeline`) merges adjacent
   literal alternatives into one regex.
 * Do not parse the same operand twice. `Pred = Sum "<" Sum | Sum "=" Sum | Sum` re-parses `Sum` for every
   alternative; with `Prim = /[0-9]+/ | "(" Pred ")"` the cost multiplies at every level of nesting. Eight nested
   parentheses took 225 ms compiled and 49 s interpreted, against 0.9 ms and 6.5 ms for the factored form
   `Pred = Sum (("<" | "=") Sum)?`. Factor the shared prefix out and return the tail.
+
+---
+
+## Portable targets: C, JavaScript, Python
+
+`charm-compile grammar.cpeg --target=c|js|python -o parser.<ext>` generates a standalone parser in that language
+that returns **exactly the tree the PHP parsers return** for the same grammar (the conformance suite runs every
+row through both PHP engines and all three targets, and compares trees, error positions, `committed`, `found` and
+`expected`). A generated file is the same small engine in each language plus the grammar as integer tables; its header says it is covered
+by the output exception ([Licence](#licence)).
+
+What a target accepts: any string-mode grammar whose snippets are [portable](#portable-snippets) (a grammar without snippets
+always qualifies). A grammar with another snippet, or in token mode (`@lexer`), is rejected at generation time with
+the rule and the snippet in the message; so is a regex outside the subset below. Supported and identical to the PHP engines: ordered choice, predicates,
+repetition (empty iterations stop), labels, spread (two levels, null skipping), the single-value collapse rule,
+`%silent`, `%prec`/`%assoc`/`@prec`, Pratt parsing of direct left recursion, seed growing for indirect left
+recursion, `@`, `"x"i`, and error reporting (furthest failure, expected set, 1-based line and byte column).
+
+| | C | JavaScript | Python |
+|---|---|---|---|
+| Output | `parser.c` + `parser.h` (`-o x.c` writes `x.h`; `-c` is the identifier prefix) | one CommonJS module (`-c` is only a label) | one module |
+| Call | `r = P_parse(src, len, &err)`; `P_result_value(r)`; `P_result_free(r)` | `parse(stringOrBuffer)` | `parse(str_or_bytes)` |
+| Tree | tagged `P_value`: NULL, STRING (slice of the source, not NUL-terminated), LIST, MAP (ordered, keys are labels or integers), INT, BOOL | `null`, string, array, plain object, number, boolean | `None`, `str`, `list`, `dict` (insertion order), `int`, `bool` |
+| Error | `P_error` (`kind`, `committed`, `offset`, `line`, `column`, `expected`, `found`, `message`) | `ParseError` (`committed`, `sourceLine`, `sourceColumn`, `offset`, `expected`, `found`) | `ParseError` (`committed`, `source_line`, `source_column`, ...) |
+| Extras | `P_get(map, "label")`, `P_to_json(value, buf, cap)`; no global state, reentrant; C99, warning-free with `-Wall -Wextra` under gcc and as C++ | | |
+
+Details that differ from PHP, all deliberate:
+
+* **Offsets and columns are bytes of the UTF-8 input in every target** (JavaScript and Python convert strings to UTF-8 first).
+* **JavaScript object key order**: integer-like keys (`"0"`, `"1"`, the unlabelled values of a map) are listed before labels,
+  because that is how JavaScript orders object keys. Everything else, including labelled values, is in PHP's order.
+* **Nesting depth**: rule calls nest at most 2500 deep in C (`-DP_MAX_DEPTH=n`), 1200 in JavaScript and Python; deeper input is an error
+  (`P_ERR_DEPTH`, `Error: nesting too deep`, `RecursionError`) instead of a crash.
+* **Invalid UTF-8**: a regex terminal does not match across an invalid sequence (PHP's `preg_match` with `u` fails the whole match).
+* The C tree owns an arena: free it once with `P_result_free`; the source buffer must outlive the tree.
+
+**Regular expressions: decision.** C has no PCRE, and generated parsers must be standalone, so the generator compiles each regex
+to bytecode for a small backtracking matcher (about 150 lines per language, the same program in all three) instead of depending on PCRE2
+or on the host language's regex engine (which differ from PCRE for `\w`, `\s`, `\b` and case folding). Matching is anchored and
+UTF-8 aware like PHP's `u` modifier, which also turns on Unicode properties: `\w \d \s \b` and `[[:alpha:]]` use PHP's own PCRE
+tables, computed at generation time, and `"é"i` / `(?i:...)` use Unicode simple case folding (`k` also matches U+212A).
+Supported: literals and escapes (`\n \r \t \f \e \a \0 \xHH \x{H..}`, escaped punctuation), `.`, classes with ranges, negation,
+`\d \w \s \h \v` (and negations), `\p{..}`/`\P{..}`, POSIX `[:alpha:]`; alternation; groups (capturing groups act as
+non-capturing: only the whole match is returned); `* + ? {n} {n,} {n,m}` greedy, lazy and possessive; atomic groups `(?>..)`; lookahead
+`(?=..) (?!..)`; lookbehind `(?<=..) (?<!..)` of one fixed length; inline flags `i s m`; `(?#..)`; `^ $ \A \z \Z \b \B`.
+Rejected at generation time with the regex in the message: back references, recursion and subroutine calls, conditionals, `\R \X \K \G \Q..\E`,
+the `x`, `U`, `J` flags, branch reset, verbs, variable-length lookbehind, repeat counts above 1000.
+
+**Performance** (gcc -O2, this machine; the engine does no memoisation, like the PHP parsers): the SkeinLang grammar parses its example files
+(78 to 811 bytes) in 0.08 to 0.32 ms each and a 5 KB file in 1.8 ms in C, 5 ms in Node and 98 ms in Python; a 5 KB JSON document with a
+snippet-free grammar takes 0.43 ms in C, against 1.2 ms for the PHP compiled parser and 8.7 ms for the interpreter.
+
+---
+
+## Portable snippets
+
+The C, JavaScript and Python targets cannot run PHP, but they run the declarative subset below, which is enough to build tagged nodes with
+source positions. A portable snippet is **one `return` of one expression**:
+
+```text
+expr    ::= value | "[" element ("," element)* ","? "]" | $label "??" default
+element ::= expr | 'key' "=>" expr                 string keys only; a keyless element gets the next integer key
+value   ::= 'text' | "text" | 123 | -123 | true | false | null
+          | $label                                 a labelled value of the same sequence (must exist)
+          | $_offset                               byte offset where the enclosing rule started
+          | $_line | $_column                      1-based line and column (bytes) of $_offset
+default ::= value | "[" "]"                        not a variable
+```
+
+* `"text"` may use only the escapes `\n \r \t \\ \" \$` and no interpolation; integers are decimal and at most 2147483647.
+* `$label ?? default` yields the default when the label's value is null (an optional part that did not match) or the label is absent.
+* `$_offset` is the byte offset where the **rule** containing the snippet started, in both PHP engines and all targets; for a left-recursive
+  rule every operator node of a chain shares the offset of the chain's first operand. `$_line`/`$_column` are derived from it.
+* Everything else is rejected for the targets with the rule and the snippet in the message (`$_0`, `$context`, `$state`, `$HIT`/`$MISS`, calls,
+  operators, assignments, several statements, floats, interpolation) and keeps working in PHP.
+* The tree gets `int` and `bool` values from these snippets; a snippet always succeeds with its value (it cannot return `$MISS`).
+
+```text
+E = l:E _ op:"+" _ r:T <? return ['binary', $op, $l, $r, '_offset' => $_offset]; ?> | T
+T = n:/[0-9]+/ <? return ['number', $n, '_offset' => $_offset]; ?>        "1 + 2"
+=> ["binary","+",["number","1","_offset":0],["number","2","_offset":4],"_offset":0]
+```
 
 ---
 
@@ -536,5 +628,5 @@ It does not expand template rules and has no flag for the `globals` option.
 `charm-compile` generates from your grammar is yours.** It, including the template text and runtime support
 copied into it, is not covered by the GPL, and you may distribute it under any terms. The exception also covers
 the interfaces and lexer classes a generated token-mode parser needs at run time. It does not extend to a
-modified compiler or library. Generated files say so in their header. Running the interpreter
+modified compiler or library. Generated files (PHP, C, JavaScript, Python) say so in their header. Running the interpreter
 (`cpeg_parse()`) uses the library itself, so it is the compiled output that carries the exception.

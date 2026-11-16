@@ -23,6 +23,7 @@ out("\n");
 
 $passed = 0;
 $failed = 0;
+@unlink(sys_get_temp_dir() . '/charm-targets-stats.log'); // rows run through the portable targets (C, JavaScript, Python)
 $testFiles = glob(__DIR__.'/charm-tests/*.php');
 if ($filter !== null) {
     $testFiles = array_filter($testFiles, function($file) use ($filter) {
@@ -174,6 +175,17 @@ wer");
     }
 }
 
+$targetStats = [];
+foreach (@file(sys_get_temp_dir() . '/charm-targets-stats.log', FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+    [$target, $status] = explode(' ', $line, 3);
+    $targetStats[$target][$status] = ($targetStats[$target][$status] ?? 0) + 1;
+}
+foreach ($targetStats as $target => $st) {
+    $pass = $st['pass'] ?? 0;
+    $fail = $st['FAIL'] ?? 0;
+    $skip = $st['skip'] ?? 0;
+    out("<!white>Target <!bwhite>$target<!>: " . ($pass + $fail) . " rows run, $pass passed, $fail failed; $skip skipped (snippets outside the portable subset or token mode)<!>\n");
+}
 out("<!bwhite>Summary: $passed passed / $failed failed<!>\n");
 exit($failed > 0 ? 1 : 0);
 

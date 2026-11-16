@@ -12,7 +12,12 @@ class CommittedError extends ParseError {
 
     public function __construct(State $state, ClauseInterface $sequence, ClauseInterface $failed) {
         $rule = $sequence->getRule();
-        $where = $rule !== null ? ' in '.$rule->getRuleName() : '';
-        parent::__construct($state, 'Expected '.$failed->toGrammarString().$where.' on :location, found :source_description');
+        $where = $rule !== null ? ' in '.($rule->getDescription() ?? $rule->getRuleName()) : '';
+        // a rule reference is described by its rule's description, if it has one
+        $what = $failed->toGrammarString();
+        if ($failed instanceof \Charm\Parsing\Clause\Identifier && $failed->getTargetClause() !== null) {
+            $what = $failed->getTargetClause()->getRule()->getDescription() ?? $what;
+        }
+        parent::__construct($state, 'Expected '.$what.$where.' on :location, found :source_description');
     }
 }

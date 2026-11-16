@@ -38,6 +38,17 @@ class Rule implements \JSONSerializable {
      * seed), and the rule is re-parsed until the match stops getting longer.
      */
     public function parse(State $state, array $context) {
+        // snippets can read where the rule started (`$_offset`, `$_line`, `$_column`)
+        $previousStart = $state->extra['ruleStart'] ?? null;
+        $state->extra['ruleStart'] = $state->offset;
+        try {
+            return $this->parseRule($state, $context);
+        } finally {
+            $state->extra['ruleStart'] = $previousStart;
+        }
+    }
+
+    private function parseRule(State $state, array $context) {
         if (!$this->grown) {
             return $this->clause->parse($state, $context);
         }

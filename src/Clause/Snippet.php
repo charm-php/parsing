@@ -47,12 +47,14 @@ class Snippet extends Terminal {
     protected $invoker;             // the compiled callback function
     protected $variables;           // the variables that the code tries to access
     protected ?string $snippetName = null;  // registry name assigned by Grammar
+    private bool $usesPosition = false;     // does the code read $_offset, $_line or $_column
 
     public function __construct(string $code, int $modifier, ?string $name, string $namespace='') {
         parent::__construct($modifier, $name);
         $this->namespace = rtrim($namespace, "\\")."\\";
         assert(trim($code)!=='');
         $this->originalSource = $code;
+        $this->usesPosition = (bool) preg_match('/\$_(offset|line|column)\b/', $code);
         $this->build();
     }
 
@@ -230,7 +232,18 @@ class Snippet extends Terminal {
         set_error_handler(\Closure::fromCallable([$this, 'exceptionErrorHandler']));
 
         try {
-            $ctx = new Snippet\Context($context + [
+            $position = [];
+            if ($this->usesPosition) {
+                // where the rule that contains the snippet started: byte offset, 1-based line and column (in bytes)
+                $start = $state->extra['ruleStart'] ?? 0;
+                $source = (string) $state->source;
+                $position['_offset'] = $start;
+                if (str_contains($this->originalSource, '$_line') || str_contains($this->originalSource, '$_column')) {
+                    $position['_line'] = 1 + substr_count($source, "\n", 0, $start);
+                    $position['_column'] = $start - (($nl = strrpos(substr($source, 0, $start), "\n")) === false ? 0 : $nl + 1) + 1;
+                }
+            }
+            $ctx = new Snippet\Context($context + $position + [
                 'context' => $context,
                 'state' => &$state->globals,
                 'HIT' => Signal::HIT,
@@ -285,6 +298,13 @@ class Snippet extends Terminal {
      */
     public function setSnippetName(string $name): void {
         $this->snippetName = $name;
+    }
+
+    /**
+     * The PHP code as written in the grammar (between `<?` and `?>`).
+     */
+    public function getOriginalSource(): string {
+        return $this->originalSource;
     }
 
     /**

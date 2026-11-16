@@ -132,7 +132,47 @@ class CPEGParser implements ParserInterface {
             $endDesc = json_encode($source[$endOffset]);
         }
 
-        throw new ParseError($state->source, $failingNode->offset, "Failed parsing $startDesc on :location, unexpected $endDesc");
+        $expected = $this->expectedAt($trace, $endOffset);
+        throw new ParseError($state->source, $failingNode->offset, "Failed parsing $startDesc on :location, unexpected $endDesc"
+            . ($expected !== [] ? ', expected ' . implode(' or ', $expected) : ''));
+    }
+
+    /**
+     * What was expected where the parse failed: the descriptions of the described rules entered at that offset,
+     * and the terminals that failed there outside of such a rule (a description stands for what its terminals
+     * expect). Same idea as the `expected` of a compiled parser's ParseError.
+     *
+     * @return list<string>
+     */
+    private function expectedAt(Trace $trace, int $offset): array {
+        $expected = [];
+        foreach ($trace->visitPreOrder() as $node) {
+            if ($node->offset !== $offset) {
+                continue;
+            }
+            $clause = $node->clause;
+            if ($clause->getParent() === null) {
+                $rule = $clause->getRule();
+                if ($rule->getDescription() !== null && $clause->getMinByteLength() > 0) {
+                    $expected[] = $rule->getDescription();
+                }
+                continue;
+            }
+            if ($node->result !== Signal::MISS || !$clause->isTerminal() || $clause->hasAndPredicate() || $clause->hasNotPredicate()
+                || $clause instanceof Clause\Commit || $clause instanceof Clause\Nothing || $clause instanceof Clause\SOF) {
+                continue;
+            }
+            // inside a described rule that was entered at this offset?
+            for ($ancestor = $node->parent; $ancestor !== null; $ancestor = $ancestor->parent) {
+                $c = $ancestor->clause;
+                if ($ancestor->offset === $offset && $c->getParent() === null && $c->getRule()->getDescription() !== null && $c->getMinByteLength() > 0) {
+                    continue 2;
+                }
+            }
+            $expected[] = $clause instanceof Clause\EOF ? 'end of input'
+                : ($clause instanceof Clause\Text ? (json_encode($clause->getText()) ?: '"' . $clause->getText() . '"') . ($clause->isCaseInsensitive() ? 'i' : '') : $clause->asString());
+        }
+        return array_values(array_unique($expected));
     }
 
     private function dumpTrace(string $source, Trace $trace): string {

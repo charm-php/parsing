@@ -376,6 +376,11 @@ PHP;
             $this->emitter->openBlock();
             // Make $state available as alias to $this->globals
             $this->emitter->line('$state = &$this->globals;');
+            if (preg_match('/\$_(line|column)\b/', $method['code'])) {
+                // positions derived from $_offset, 1-based, columns in bytes (like ParseError::$sourceLine/$sourceColumn)
+                $this->emitter->line('$_line = 1 + \substr_count($this->source, "\n", 0, $_offset);');
+                $this->emitter->line('$_column = $_offset - ((($_nl = \strrpos(\substr($this->source, 0, $_offset), "\n")) === false) ? 0 : $_nl + 1) + 1;');
+            }
             if (strpos($method['code'], '$MISS') !== false) {
                 $this->emitter->line('$MISS = ' . $this->signalMiss() . ';');
             }
@@ -418,15 +423,39 @@ PHP;
             $this->emitter->openBlock();
             $this->emitter->line('$_offset = $this->offset;');
             // Only track expectations for rules with descriptions that must consume input
-            if ($rule->getDescription() !== null && $clause->getMinByteLength() > 0) {
-                $this->emitter->line("\$this->expect(" . var_export($ruleName, true) . ");");
+            $shield = $rule->getDescription() !== null && $clause->getMinByteLength() > 0;
+            if ($shield) {
+                $this->emitShieldOpen($ruleName);
             }
             $this->emitter->line();
             $this->generateClauseCode($clause, '$_result', true);
             $this->emitter->line();
             $this->emitter->line('return $_result;');
+            if ($shield) {
+                $this->emitShieldClose();
+            }
             $this->emitter->closeBlock();
         }
+    }
+
+    /**
+     * Entering a described rule: its description is expected at this offset, and replaces what the terminals
+     * inside it expect at the same offset (see the `shield` property of the template).
+     */
+    private function emitShieldOpen(string $ruleName): void
+    {
+        $this->emitter->line('$_shield = $this->shield;');
+        $this->emitter->line("\$this->expect(" . var_export($ruleName, true) . ");");
+        $this->emitter->line('$this->shield = $this->offset;');
+        $this->emitter->line('try {');
+        $this->emitter->indent();
+    }
+
+    private function emitShieldClose(): void
+    {
+        $this->emitter->dedent()->line('} finally {');
+        $this->emitter->indent()->line('$this->shield = $_shield;');
+        $this->emitter->closeBlock();
     }
 
     /**
@@ -495,21 +524,23 @@ PHP;
         // Main Pratt method
         $this->emitter->line("private function $methodName(int \$_minPrec = 0): mixed");
         $this->emitter->openBlock();
-        if ($rule->getDescription() !== null && $clause->getMinByteLength() > 0) {
-            $this->emitter->line("\$this->expect(" . var_export($ruleName, true) . ");");
+        $shield = $rule->getDescription() !== null && $clause->getMinByteLength() > 0;
+        if ($shield) {
+            $this->emitShieldOpen($ruleName);
         }
 
         // Parse primary (left-hand side)
+        $this->emitter->line('$_offset = $this->offset;');
         $this->emitter->line('$_left = $this->' . $methodName . 'Primary();');
         $this->emitter->line('if ($_left === ' . $this->signalMiss() . ') {');
         $this->emitter->indent()->line('return ' . $this->signalMiss() . ';');
         $this->emitter->closeBlock();
         $this->emitter->line();
 
-        // Pratt loop
+        // Pratt loop ($_offset stays the rule's start, which is what snippets see; $_loop is where one iteration began)
         $this->emitter->line('while (true) {');
         $this->emitter->indent();
-        $this->emitter->line('$_offset = $this->offset;');
+        $this->emitter->line('$_loop = $this->offset;');
         $this->emitter->line('$_matched = false;');
         $this->emitter->line('$_prevLeft = $_left;');
         $this->emitter->line();
@@ -520,7 +551,7 @@ PHP;
             // consumed nothing (`E = E A? | ...`) would repeat forever: it ends the loop and is not taken
             $this->emitter->line('if ($_matched) {');
             $this->emitter->indent();
-            $this->emitter->line('if ($this->offset > $_offset) continue;');
+            $this->emitter->line('if ($this->offset > $_loop) continue;');
             $this->emitter->line('$_left = $_prevLeft;');
             $this->emitter->line('break;');
             $this->emitter->closeBlock();
@@ -534,6 +565,9 @@ PHP;
         $this->emitter->closeBlock();
         $this->emitter->line();
         $this->emitter->line('return $_left;');
+        if ($shield) {
+            $this->emitShieldClose();
+        }
         $this->emitter->closeBlock();
         $this->emitter->line();
 
@@ -731,7 +765,7 @@ PHP;
             if ($committed) {
                 $this->emitter->line('$this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
             } else {
-                $this->emitter->line('$this->offset = $_offset; break;');
+                $this->emitter->line('$this->offset = $_loop; break;');
             }
         };
         for ($i = 1; $i < count($parts); $i++) {
@@ -873,7 +907,7 @@ PHP;
     private function emitTerminalMiss(string $resultVar, string $expected): void
     {
         $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
-        $this->emitter->line('if ($this->offset > $this->maxOffset) { $this->maxOffset = $this->offset; $this->expected = ' . var_export($expected, true) . '; }');
+        $this->emitter->line('$this->miss($this->offset, ' . var_export($expected, true) . ');');
     }
 
     private function generateTextCode(Text $clause, string $resultVar): void
@@ -1019,7 +1053,7 @@ PHP;
         $this->emitter->line("$resultVar = " . $this->signalHit() . ";");
         $this->emitter->dedent()->line("} else {");
         $this->emitter->indent();
-        $this->emitter->line("\$this->expect('$');");
+        $this->emitter->line("\$this->miss(\$this->offset, 'end of input');");
         $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
         $this->emitter->closeBlock();
     }
@@ -1052,7 +1086,9 @@ PHP;
             $minByteLen = $targetClause->isOptional() ? 0 : $targetClause->getMinByteLength();
             $hasDescription = $targetRule->getDescription() !== null;
 
-            $firstBytes = $minByteLen > 0 ? $targetClause->getFirstBytes() : null;
+            // Only a described rule is guarded: its description is what it expects there. An undescribed rule has to
+            // run, so that the terminals it starts with are among the things expected
+            $firstBytes = $minByteLen > 0 && $hasDescription ? $targetClause->getFirstBytes() : null;
             if ($firstBytes !== null) {
                 // Only the first byte is checked here: if the rule would fail further in, it has to run
                 // so that the furthest failure offset (reported by fail()) is the same as when interpreted
@@ -1062,7 +1098,7 @@ PHP;
                 $ruleName = var_export($clause->getIdentifier(), true);
                 $this->emitter->line("if ($guard) {");
                 $this->emitter->indent();
-                $this->emitter->line("\$this->expect($ruleName);");
+                $this->emitter->line("\$this->missRule($ruleName);");
                 $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
                 $this->emitter->dedent()->line("} else {");
                 $this->emitter->indent();
@@ -1117,7 +1153,7 @@ PHP;
         if ($hasPredicate) {
             // A predicate that fails leaves no terminal failure behind, but the interpreter still
             // reports the sequence's start as a failure position
-            $this->emitter->line("if ($tempOffset > \$this->maxOffset) { \$this->maxOffset = $tempOffset; \$this->expected = null; }");
+            $this->emitter->line("\$this->bump($tempOffset);");
         }
         if ($committed) {
             $this->emitter->line('$this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
@@ -1275,11 +1311,6 @@ PHP;
                 return;
             }
 
-            // Try switch-based dispatch if alternatives have disjoint first bytes
-            if ($this->canUseSwitchDispatch($clause)) {
-                $this->generateSwitchDispatchCode($clause, $resultVar);
-                return;
-            }
         }
 
         // Fall back to sequential alternatives. The first alternative that succeeds wins, even
@@ -1312,87 +1343,13 @@ PHP;
         foreach ($clause as $choice) {
             if ($choice->hasAndPredicate() || $choice->hasNotPredicate()) {
                 // see emitSequenceMiss(): a failed predicate leaves no terminal failure behind
-                $this->emitter->line("if ($tempOffset > \$this->maxOffset) { \$this->maxOffset = $tempOffset; \$this->expected = null; }");
+                $this->emitter->line("\$this->bump($tempOffset);");
                 break;
             }
         }
         $this->emitter->line("\$this->offset = $tempOffset;");
         $this->emitter->line("$resultVar = " . $this->signalMiss() . ";");
         $this->emitter->line("_choiceEnd{$counter}:");
-    }
-
-    private function canUseSwitchDispatch(OrderedChoice $clause): bool
-    {
-        $allBytes = '';
-        foreach ($clause as $choice) {
-            // An alternative that can succeed without consuming input (optional, `*`, a predicate,
-            // a nullable rule) must be tried in order, so it can't be dispatched on a byte
-            if ($choice->isOptional() || $choice->hasAndPredicate() || $choice->hasNotPredicate() || $choice->getMinByteLength() < 1) {
-                return false;
-            }
-            $firstBytes = $choice->getFirstBytes();
-            if ($firstBytes === null || $firstBytes === '') {
-                return false; // Unknown or empty first bytes
-            }
-            // Check for overlap with previous alternatives
-            for ($i = 0; $i < strlen($firstBytes); $i++) {
-                if (strpos($allBytes, $firstBytes[$i]) !== false) {
-                    return false; // Overlap detected
-                }
-            }
-            $allBytes .= $firstBytes;
-        }
-        return true;
-    }
-
-    private function generateSwitchDispatchCode(OrderedChoice $clause, string $resultVar): void
-    {
-        $counter = ++$this->tempVarCounter;
-
-        // Build byte-to-alternative mapping (use ord() as key to avoid PHP's numeric string conversion)
-        $byteToAlt = [];
-        foreach ($clause as $i => $choice) {
-            $firstBytes = $choice->getFirstBytes();
-            for ($j = 0; $j < strlen($firstBytes); $j++) {
-                $byteToAlt[ord($firstBytes[$j])] = [$i, $firstBytes[$j]];
-            }
-        }
-
-        $this->emitter->line("if (\$this->offset >= \$this->length) {");
-        $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, $clause->toGrammarString());
-        $this->emitter->dedent()->line('} else {');
-        $this->emitter->indent();
-
-        $this->emitter->line("switch (\$this->source[\$this->offset]) {");
-        $this->emitter->indent();
-
-        // Group bytes by alternative for cleaner output
-        $altToBytes = [];
-        foreach ($byteToAlt as $ord => [$altIndex, $byte]) {
-            $altToBytes[$altIndex][] = $byte;
-        }
-
-        foreach ($altToBytes as $altIndex => $bytes) {
-            foreach ($bytes as $byte) {
-                $escaped = var_export($byte, true);
-                $this->emitter->line("case $escaped:");
-            }
-            $this->emitter->indent();
-            $choiceVar = '$_sw' . $counter . '_' . $altIndex;
-            $this->generateClauseCode($clause[$altIndex], $choiceVar);
-            $this->emitter->line("$resultVar = $choiceVar;");
-            $this->emitter->line("break;");
-            $this->emitter->dedent();
-        }
-
-        $this->emitter->line("default:");
-        $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, $clause->toGrammarString());
-        $this->emitter->dedent();
-
-        $this->emitter->dedent()->line('}');
-        $this->emitter->closeBlock();
     }
 
     private function generateOptionalCode(Clause $clause, string $resultVar): void
