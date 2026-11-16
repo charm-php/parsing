@@ -170,7 +170,7 @@ class CPEGParser implements ParserInterface {
                 }
             }
             $expected[] = $clause instanceof Clause\EOF ? 'end of input'
-                : ($clause instanceof Clause\Text ? (json_encode($clause->getText()) ?: '"' . $clause->getText() . '"') . ($clause->isCaseInsensitive() ? 'i' : '') : $clause->asString());
+                : ($clause instanceof Clause\Text ? (json_encode($clause->getText(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '"' . $clause->getText() . '"') . ($clause->isCaseInsensitive() ? 'i' : '') : $clause->asString());
         }
         return array_values(array_unique($expected));
     }

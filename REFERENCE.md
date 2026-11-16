@@ -14,7 +14,7 @@ S = "a" "b"      "ab"  =>  ["a","b"]
 ```
 
 `ERROR@1:2` means the parse fails and the generated parser reports line 1, column 2 (columns count bytes from
-1; the interpreter's own message counts the column from 0).
+1; the interpreter now agrees).
 
 Contents: [Grammar file](#grammar-file) | [Terminals](#terminals) | [Operators](#operators) |
 [Values](#values) | [Choice, repetition, predicates, commit](#choice-repetition-predicates-and-commit) |
@@ -452,7 +452,7 @@ grammar as it is and reject `Name<Arg>`.
 terminal started (not where the alternative began): `S = "ab"` on `ax` is 1:1. `$` counts. **Predicates do
 not**: a predicate on a terminal (`&"b"`, `!"c"`) and the attempt that ends a repetition of a terminal (`"a"*`)
 are not positions. Columns are bytes; the compiled parser counts lines and columns from 1, the interpreter's
-messages count the column from 0.
+messages count it from 1 as well.
 
 **What is thrown.**
 

@@ -2,6 +2,11 @@
     "name": "charm/parsing",
     "description": "A PEG grammar parser, for parsing most context free grammar such as programming languages, database queries and mathematical expressions.",
     "type": "library",
+    "homepage": "https://github.com/charm-php/parsing",
+    "support": {
+        "source": "https://github.com/charm-php/parsing",
+        "issues": "https://github.com/charm-php/parsing/issues"
+    },
     "require-dev": {
         "phpunit/phpunit": "^9",
         "nikic/php-parser": "^5"

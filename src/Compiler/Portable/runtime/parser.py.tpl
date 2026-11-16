@@ -298,7 +298,13 @@ def _join_expected(p, off, fallback):
     return fallback if not p.exp or p.maxoff < off else ' or '.join(p.exp)
 
 
-def _commit_fail(p, rule):
+def _promote(p, mo, n):
+    if p.maxoff == mo and 0 < n < len(p.exp):
+        p.exp = p.exp[n:] + p.exp[:n]
+
+
+def _commit_fail(p, rule, mo, n):
+    _promote(p, mo, n)
     raise _CommitFail(max(p.off, p.maxoff), _join_expected(p, p.off, STR[RULES[rule * 12 + 3]]))
 
 
@@ -408,12 +414,13 @@ def _seq(p, n):
         if NODES[k * 6] == OP_SNIP:
             p.v = _eval(p, NODES[k * 6 + 3], ent)
             return VAL
+        xmo, xn = p.maxoff, len(p.exp)
         r = _ev(p, k)
         if r == MISS:
             if flags & SEQ_BUMP:
                 _bump(p, off0)
             if committed:
-                _commit_fail(p, rule)
+                _commit_fail(p, rule, xmo, xn)
             p.off = off0
             return MISS
         if r == HIT:
@@ -439,10 +446,11 @@ def _pratt_op(p, n, left):
         if NODES[k * 6] == OP_SNIP:
             p.v = _eval(p, NODES[k * 6 + 3], ent)
             return VAL
+        xmo, xn = p.maxoff, len(p.exp)
         r = _ev(p, k)
         if r == MISS:
             if committed:
-                _commit_fail(p, rule)
+                _commit_fail(p, rule, xmo, xn)
             p.off = off0
             return MISS
         if r == HIT:

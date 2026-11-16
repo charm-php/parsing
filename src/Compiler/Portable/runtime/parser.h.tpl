@@ -45,9 +45,9 @@ typedef struct @n@_error {
     size_t offset;          /* byte offset of the furthest failure */
     unsigned line;          /* 1-based */
     unsigned column;        /* 1-based, counted in bytes */
-    char expected[256];     /* what was expected at that offset: alternatives joined with " or " */
+    char expected[4096];    /* what was expected at that offset: alternatives joined with " or " (cut at 4095 bytes) */
     char found[16];         /* what was found: 'x', \xNN or "end of input" */
-    char message[512];      /* "Parse error at line L, column C: expected E, found F" */
+    char message[4200];      /* "Parse error at line L, column C: expected E, found F" */
 } @n@_error;
 
 /* Parse src[0..len). Returns NULL on failure and fills *err (err may be NULL). A parse does not have to

@@ -35,15 +35,15 @@ return [
     [ ['tree', $add, '1 + x'], both('ERROR@1:5') ],
 
     // committed errors: 1-based line and a rule's description instead of its name
-    [ ['message', 'S = "a" @ "b"', 'ac'], 'Expected "b" in S on parsed source:1:1, found string `c` on line 1 column 1' ],
-    [ ['message', "S = \"a\" \"\\n\" @ \"b\"", "a\nx"], 'Expected "b" in S on parsed source:2:0, found string `x` on line 2 column 0' ],
+    [ ['message', 'S = "a" @ "b"', 'ac'], 'Expected "b" in S on parsed source:1:2, found string `c` on line 1 column 2' ],
+    [ ['message', "S = \"a\" \"\\n\" @ \"b\"", "a\nx"], 'Expected "b" in S on parsed source:2:1, found string `x` on line 2 column 1' ],
     [ ['message', 'S "a statement" = "a" @ Semi
-Semi "a semicolon" = ";"', 'a,'], 'Expected a semicolon in a statement on parsed source:1:1, found symbol `,` on line 1 column 1' ],
+Semi "a semicolon" = ";"', 'a,'], 'Expected a semicolon in a statement on parsed source:1:2, found symbol `,` on line 1 column 2' ],
 
     // the interpreter says what was expected at the failing position
-    [ ['message', 'S = "a" ("b" | "c")', 'ax'], 'Failed parsing "S" on parsed source:1:1, unexpected "x", expected "b" or "c"' ],
+    [ ['message', 'S = "a" ("b" | "c")', 'ax'], 'Failed parsing "S" on parsed source:1:2, unexpected "x", expected "b" or "c"' ],
     [ ['message', 'S = "a" T
-T "a thing" = "b" | "c"', 'ax'], 'Failed parsing "S" on parsed source:1:1, unexpected "x", expected a thing' ],
+T "a thing" = "b" | "c"', 'ax'], 'Failed parsing "S" on parsed source:1:2, unexpected "x", expected a thing' ],
 
     // a single labelled clause is its bare value (the sequence collapses); a second value-producing element keeps the label
     [ ['tree', 'P = number:/[0-9]+/ | name:/[a-z]+/', '12'], both('12') ],

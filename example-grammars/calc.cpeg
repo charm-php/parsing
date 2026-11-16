@@ -1,0 +1,10 @@
+Calc = _ Expr $
+
+Expr = Expr "*" _ Expr    <? return ['op' => '*', 'left' => $_0, 'right' => $_2]; ?>
+     | Expr "+" _ Expr    <? return ['op' => '+', 'left' => $_0, 'right' => $_2]; ?>
+     | "(" @ _ Expr ")" _ <? return $_1; ?>
+     | Number
+
+Number = /[0-9]+/ _       <? return ['num' => (int) $_0]; ?>
+
+_ = /\s*/ %silent

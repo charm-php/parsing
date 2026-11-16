@@ -95,6 +95,17 @@
         }
     }
 
+    /**
+     * A committed sequence failed: what its failing element expected comes first (`expected ";"`), before whatever
+     * else could have continued at that offset. $mark is [maxOffset, count($expected)] from before the element ran.
+     */
+    private function promote(int $maxOffset, int $count): void
+    {
+        if ($this->maxOffset === $maxOffset && $count > 0 && $count < \count($this->expected)) {
+            $this->expected = [...\array_slice($this->expected, $count), ...\array_slice($this->expected, 0, $count)];
+        }
+    }
+
     /** A failure position with nothing to expect (a failed predicate leaves no terminal failure behind). */
     private function bump(int $offset): void
     {

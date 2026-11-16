@@ -292,7 +292,7 @@ final class Program
 
     private function expectedText(string $text, bool $ci): int
     {
-        $json = json_encode($text);
+        $json = json_encode($text, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         return $this->str(($json === false ? '"' . $text . '"' : $json) . ($ci ? 'i' : ''));
     }
 

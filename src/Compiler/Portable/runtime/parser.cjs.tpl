@@ -233,7 +233,12 @@ function join_expected(p, off, fallback) {
     return p.exp.length === 0 || p.maxoff < off ? fallback : p.exp.join(' or ');
 }
 
-function commit_fail(p, rule) {
+function promote(p, mo, n) {
+    if (p.maxoff === mo && n > 0 && n < p.exp.length) p.exp = p.exp.slice(n).concat(p.exp.slice(0, n));
+}
+
+function commit_fail(p, rule, mo, n) {
+    promote(p, mo, n);
     throw new CommitFail(p.off > p.maxoff ? p.off : p.maxoff, join_expected(p, p.off, STR[RULES[rule * 12 + 3]]));
 }
 
@@ -319,10 +324,11 @@ function seq(p, n) {
         const k = KIDS[a + i];
         if (NODES[k * 6] === OP_COMMIT) { committed = true; continue; }
         if (NODES[k * 6] === OP_SNIP) { p.v = eval_expr(p, NODES[k * 6 + 3], ent); return VAL; }
+        const xmo = p.maxoff, xn = p.exp.length;
         const r = ev(p, k);
         if (r === MISS) {
             if (flags & SEQ_BUMP) bump(p, off0);
-            if (committed) commit_fail(p, rule);
+            if (committed) commit_fail(p, rule, xmo, xn);
             p.off = off0;
             return MISS;
         }
@@ -343,9 +349,10 @@ function pratt_op(p, n, left) {
         const k = KIDS[a + i];
         if (NODES[k * 6] === OP_COMMIT) { committed = true; continue; }
         if (NODES[k * 6] === OP_SNIP) { p.v = eval_expr(p, NODES[k * 6 + 3], ent); return VAL; }
+        const xmo = p.maxoff, xn = p.exp.length;
         const r = ev(p, k);
         if (r === MISS) {
-            if (committed) commit_fail(p, rule);
+            if (committed) commit_fail(p, rule, xmo, xn);
             p.off = off0;
             return MISS;
         }

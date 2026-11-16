@@ -110,7 +110,7 @@ Failed parsing "a number" on config.json:3:11, unexpected "x"
 ```
 
 After a commit (`@`) the message is different: a `CommittedError` reading `Expected
-TableRef in FromClause on parsed source:1:13, found end of file` names the clause that was
+TableRef in FromClause on parsed source:1:14, found end of file` names the clause that was
 being matched and what it was waiting for.
 
 Because the reported node is the outermost one that got furthest, the message
@@ -127,7 +127,7 @@ readable - see [Grammar syntax](grammar-syntax.md).
 | `:location` | `:file::line::column` (`getLocationString()`) |
 | `:file` | The filename given with `setFileInfo()` / `setErrorFile()`, else the literal `parsed source` |
 | `:line` | 1-based line |
-| `:column` | 0-based column |
+| `:column` | 1-based column |
 | `:source_description` | `State::describeOffsetAt()` (token mode) or `StringTools::describeOffset()` |
 
 Only placeholders that occur in the template are evaluated. The message is
@@ -149,7 +149,7 @@ apply them once.
 
 Two limits worth knowing:
 
-* Lines are 1-based but columns are 0-based in the interpreted engine
+* Lines and columns are 1-based in every engine
   (`getErrorColumn()` does not add one). The compiled template adds one, so
   compiled messages are 1-based.
 * `:source_description` only works on `Error\State\ParseError` in token mode.

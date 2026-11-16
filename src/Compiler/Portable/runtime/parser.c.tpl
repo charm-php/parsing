@@ -53,7 +53,6 @@
 #define SEQ_COLLAPSE 1
 #define SEQ_BUMP 2
 #define CH_BUMP 1
-#define MAXEXP 16
 
 enum { MISS = 0, HIT = 1, VAL = 2, ERR = 3 };
 
@@ -84,8 +83,8 @@ typedef struct {
     const unsigned char *s;
     size_t len, off;
     int64_t maxoff, shield;      /* furthest failure offset (-1: none yet); offset a described rule was entered at */
-    const char *exp[MAXEXP];     /* the distinct things expected at maxoff */
-    int nexp, quiet;
+    const char **exp;            /* the distinct things expected at maxoff */
+    int nexp, expcap, quiet;
     arena *a;
     ent *vs; size_t vsn, vscap;
     int64_t *bt; size_t btn, btcap;
@@ -97,7 +96,7 @@ typedef struct {
     int err;                     /* 0, or an @N@_ERR_* code for an internal failure */
     int depth;
     size_t cerr_off;             /* the committed failure that is propagating */
-    char cerr_expected[256];
+    char cerr_expected[4096];
 } P;
 
 /* arena */
@@ -386,10 +385,16 @@ static int call_rule(P *p, int r, long minprec, value **out);
 
 static void add_exp(P *p, int64_t o, const char *what) {
     int i;
-    if (o > p->maxoff) { p->maxoff = o; p->nexp = 1; p->exp[0] = what; }
+    if (o > p->maxoff) { p->maxoff = o; p->nexp = 0; add_exp(p, o, what); }
     else if (o == p->maxoff) {
         for (i = 0; i < p->nexp; i++) if (strcmp(p->exp[i], what) == 0) return;
-        if (p->nexp < MAXEXP) p->exp[p->nexp++] = what;
+        if (p->nexp == p->expcap) {
+            int nc = p->expcap ? p->expcap * 2 : 16;
+            const char **n = (const char **)realloc((void *)p->exp, (size_t)nc * sizeof(char *));
+            if (!n) { p->err = @N@_ERR_NOMEM; return; }
+            p->exp = n; p->expcap = nc;
+        }
+        p->exp[p->nexp++] = what;
     }
 }
 
@@ -418,8 +423,23 @@ static void join_expected(P *p, size_t off, const char *fallback, char *buf, siz
     }
 }
 
+/* a committed sequence failed: what its failing element expected goes first (`expected ";"`), before whatever
+ * else could have continued at that offset. mo and n: maxoff and nexp from before the element ran. */
+static void promote(P *p, int64_t mo, int n) {
+    const char **tmp;
+    int i, m = p->nexp - n;
+    if (p->maxoff != mo || n <= 0 || m <= 0) return;
+    tmp = (const char **)malloc((size_t)p->nexp * sizeof(char *));
+    if (!tmp) return;
+    for (i = 0; i < m; i++) tmp[i] = p->exp[n + i];
+    for (i = 0; i < n; i++) tmp[m + i] = p->exp[i];
+    memcpy((void *)p->exp, (void *)tmp, (size_t)p->nexp * sizeof(char *));
+    free((void *)tmp);
+}
+
 /* a committed sequence failed: record the error; it propagates to the top as ERR */
-static int commit_fail(P *p, int rule, size_t sp) {
+static int commit_fail(P *p, int rule, size_t sp, int64_t mo, int n) {
+    promote(p, mo, n);
     p->vsn = sp;
     p->cerr_off = (int64_t)p->off > p->maxoff ? p->off : (size_t)p->maxoff;
     join_expected(p, p->off, STRP(RULE(rule)[3]), p->cerr_expected, sizeof p->cerr_expected);
@@ -514,7 +534,8 @@ static value *eval_expr(P *p, int e, size_t sp0, size_t lim) {
 
 static int seq(P *p, int n, value **out) {
     const int32_t *nd = NODE(n);
-    int a = nd[3], cnt = nd[4], flags = nd[5] & 255, rule = nd[5] >> 8, i, k, r, committed = 0;
+    int a = nd[3], cnt = nd[4], flags = nd[5] & 255, rule = nd[5] >> 8, i, k, r, committed = 0, xn = 0;
+    int64_t xmo = -1;
     size_t off0 = p->off, sp0 = p->vsn;
     amark m = amk(p);
     value *v;
@@ -528,11 +549,12 @@ static int seq(P *p, int n, value **out) {
             *out = v;
             return VAL;
         }
+        xmo = p->maxoff; xn = p->nexp;
         r = ev(p, k, &v);
         if (r == ERR) { p->vsn = sp0; return ERR; }
         if (r == MISS) {
             if (flags & SEQ_BUMP) bump(p, off0);
-            if (committed) return commit_fail(p, rule, sp0);
+            if (committed) return commit_fail(p, rule, sp0, xmo, xn);
             p->off = off0; p->vsn = sp0; arew(p, m);
             return MISS;
         }
@@ -551,7 +573,8 @@ static int seq(P *p, int n, value **out) {
 /* one operator alternative of a Pratt rule, with the left operand already parsed */
 static int pratt_op(P *p, int n, value *left, value **out) {
     const int32_t *nd = NODE(n);
-    int a = nd[3], cnt = nd[4], rule = nd[5] >> 8, i, k, r, committed = 0;
+    int a = nd[3], cnt = nd[4], rule = nd[5] >> 8, i, k, r, committed = 0, xn = 0;
+    int64_t xmo = -1;
     size_t off0 = p->off, sp0 = p->vsn;
     value *v;
     if (!item(p, KIDS[a], left, sp0)) { p->vsn = sp0; return ERR; }
@@ -565,10 +588,11 @@ static int pratt_op(P *p, int n, value *left, value **out) {
             *out = v;
             return VAL;
         }
+        xmo = p->maxoff; xn = p->nexp;
         r = ev(p, k, &v);
         if (r == ERR) { p->vsn = sp0; return ERR; }
         if (r == MISS) {
-            if (committed) return commit_fail(p, rule, sp0);
+            if (committed) return commit_fail(p, rule, sp0, xmo, xn);
             p->off = off0; p->vsn = sp0;
             return MISS;
         }
@@ -884,18 +908,18 @@ static void set_error(P *p, @n@_error *err, int kind, int committed, size_t off,
         if (p.err) set_error(&p, err, p.err, 0, 0, NULL);
         else if (st == ERR) set_error(&p, err, @N@_ERR_PARSE, 1, p.cerr_off, p.cerr_expected);
         else {
-            char ex[256];
+            char ex[4096];
             size_t off = (int64_t)p.off > p.maxoff ? p.off : (size_t)p.maxoff;
             join_expected(&p, p.off, STRP(GOAL_DESCRIPTION), ex, sizeof ex);
             set_error(&p, err, @N@_ERR_PARSE, 0, off, ex);
         }
         res->root = NULL;
         @n@_result_free(res);
-        free(p.vs); free(p.bt); free(p.seeds);
+        free(p.vs); free(p.bt); free(p.seeds); free((void *)p.exp);
         return NULL;
     }
     res->root = st == HIT ? (value *)&NULLV : v;
-    free(p.vs); free(p.bt); free(p.seeds);
+    free(p.vs); free(p.bt); free(p.seeds); free((void *)p.exp);
     return res;
 }
 

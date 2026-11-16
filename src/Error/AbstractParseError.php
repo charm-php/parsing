@@ -79,7 +79,7 @@ abstract class AbstractParseError extends \RuntimeException {
     }
 
     public function getErrorColumn(): int {
-        return $this->getInternalColumnNumber() + $this->_columnOffset;
+        return $this->getInternalColumnNumber() + $this->_columnOffset + 1;
     }
 
     protected function update() {

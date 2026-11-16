@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+- **Portable targets (C, JavaScript, Python).** `charm-compile --target c|js|python` emits a standalone parser (a table-driven
+  engine plus tables) whose parse tree and error reporting match the PHP compiled parser; regexes run on a bytecode matcher
+  compiled at generation time (PCRE subset, UCP semantics). Snippets work in a declarative subset (`return` of an array literal,
+  `$label`, `$_offset`, `$_line`, `$_column`, `??`, literals). The conformance suite runs every supported row through all
+  targets. See REFERENCE.md, "Portable targets", and `docs/compiled-parsers-and-cli.md`.
+- Fixes (commit bb62d71): `@` inside a left-recursive (Pratt) alternative no longer crashes the interpreter; CommittedError
+  messages count lines from 1 and name the rule's description; every engine reports an expected set ("expected a or b"); the
+  `charm-tests` rows 0056 to 0058 cover them.
+- Error messages (this release): a literal `/` is shown as `/` (was `"\/"`) in `expected`; the C target no longer cuts a long
+  expected list at 255 bytes; a committed sequence puts what it was waiting for first (`expected ";" or an operator`), and a
+  described rule stands for its alternatives; the interpreter's columns are now 1-based like the compiled parsers (**breaking**
+  for code that parsed `parsed source:L:C`; `getErrorColumn()` and `:column` change by one). Known difference: for a failure
+  after a commit the interpreter reports the committed element's position, compiled parsers the furthest failure. Rows in
+  `charm-tests/0059`.
+- Documentation: new calculator tutorial (`docs/tutorial.md`, `example-grammars/calc.cpeg`, run by `charm-tests/0054`), REFERENCE API table
+  completed, repository moved to https://github.com/charm-php/parsing. Tests: `charm-tests/0055` (Parser `GOAL`, descriptions,
+  compiler options, `charm-compile`).
+
 ## 0.2.0
 
 - **Breaking: single-value sequences collapse.** A sequence (a rule body or a parenthesised group, in both

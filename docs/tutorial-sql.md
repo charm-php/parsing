@@ -640,7 +640,7 @@ SELECT a FROM t WHERE a >= 18
 SELECT 1 < 2 < 3
 ```
 ```error
-Parse error at line 1, column 14: expected "+" or "-" or "*" or "\/" or "%" or "as"i or /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/ or /[A-Za-z_][A-Za-z0-9_]*/ or "," or "from"i or "where"i or ";" or end of input, found '<'
+Parse error at line 1, column 14: expected "+" or "-" or "*" or "/" or "%" or "as"i or /(?i:select|distinct|from|where|group|by|having|order|limit|offset|join|inner|left|right|outer|on|as|and|or|not|in|is|null|true|false|between|like|asc|desc)\b/ or /[A-Za-z_][A-Za-z0-9_]*/ or "," or "from"i or "where"i or ";" or end of input, found '<'
 ```
 
 *Learned.* `@prec`, `left`, why each rule level exists, `%prec=NAME` for an alternative whose
@@ -1295,8 +1295,8 @@ Step 13: error messages and `@`
 
 Start with what the parser says now. Both engines report the position of the *furthest terminal
 that failed* (a literal or regex that was tried and did not match; predicates do not count). The
-generated parser reports line and column counted from 1, in bytes; the interpreter counts the
-column from 0. What it *expected* is the first thing that was tried at that position.
+generated parser reports line and column counted from 1, in bytes; the interpreter does too.
+What it *expected* is the first thing that was tried at that position.
 
 ```sql
 SELECT a FROM
@@ -1389,13 +1389,13 @@ foreach (['SELECT a FROM', 'SELECT a FROM t WHERE', 'SELECT a,, b', 'SELECT a FR
 ```
 ```output
 Charm\Parsing\Error\State\CommittedError
-    Expected table name in FROM clause on parsed source:1:13, found end of file
+    Expected table name in FROM clause on parsed source:1:14, found end of file
 Charm\Parsing\Error\State\CommittedError
-    Expected Expr in WhereClause on parsed source:1:21, found end of file
+    Expected Expr in WhereClause on parsed source:1:22, found end of file
 Charm\Parsing\Error\ParseError
-    Failed parsing "SelectList" on parsed source:1:9, unexpected ",", expected identifier or "*" or "not"i or "-" or /[0-9]+(\.[0-9]+)?/ or /'(?:[^']|'')*'/ or "null"i or "true"i or "false"i or "?" or /:[A-Za-z_][A-Za-z0-9_]*/ or "("
+    Failed parsing "SelectList" on parsed source:1:10, unexpected ",", expected identifier or "*" or "not"i or "-" or /[0-9]+(\.[0-9]+)?/ or /'(?:[^']|'')*'/ or "null"i or "true"i or "false"i or "?" or /:[A-Za-z_][A-Za-z0-9_]*/ or "("
 Charm\Parsing\Error\ParseError
-    Failed parsing "Sum" on parsed source:1:28, unexpected "b", expected "+" or "-" or "*" or "\/" or "%" or "or"i or "and"i or "group"i or "having"i or "order"i or "limit"i or ";" or end of input
+    Failed parsing "Sum" on parsed source:1:29, unexpected "b", expected "+" or "-" or "*" or "/" or "%" or "or"i or "and"i or "group"i or "having"i or "order"i or "limit"i or ";" or end of input
 ```
 
 The interpreter names the rule that gave up and, after a commit, the rule it was waiting for. Both its
@@ -1528,7 +1528,7 @@ What differs between the two:
 * `$state` starts from the initial state on every call in both engines, so one compiled object can parse
   any number of queries. Pass the state you need on every call, as above.
 * Interpreter errors are `Charm\Parsing\Error\ParseError` (and `State\CommittedError`) with the column
-  counted from 0.
+  counted from 1.
 
 *Speed.* One 221-byte query with joins, a `WHERE`, `GROUP BY`, `HAVING`, `ORDER BY` and `LIMIT`,
 parsed repeatedly on PHP 8.5.12 (CLI, no opcache), best of five rounds (a 202-byte query here):

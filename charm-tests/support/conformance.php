@@ -28,8 +28,8 @@ function conformance_outcome(callable $run, bool $position): mixed {
         if ($e instanceof \Charm\Parsing\Error\State\ParseError && !$e instanceof \Charm\Parsing\Error\State\CommittedError) {
             return 'GRAMMAR_ERROR'; // the grammar text itself is invalid
         }
-        // interpreter: "... on parsed source:L:C ..." with a 0-based column
-        return $position && preg_match('/:(\d+):(\d+)/', $e->getMessage(), $m) ? "ERROR@$m[1]:" . ($m[2] + 1) : 'PARSE_ERROR';
+        // interpreter: "... on parsed source:L:C ..." with a 1-based column
+        return $position && preg_match('/:(\d+):(\d+)/', $e->getMessage(), $m) ? "ERROR@$m[1]:$m[2]" : 'PARSE_ERROR';
     } catch (\RuntimeException $e) {
         // compiled fail(): "Parse error at line L, column C: ..." (a plain RuntimeException)
         if (!str_starts_with($e->getMessage(), 'Parse error at line ')) {

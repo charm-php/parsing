@@ -662,6 +662,7 @@ PHP;
             }
 
             $itemVar = '$_seq' . $seqId . '_' . $i;
+            if ($committed) { $this->emitter->line('$_xm = [$this->maxOffset, \\count($this->expected)];'); }
 
             if ($subClause instanceof Identifier && $subClause->getIdentifier() === $ruleName && $subClause->getModifier() === Clause::NONE) {
                 $minPrec = $i === $lastIndex ? $precedence : 0;
@@ -763,7 +764,7 @@ PHP;
         $hasSnippet = false;
         $miss = function () use (&$committed) {
             if ($committed) {
-                $this->emitter->line('$this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
+                $this->emitter->line('$this->promote(...($_xm ?? [-2, 0])); $this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
             } else {
                 $this->emitter->line('$this->offset = $_loop; break;');
             }
@@ -783,6 +784,7 @@ PHP;
                 $nextPrec = $rightAssoc ? ($precedence - 1) : $precedence;
                 $methodName = 'parse' . $this->toMethodName($ruleName);
                 $varName = '$_r' . $i;
+                if ($committed) { $this->emitter->line('$_xm = [$this->maxOffset, \\count($this->expected)];'); }
                 $this->emitter->line("$varName = \$this->$methodName($nextPrec);");
                 $this->emitter->line("if ($varName === " . $this->signalMiss() . ") {");
                 $this->emitter->indent();
@@ -814,6 +816,7 @@ PHP;
             } else {
                 // Regular clause
                 $varName = '$_m' . $i;
+                if ($committed) { $this->emitter->line('$_xm = [$this->maxOffset, \\count($this->expected)];'); }
                 $this->generateClauseCode($part, $varName);
                 $this->emitter->line("if ($varName === " . $this->signalMiss() . ") {");
                 $this->emitter->indent();
@@ -931,7 +934,7 @@ PHP;
             $this->emitter->line("\$this->offset++;");
             $this->emitter->dedent()->line('} else {');
             $this->emitter->indent();
-            $this->emitTerminalMiss($resultVar, json_encode($textValue));
+            $this->emitTerminalMiss($resultVar, json_encode($textValue, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $this->emitter->closeBlock();
             return;
         }
@@ -973,7 +976,7 @@ PHP;
         }
         $this->emitter->dedent()->line('} else {');
         $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, json_encode($textValue) . ($isCaseInsensitive ? 'i' : ''));
+        $this->emitTerminalMiss($resultVar, json_encode($textValue, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . ($isCaseInsensitive ? 'i' : ''));
         $this->emitter->closeBlock();
     }
 
@@ -1030,7 +1033,7 @@ PHP;
         $this->emitter->line('$this->offset++;');
         $this->emitter->dedent()->line('} else {');
         $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, json_encode($literalValue));
+        $this->emitTerminalMiss($resultVar, json_encode($literalValue, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $this->emitter->closeBlock();
     }
 
@@ -1156,7 +1159,7 @@ PHP;
             $this->emitter->line("\$this->bump($tempOffset);");
         }
         if ($committed) {
-            $this->emitter->line('$this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
+            $this->emitter->line('$this->promote(...($_xm ?? [-2, 0])); $this->fail(' . var_export($this->currentRuleName ?? 'input', true) . ', true);');
             return;
         }
         $this->emitter->line("\$this->offset = $tempOffset;");
@@ -1279,6 +1282,7 @@ PHP;
             }
 
             $itemVar = '$_seq' . $seqId . '_' . $i;
+            if ($committed) { $this->emitter->line('$_xm = [$this->maxOffset, \\count($this->expected)];'); }
             $this->generateClauseCode($subClause, $itemVar);
 
             $this->emitter->line("if ($itemVar === " . $this->signalMiss() . ") {");
@@ -2003,7 +2007,7 @@ PHP;
         // Close regex match block
         $this->emitter->dedent()->line("} else {");
         $this->emitter->indent();
-        $this->emitTerminalMiss($resultVar, implode(' or ', array_map(fn($t) => $t instanceof Text ? json_encode($t->getText()) : $t->asString(), $analysis['terminals'])));
+        $this->emitTerminalMiss($resultVar, implode(' or ', array_map(fn($t) => $t instanceof Text ? json_encode($t->getText(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : $t->asString(), $analysis['terminals'])));
         $this->emitter->line("\$this->offset = $tempOffset;");
         $this->emitter->closeBlock();
 

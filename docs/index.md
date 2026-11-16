@@ -26,7 +26,7 @@ The same grammar text runs two ways.
 | At runtime | `Charm\Parsing\CPEGParser` walks the clause objects built by `GrammarParser` | A generated PHP method per rule (two for a left-recursive rule), plus a per-class `Signal` enum |
 | Dependency at runtime | This library | Nothing, for string-mode grammars |
 | Failure | `Charm\Parsing\Error\ParseError` (`RuntimeException`) | a generated `{Class}ParseError` (`RuntimeException`): "Parse error at line N, column C: expected ..., found ..." |
-| Columns in messages | 0-based | 1-based |
+| Columns in messages | 1-based | 1-based |
 | Left recursion | `OrderedChoice::lrParse()` - same precedence rules as the compiler (alternative order, `%prec`, `@prec`, `%assoc`) | Generated Pratt pair `parseRule(int $_minPrec)` / `parseRulePrimary()` |
 | Token mode (`@lexer`) | No - a `Clause\Token` throws `\LogicException` | Yes |
 | Commit (`@`) | Yes - `Sequence` throws `Error\State\CommittedError` | Yes - the sequence throws the parser's `{Class}ParseError` with `committed === true` |
@@ -40,6 +40,7 @@ first.
 
 ## Pages
 
+* [Tutorial: a calculator](tutorial.md) - five short steps: rules, precedence, an AST, errors, compiling.
 * [Tutorial: parsing SQL](tutorial-sql.md) - build a `SELECT` parser step by step, from
   literals to a compiled standalone class; the result is `example-grammars/sql.cpeg`.
 * [Reference](../REFERENCE.md) - every operator, pragma, snippet variable, API call and CLI flag in one
@@ -63,7 +64,7 @@ first.
 * [Errors and debugging](errors-and-debugging.md) - what to catch, the message
   placeholders, snippet errors, compiled `fail()`/`expect()`, the trace, options.
 
-A sensible first pass is getting started, then the tutorial, then grammar syntax and snippets.
+A sensible first pass is getting started, then the calculator tutorial and the SQL tutorial, then grammar syntax and snippets.
 Reach for the precedence page as soon as a rule is left-recursive, the token
 mode and lexing pages when you want the input split into tokens, and the compiled
 page when a grammar has to run fast enough to be worth generating code for.
@@ -95,4 +96,4 @@ needed for `Charm\Parsing\Lexers\PhpLexer`. The source uses `enum` and
 
 The library is GPL-3.0-only, with an output exception in `LICENCE.md` that lets
 generated parsers be distributed under other terms: a parser that `charm-compile` generates from your
-grammar is yours. `CHANGELOG.md` records what changed between releases; these pages describe the tree at 0.1.3.
+grammar is yours. `CHANGELOG.md` records what changed between releases; these pages describe the tree at 0.3.0.

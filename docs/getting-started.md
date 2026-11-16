@@ -25,6 +25,9 @@ Autoloading is set up as follows:
 | `classmap: Parser.php` | `Charm\Parser` (note: not in the `Charm\Parsing` namespace) |
 | `psr-4: src/` | Everything else, under `Charm\Parsing\` |
 
+New here? The [calculator tutorial](tutorial.md) walks from a first grammar to an AST, errors and a
+compiled parser in five short steps.
+
 ## A first parse
 
 ```php
@@ -108,10 +111,10 @@ public function parse(
 ): mixed
 ```
 
-`$filename` has no default value, so pass something even when you have no file
-- it is only used for error messages. `$lineOffset` and `$columnOffset` are
-added to every location reported while parsing. `$initialState` seeds the
-`$state` variable available to snippets.
+`$filename` has no default value, so pass something even when you have no file.
+`$initialState` seeds the `$state` variable available to snippets. `$filename`,
+`$lineOffset` and `$columnOffset` are accepted for `ParserInterface` but the
+interpreter does not use them: its error messages always say `parsed source:LINE:COL`.
 
 ## A compiled parser
 
@@ -149,6 +152,7 @@ file, with the message `Parse error at line N, column C: expected ..., found ...
 
 ## Next steps
 
+* [Tutorial: a calculator](tutorial.md) - the short walk-through.
 * [Tutorial: parsing SQL](tutorial-sql.md) - a grammar built step by step, with every output shown.
 * [Grammar syntax](grammar-syntax.md) - rules, terminals, operators, captures.
 * [Snippets and state](snippets-and-state.md) - running PHP from a grammar.

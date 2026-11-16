@@ -10,7 +10,7 @@ produce the same values and the same error positions; a conformance suite runs e
 composer require charm/parsing
 ```
 
-PHP 8.1 or newer.
+PHP 8.1 or newer. Source and issues: https://github.com/charm-php/parsing
 
 ## Sixty seconds
 
@@ -48,7 +48,7 @@ try {
 ```
 ```text
 17
-Failed parsing "Expr" on parsed source:1:4, unexpected "*"
+Failed parsing "Expr" on parsed source:1:5, unexpected "*", expected "(" or /[0-9]+/
 ```
 
 The same grammar compiled into a class with no dependency on this library:
@@ -70,7 +70,7 @@ try {
 ```
 ```text
 17
-Parse error at line 1, column 5: expected "(", found '*'
+Parse error at line 1, column 5: expected "(" or /[0-9]+/, found '*'
 ```
 
 Without snippets the parse returns the parse tree: `Expr = Expr "+" Expr | /[0-9]+/` on `1+2+3` gives
@@ -104,6 +104,8 @@ Develop with the interpreter, compile when parse time matters or when you ship a
 
 ## Documentation
 
+* [Tutorial: a calculator](docs/tutorial.md): ten minutes from a first grammar to an AST, errors and a
+  compiled parser (the grammar is [`example-grammars/calc.cpeg`](example-grammars/calc.cpeg))
 * [Tutorial: parsing SQL](docs/tutorial-sql.md): build a `SELECT` parser step by step; the finished grammar is
   [`example-grammars/sql.cpeg`](example-grammars/sql.cpeg)
 * [REFERENCE.md](REFERENCE.md): every operator, pragma, snippet variable, API call and CLI flag, with the value
